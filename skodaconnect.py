@@ -577,11 +577,11 @@ class Vehicle:
 
     def dashboard(self, **config):
         #Classic python notation
-        #from dashboardskoda import Dashboard
-        #return Dashboard(self, **config)
+        from dashboardskoda import Dashboard
+        return Dashboard(self, **config)
         #HA notation
-        from . import dashboardskoda        
-        return dashboardskoda.Dashboard(self, **config)
+        #from . import dashboardskoda        
+        #return dashboardskoda.Dashboard(self, **config)
 
     @property
     def vin(self):
