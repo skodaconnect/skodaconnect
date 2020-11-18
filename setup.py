@@ -6,9 +6,12 @@ this_directory = path.abspath(path.dirname(__file__))
 with open(path.join(this_directory, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
+def local_scheme(version):
+    return ""
+
 setup(
     name='skodaconnect',
-    version="1.0.2",
+    version='1.0.4',
     description='Communicate with Skoda Connect',
     author='lendy007',
     author_email='lendik@gmail.com',
@@ -23,7 +26,8 @@ setup(
     ],
     provides=["skodaconnect"],
     install_requires=list(open("requirements.txt").read().strip().split("\n")),
-    use_scm_version=True,
+    #use_scm_version=True,
+    use_scm_version={"local_scheme": local_scheme},
     setup_requires=[
         'setuptools_scm',
         'pytest>=5,<6',
