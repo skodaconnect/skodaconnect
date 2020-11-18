@@ -1,4 +1,8 @@
-# Skoda Connect v1.0.2
+![Version](https://img.shields.io/github/v/release/lendy007/skodaconnect)
+![PyPi](https://img.shields.io/pypi/v/skodaconnect?label=latest%20pypi)
+![Downloads](https://img.shields.io/github/downloads/lendy007/skodaconnect/total)
+
+# Skoda Connect v1.0.4
 
 Fork of https://github.com/robinostlund/volkswagencarnet where it was modified to support also Skoda Connect
 
