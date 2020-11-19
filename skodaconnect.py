@@ -72,7 +72,7 @@ class Connection:
         self._vin = ""
 
         _LOGGER.debug('Using service <%s>', self._session_base)
-        
+
         self._jarCookie = ""
         self._state = {}
 
@@ -102,7 +102,7 @@ class Connection:
 
             # Request landing page and get auth URL:
             req = await self._session.get(
-                url="https://identity.vwgroup.io/.well-known/openid-configuration"                
+                url="https://identity.vwgroup.io/.well-known/openid-configuration"
             )
             if req.status != 200:
                 return ""
@@ -110,11 +110,11 @@ class Connection:
             authorizationEndpoint = response_data["authorization_endpoint"]
             authissuer = response_data["issuer"]
 
-            # Get authorization 
+            # Get authorization
             # https://identity.vwgroup.io/oidc/v1/authorize?nonce=yVOPHxDmksgkMo1HDUp6IIeGs9HvWSSWbkhPcxKTGNU&response_type=code id_token token&scope=openid mbb&ui_locales=de&redirect_uri=skodaconnect://oidc.login/&client_id=7f045eee-7003-4379-9968-9355ed2adb06%40apps_vw-dilab_com             
             req = await self._session.get(
                 url=authorizationEndpoint+'?nonce='+getNonce()+'&response_type=code id_token token&scope=openid mbb&ui_locales=de&redirect_uri=skodaconnect://oidc.login/&client_id='+CLIENT_ID,
-                headers=self._session_auth_headers                
+                headers=self._session_auth_headers
             )
             if req.status != 200:
                 return ""
@@ -131,7 +131,7 @@ class Connection:
             req = await self._session.post(
                 url=pe_url,
                 headers=self._session_auth_headers,
-                data = mailform               
+                data = mailform
             )
             if req.status != 200:
                 return ""
@@ -160,7 +160,7 @@ class Connection:
             ref_url_1 = req.headers.get("location")
             req = await self._session.get(ref_url_1, allow_redirects=False, headers=self._session_auth_headers)
             if req.status != 302:
-                return ""            
+                return ""
 
             # https://identity.vwgroup.io/oidc/v1/oauth/client/callback?clientId=xxx@apps_vw-dilab_com&relayState=xxx&userId=xxxGUID&HMAC=xxx
             ref_url_3 = req.headers.get('location')
@@ -346,11 +346,11 @@ class Connection:
             await self.getHomeRegion(url)
         except Exception as err:
             _LOGGER.debug(f'Cannot get homeregion, error: {err}')
-        
+
+        # Car Info
         #https://msg.volkswagen.de/fs-car/promoter/portfolio/v1/skoda/CZ/vehicle/$vin/carportdata
-        try:
-            
-            response = await self.get('fs-car/promoter/portfolio/v1/skoda/CZ/vehicle/$vin/carportdata', vin=url)            
+        try:            
+            response = await self.get('fs-car/promoter/portfolio/v1/skoda/CZ/vehicle/$vin/carportdata', vin=url)
             if response.get('carportData', {}) :
                 self._state[url].update(
                     {'carportData': response.get('carportData', {})}
@@ -360,10 +360,10 @@ class Connection:
         except Exception as err:
             _LOGGER.debug(f'Could not fetch carportData, error: {err}')
 
+        # Position data
         #https://msg.volkswagen.de/fs-car/bs/cf/v1/skoda/CZ/vehicles/$vin/position
-        try:
-            
-            response = await self.get('fs-car/bs/cf/v1/skoda/CZ/vehicles/$vin/position', vin=url)            
+        try:            
+            response = await self.get('fs-car/bs/cf/v1/skoda/CZ/vehicles/$vin/position', vin=url)
             if response.get('findCarResponse', {}) :
                 self._state[url].update(
                     {'findCarResponse': response.get('findCarResponse', {})}
@@ -373,10 +373,10 @@ class Connection:
         except Exception as err:
             _LOGGER.debug(f'Could not fetch position, error: {err}')
 
+        # Stored car data
         #https://msg.volkswagen.de/fs-car/bs/vsr/v1/skoda/CZ/vehicles/$vin/status
-        try:
-            
-            response = await self.get('fs-car/bs/vsr/v1/skoda/CZ/vehicles/$vin/status', vin=url)            
+        try:            
+            response = await self.get('fs-car/bs/vsr/v1/skoda/CZ/vehicles/$vin/status', vin=url)
             if response.get('StoredVehicleDataResponse', {}).get('vehicleData', {}).get('data', {})[0].get('field', {})[0] :
                 self._state[url].update(
                     {'StoredVehicleDataResponse': response.get('StoredVehicleDataResponse', {})}
@@ -389,10 +389,10 @@ class Connection:
         except Exception as err:
             _LOGGER.debug(f'Could not fetch StoredVehicleDataResponse, error: {err}')
         
-        #TRIP DATA
+        # TRIP DATA
         #https://msg.volkswagen.de/fs-car/bs/tripstatistics/v1/skoda/CZ/vehicles/TMBJJ7NS3L8500308/tripdata/shortTerm?newest
         # -or- shortTerm?type=list -or- longTerm?type=list
-        try:            
+        try:
             response = await self.get('fs-car/bs/tripstatistics/v1/skoda/CZ/vehicles/$vin/tripdata/shortTerm?newest', vin=url)            
             if response.get('tripData', {}):
                 self._state[url].update(
@@ -403,24 +403,55 @@ class Connection:
         except Exception as err:
             _LOGGER.debug(f'Could not fetch tripstatistics, error: {err}')
 
-        # Heating status
+        # CLIMATISATION DATA
+        #https://msg.volkswagen.de/fs-car/bs/climatisation/v1/skoda/CZ/vehicles/<VIN>/climater
+        try:
+            response = await self.get('fs-car/bs/climatisation/v1/skoda/CZ/vehicles/$vin/climater', vin=url)
+            if response.get('climater', {}):
+                self._state[url].update(
+                    {'climater': response.get('climater', {})}
+                )
+            else:
+                _LOGGER.debug(f'Could not fetch climatisation: {response}')
+        except Exception as err:
+            _LOGGER.debug(f'Could not fetch climatisation, error: {err}')
+
+        # CHARGING DATA
+        #https://msg.volkswagen.de/fs-car/bs/batterycharge/v1/skoda/CZ/vehicles/<VIN>/charger
+        try:
+            response = await self.get('fs-car/bs/batterycharge/v1/skoda/CZ/vehicles/$vin/charger', vin=url)
+            if response.get('charger', {}):
+                self._state[url].update(
+                    {'charger': response.get('charger', {})}
+                )
+            else:
+                _LOGGER.debug(f'Could not fetch charger: {response}')
+        except Exception as err:
+            _LOGGER.debug(f'Could not fetch charger, error: {err}')
+
+        # Pre-heater status (auxiliary heating)
         # https://msg.volkswagen.de/fs-car/bs/rs/v1/skoda/CZ/vehicles/$vin/status
         try:
             
-            response = await self.get('fs-car/bs/rs/v1/skoda/CZ/vehicles/$vin/status', vin=url)            
+            response = await self.get('fs-car/bs/rs/v1/skoda/CZ/vehicles/$vin/status', vin=url)
             if response.get('statusResponse', {}) :
                 self._state[url].update(
                     {'heating': response.get('statusResponse', {})}
                 )
             else:
-                _LOGGER.debug(f'Could not fetch heating: {response}')
+                _LOGGER.debug(f'Could not fetch pre-heating: {response}')
         except Exception as err:
-            _LOGGER.debug(f'Could not fetch heating, error: {err}')
+            _LOGGER.debug(f'Could not fetch pre-heating, error: {err}')
     
     async def getHomeRegion(self, vin):
-        _LOGGER.debug("Getting homeregion for {vin}")
-        response = await self.get('https://mal-1a.prd.ece.vwg-connect.com/api/cs/vds/v1/vehicles/$vin/homeRegion', vin)
-        self._session_auth_ref_url = response['homeRegion']['baseUri']['content'].split("/api")[0].replace("mal-", "fal-") if response['homeRegion']['baseUri']['content'] != "https://mal-1a.prd.ece.vwg-connect.com/api" else "https://msg.volkswagen.de"
+        _LOGGER.debug("Getting homeregion for %s" % vin)
+        try:
+            response = await self.get('https://mal-1a.prd.ece.vwg-connect.com/api/cs/vds/v1/vehicles/$vin/homeRegion', vin)
+            self._session_auth_ref_url = response['homeRegion']['baseUri']['content'].split("/api")[0].replace("mal-", "fal-") if response['homeRegion']['baseUri']['content'] != "https://mal-1a.prd.ece.vwg-connect.com/api" else "https://msg.volkswagen.de"
+        except:
+            _LOGGER.debug(f'Retrying homeregion for %s' % vin)
+            response = await self.get('https://mal-1a.prd.ece.vwg-connect.com/api/cs/vds/v1/vehicles/$vin/homeRegion', vin)
+            self._session_auth_ref_url = response['homeRegion']['baseUri']['content'].split("/api")[0].replace("mal-", "fal-") if response['homeRegion']['baseUri']['content'] != "https://mal-1a.prd.ece.vwg-connect.com/api" else "https://msg.volkswagen.de"
 
     def vehicle(self, vin):
         """Return vehicle for given vin."""
@@ -614,34 +645,54 @@ class Vehicle:
 
     @property
     def climatisation_target_temperature(self):
-        #Not implemented for SKODA
-        return self.attrs.get('vehicleEmanager', {}).get('rpc', {}).get('settings',{}).get('targetTemperature', 0)
+        value = self.attrs.get('climater').get('settings').get('targetTemperature').get('content')
+        if value:
+            return float((value-2730)/10)
 
     @property
     def is_climatisation_target_temperature_supported(self):
-        #Not implemented for SKODA
-        return self.is_climatisation_supported
+        if self.attrs.get('climater', {}):
+            if 'settings' in self.attrs.get('climater', {}):
+                if 'targetTemperature' in self.attrs.get('climater', {})['settings']:
+                    return True
+            else:
+                return False
 
     @property
     def climatisation_without_external_power(self):
-        #Not implemented for SKODA
-        return self.attrs.get('vehicleEmanager', {}).get('rpc', {}).get('settings', {}).get('climatisationWithoutHVPower', False)
+        return self.attrs.get('climater').get('settings').get('climatisationWithoutHVpower').get('content', False)
 
     @property
     def is_climatisation_without_external_power_supported(self):
-        #Not implemented for SKODA
-        return self.is_climatisation_supported
+        if self.attrs.get('climater', {}):
+            if 'settings' in self.attrs.get('climater', {}):
+                if 'climatisationWithoutHVpower' in self.attrs.get('climater', {})['settings']:
+                    return True
+            else:
+                return False
 
     @property
     def service_inspection(self):
         """Return time left for service inspection"""
         return self.attrs.get('StoredVehicleDataResponseParsed')['0x0203010004'].get('value')
-        
 
     @property
     def is_service_inspection_supported(self):
         if self.attrs.get('StoredVehicleDataResponseParsed', {}):
             if '0x0203010004' in self.attrs.get('StoredVehicleDataResponseParsed'):
+                return True
+            else:
+                return False
+
+    @property
+    def service_inspection_km(self):
+        """Return time left for service inspection"""
+        return self.attrs.get('StoredVehicleDataResponseParsed')['0x0203010003'].get('value')
+
+    @property
+    def is_service_inspection_km_supported(self):
+        if self.attrs.get('StoredVehicleDataResponseParsed', {}):
+            if '0x0203010003' in self.attrs.get('StoredVehicleDataResponseParsed'):
                 return True
             else:
                 return False
@@ -655,6 +706,19 @@ class Vehicle:
     def is_oil_inspection_supported(self):
         if self.attrs.get('StoredVehicleDataResponseParsed', {}):
             if '0x0203010002' in self.attrs.get('StoredVehicleDataResponseParsed'):
+                return True
+            else:
+                return False
+    
+    @property
+    def oil_inspection_km(self):
+        """Return time left for service inspection"""
+        return self.attrs.get('StoredVehicleDataResponseParsed')['0x0203010001'].get('value')
+
+    @property
+    def is_oil_inspection_km_supported(self):
+        if self.attrs.get('StoredVehicleDataResponseParsed', {}):
+            if '0x0203010001' in self.attrs.get('StoredVehicleDataResponseParsed'):
                 return True
             else:
                 return False
@@ -673,26 +737,47 @@ class Vehicle:
 
     @property
     def battery_level(self):
-        #Not implemented for SKODA
-        return self.attrs.get('vehicleStatus', {}).get('batteryLevel', 0)
+        """Return battery level"""
+        return self.attrs.get('charger').get('status').get('batteryStatusData').get('stateOfCharge').get('content', 0)
 
     @property
     def is_battery_level_supported(self):
-        #Not implemented for SKODA
-        if type(self.attrs.get('vehicleStatus', {}).get('batteryLevel', False)) in (float, int):
-            return True
+        """Return true if battery level is supported"""
+        if self.attrs.get('charger', {}):
+            if 'status' in self.attrs.get('charger'):
+                if 'batteryStatusData' in self.attrs.get('charger')['status']:
+                    if 'stateOfCharge' in self.attrs.get('charger')['status']['batteryStatusData']:
+                        return True
+                    else:
+                        return False
+                else:
+                    return False
+            else:
+                return False
+        else:
+            return False
+
 
     @property
     def charge_max_ampere(self):
-        #Not implemented for SKODA
-        """Return charge max ampere"""
-        return self.attrs.get('vehicleEmanager').get('rbc').get('settings').get('chargerMaxCurrent')
+        value = self.attrs.get('charger').get('settings').get('maxChargeCurrent').get('content')
+        if value == 254:
+            return "Max"
+        if value == 0:
+            return "Unknown"
+        else:
+            return "Reduced"
 
     @property
     def is_charge_max_ampere_supported(self):
-        #Not implemented for SKODA
-        if type(self.attrs.get('vehicleEmanager', {}).get('rbc', {}).get('settings', {}).get('chargerMaxCurrent', False)) in (float, int):
-            return True
+        """Return true if Charger Max Ampere is supported"""
+        if self.attrs.get('charger', {}):
+            if 'settings' in self.attrs.get('charger', {}):
+                if 'maxChargeCurrent' in self.attrs.get('charger', {})['settings']:
+                    return True
+            else:
+                return False
+
 
     @property
     def parking_light(self):
@@ -709,6 +794,27 @@ class Vehicle:
         if self.attrs.get('StoredVehicleDataResponseParsed', {}):
             if '0x0301010001' in self.attrs.get('StoredVehicleDataResponseParsed'):
                 return True
+            else:
+                return False
+    
+    @property
+    def outside_temperature(self):
+        """Return true if parking light is on"""
+        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301020001'].get('value',0))
+        if response:
+            return float((response-2730)/10)        
+        else:
+            return False
+
+    @property
+    def is_outside_temperature_supported(self):
+        """Return true if parking light is supported"""
+        if self.attrs.get('StoredVehicleDataResponseParsed', {}):
+            if '0x0301020001' in self.attrs.get('StoredVehicleDataResponseParsed'):
+                if "value" in self.attrs.get('StoredVehicleDataResponseParsed')['0x0301020001']:
+                    return True
+                else:
+                    return False
             else:
                 return False
 
@@ -738,7 +844,7 @@ class Vehicle:
             "lat" : lat,
             "lng" : lng,
             "timestamp" : parkingTime
-        }        
+        }
         return output
 
     @property
@@ -781,56 +887,71 @@ class Vehicle:
 
     @property
     def charging(self):
-        #Not implemented for SKODA
-        """Return status of charging."""
-        response = self.attrs.get('vehicleEmanager', {}).get('rbc', {}).get('status', {}).get('chargingState', {})
-        if response == 'CHARGING':
-            return True
+        """Return battery level"""
+        cstate = self.attrs.get('charger').get('status').get('chargingStatusData').get('chargingState').get('content', '')
+        return 1 if cstate == 'charging' else 0
+
+    @property
+    def is_charging_supported(self):
+        """Return true if charging is supported"""
+        if self.attrs.get('charger', {}):
+            if 'status' in self.attrs.get('charger'):
+                if 'chargingStatusData' in self.attrs.get('charger')['status']:
+                    if 'chargingState' in self.attrs.get('charger')['status']['chargingStatusData']:
+                        return True
+                    else:
+                        return False
+                else:
+                    return False
+            else:
+                return False
         else:
             return False
 
     @property
-    def is_charging_supported(self):
-        #Not implemented for SKODA
-        """Return true if vehichle has heater."""
-        if type(self.attrs.get('vehicleEmanager', {}).get('rbc', {}).get('status', {}).get('batteryPercentage', False)) in (float, int):
-            return True
-
-    @property
     def electric_range(self):
-        #Not implemented for SKODA
-        return self.attrs.get('vehicleStatus', {}).get('batteryRange', 0)
+        value = self.attrs.get('StoredVehicleDataResponseParsed')['0x0301030008'].get('value',0)
+        if value:
+            return int(value)
 
     @property
     def is_electric_range_supported(self):
-        #Not implemented for SKODA
-        if type(self.attrs.get('vehicleStatus', {}).get('batteryRange', False)) in (float, int):
-            return True
+        if self.attrs.get('StoredVehicleDataResponseParsed', {}):
+            if '0x0301030008' in self.attrs.get('StoredVehicleDataResponseParsed'):
+                if 'value' in self.attrs.get('StoredVehicleDataResponseParsed')['0x0301030008']:
+                    return True
+                else:
+                    return False
+            else:
+                return False
 
     @property
     def combustion_range(self):
-        value = self.attrs.get('StoredVehicleDataResponseParsed')['0x0301030005'].get('value',0)
+        value = self.attrs.get('StoredVehicleDataResponseParsed')['0x0301030006'].get('value',0)
         if value:
             return int(value)
 
     @property
     def is_combustion_range_supported(self):
         if self.attrs.get('StoredVehicleDataResponseParsed', {}):
-            if '0x0301030005' in self.attrs.get('StoredVehicleDataResponseParsed'):
+            if '0x0301030006' in self.attrs.get('StoredVehicleDataResponseParsed'):
                 return True
             else:
                 return False
 
     @property
     def combined_range(self):
-        #Not implemented for SKODA
-        return self.attrs.get('vehicleStatus', {}).get('totalRange', 0)
+        value = self.attrs.get('StoredVehicleDataResponseParsed')['0x0301030005'].get('value',0)
+        if value:
+            return int(value)
 
     @property
     def is_combined_range_supported(self):
-        #Not implemented for SKODA
-        if type(self.attrs.get('vehicleStatus', {}).get('totalRange', False)) in (float, int):
-            return True
+        if self.attrs.get('StoredVehicleDataResponseParsed', {}):
+            if '0x0301030005' in self.attrs.get('StoredVehicleDataResponseParsed'):
+                return True
+            else:
+                return False
 
     @property
     def fuel_level(self):
@@ -848,77 +969,73 @@ class Vehicle:
 
     @property
     def external_power(self):
-        #Not implemented for SKODA
         """Return true if external power is connected."""
-        check = self.attrs.get('vehicleEmanager', {}).get('rbc', {}).get('status', {}).get('pluginState', {})
-        if check == 'CONNECTED':
+        check = self.attrs.get('charger', {}).get('status', {}).get('chargingStatusData', {}).get('externalPowerSupplyState', {}).get('content', '')
+        if check in ['stationConnected', 'available']:
             return True
         else:
             return False
 
     @property
     def is_external_power_supported(self):
-        #Not implemented for SKODA
         """External power supported."""
-        if self.attrs.get('vehicleEmanager', {}).get('rbc', {}).get('status', {}).get('pluginState', False):
+        if self.attrs.get('charger', {}).get('status', {}).get('chargingStatusData', {}).get('externalPowerSupplyState', False):
             return True
+
 
     @property
     def electric_climatisation(self):
-        #Not implemented for SKODA
         """Return status of climatisation."""
-        climatisation_type = self.attrs.get('vehicleEmanager', {}).get('rpc', {}).get('settings', {}).get('electric', False)
-        status = self.attrs.get('vehicleEmanager', {}).get('rpc', {}).get('status', {}).get('climatisationState', '')
-        if status in ['HEATING', 'COOLING'] and climatisation_type is True:
+        climatisation_type = self.attrs.get('climater', {}).get('settings', {}).get('heaterSource', {}).get('content', '')
+        status = self.attrs.get('climater', {}).get('status', {}).get('climatisationStatusData', {}).get('climatisationState', {}).get('content', '')
+        if status in ['on', 'off', 'HEATING', 'COOLING'] and climatisation_type == 'electric':
             return True
         else:
             return False
 
     @property
     def is_climatisation_supported(self):
-        #Not implemented for SKODA
-        """Return true if vehichle has heater."""
-        response = self.attrs.get('vehicleEmanager', {}).get('rpc', {}).get('climaterActionState', '')
-        if response == 'AVAILABLE' or response == 'NO_PLUGIN':
+        """Return true if climatisation has State."""
+        response = self.attrs.get('climater', {}).get('status', {}).get('climatisationStatusData', {}).get('climatisationState', {}).get('content', '')
+        if response != '':
             return True
 
     @property
     def is_electric_climatisation_supported(self):
-        #Not implemented for SKODA
         """Return true if vehichle has heater."""
         return self.is_climatisation_supported
 
     @property
-    def combustion_climatisation(self):        
+    def combustion_climatisation(self):
         """Return status of combustion climatisation."""
         return self.attrs.get('heating', {}).get('climatisationStateReport', {}).get('climatisationState', False) == 'ventilation'
 
     @property
-    def is_combustion_climatisation_supported(self):        
+    def is_combustion_climatisation_supported(self):
         """Return true if vehichle has combustion climatisation."""         
         if self.attrs.get('heating', {}).get('climatisationStateReport', {}).get('climatisationState', False):
             return True
 
     @property
     def window_heater(self):
-        #Not implemented for SKODA
         """Return status of window heater."""
         ret = False
-        status_front = self.attrs.get('vehicleEmanager', {}).get('rpc', {}).get('status', {}).get('windowHeatingStateFront', '')
-        if status_front == 'ON':
-            ret = True
+        status_front = self.attrs.get('climater', {}).get('status', {}).get('windowHeatingStatusData', {}).get('windowHeatingStateFront', {}).get('content', '')
+        if status_front == 'on':
+            ret = True            
 
-        status_rear = self.attrs.get('vehicleEmanager', {}).get('rpc', {}).get('status', {}).get('windowHeatingStateRear', '')
-        if status_rear == 'ON':
+        status_rear = self.attrs.get('climater', {}).get('status', {}).get('windowHeatingStatusData', {}).get('windowHeatingStateRear', {}).get('content', '')
+        if status_rear == 'on':
             ret = True
         return ret
 
     @property
     def is_window_heater_supported(self):
-        #Not implemented for SKODA
         """Return true if vehichle has heater."""
         if self.is_electric_climatisation_supported:
-            if self.attrs.get('vehicleEmanager', {}).get('rpc', {}).get('status', {}).get('windowHeatingAvailable', False):
+            if self.attrs.get('climater', {}).get('status', {}).get('windowHeatingStatusData', {}).get('windowHeatingStateFront', {}).get('content', '') in ['on', 'off']:
+                return True
+            if self.attrs.get('climater', {}).get('status', {}).get('windowHeatingStatusData', {}).get('windowHeatingStateRear', {}).get('content', '') in ['on', 'off']:
                 return True
 
     @property
@@ -944,7 +1061,7 @@ class Vehicle:
             return True
 
     @property
-    def windows_closed(self):        
+    def windows_closed(self):
         return (self.window_closed_left_front and self.window_closed_left_back and self.window_closed_right_front and self.window_closed_right_back)
 
     @property
@@ -1045,26 +1162,85 @@ class Vehicle:
                 return False
 
     @property
+    def hood_closed(self):
+        response = self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040011'].get('value',0)
+        if response == 3:
+            _LOGGER.debug("Hood state is Closed?: %s" % response)
+            return True
+        else:
+            _LOGGER.debug("Hood state is Open?: %s" % response)
+            return False
+
+    @property
+    def is_hood_closed_supported(self):
+        """Return true if hood state is supported"""
+        if self.attrs.get('StoredVehicleDataResponseParsed', {}):
+            if '0x0301040011' in self.attrs.get('StoredVehicleDataResponseParsed'):
+                if (int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040011'].get('value',0)) == 0):
+                    return False
+                else:
+                    return True
+            else:
+                return False
+
+    @property
+    def charging_cable_locked(self):
+        """Return plug locked state"""
+        response = self.attrs.get('charger')['status']['plugStatusData']['lockState'].get('content',0)
+        if response == 'locked':
+            return True
+        else:
+            return False
+
+    @property
+    def is_charging_cable_locked_supported(self):
+        """Return true if plug locked state is supported"""
+        if self.attrs.get('charger', {}):
+            if 'status' in self.attrs.get('charger', {}):
+                if 'plugStatusData' in self.attrs.get('charger').get('status', {}):
+                    if 'lockState' in self.attrs.get('charger')['status'].get('plugStatusData', {}):
+                        return True
+        return False
+
+    @property
+    def charging_cable_connected(self):
+        """Return plug locked state"""
+        response = self.attrs.get('charger')['status']['plugStatusData']['plugState'].get('content',0)
+        if response == 'connected':
+            return False
+        else:
+            return True
+
+    @property
+    def is_charging_cable_connected_supported(self):
+        """Return true if charging cable connected is supported"""
+        if self.attrs.get('charger', {}):
+            if 'status' in self.attrs.get('charger', {}):
+                if 'plugStatusData' in self.attrs.get('charger').get('status', {}):
+                    if 'plugState' in self.attrs.get('charger')['status'].get('plugStatusData', {}):
+                        return True
+        return False
+
+    @property
     def charging_time_left(self):
-        #Not implemented for SKODA
+        """Return minutes to charing complete"""
         if self.external_power:
-            hours = self.attrs.get('vehicleEmanager', {}).get('rbc', {}).get('status', {}).get('chargingRemaningHour', 0)
-            minutes = self.attrs.get('vehicleEmanager', {}).get('rbc', {}).get('status', {}).get('chargingRemaningMinute', 0)
-            if hours and minutes:
-                # return 0 if we are not able to convert the values we get from skoda connect.
+            minutes = self.attrs.get('charger', {}).get('status', {}).get('batteryStatusData', {}).get('remainingChargingTime', {}).get('content', 0)
+            if minutes:
                 try:
-                    return (int(hours) * 60) + int(minutes)
+                    if minutes == 65535: minutes = -1
+                    return int(minutes)
                 except Exception:
                     pass
         return 0
 
     @property
     def is_charging_time_left_supported(self):
-        #Not implemented for SKODA
+        """Return true if charging is supported"""
         return self.is_charging_supported
 
     @property
-    def door_locked(self):        
+    def door_locked(self):
         #LEFT FRONT
         response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040001'].get('value',0))
         if response != 2:
@@ -1211,7 +1387,7 @@ class Vehicle:
 
     # trips
     @property
-    def trip_last_entry(self):        
+    def trip_last_entry(self):
         return self.attrs.get('tripstatistics', {})
 
     @property
@@ -1219,19 +1395,19 @@ class Vehicle:
         return self.trip_last_entry.get('averageSpeed')
 
     @property
-    def is_trip_last_average_speed_supported(self):        
+    def is_trip_last_average_speed_supported(self):
         response = self.trip_last_entry
         if response and type(response.get('averageSpeed')) in (float, int):
             return True
 
     @property
     def trip_last_average_electric_consumption(self):
-        return self.trip_last_entry.get('averageElectricConsumption')
+        return self.trip_last_entry.get('averageElectricEngineConsumption')
 
     @property
     def is_trip_last_average_electric_consumption_supported(self):
         response = self.trip_last_entry
-        if response and type(response.get('averageElectricConsumption')) in (float, int):
+        if response and type(response.get('averageElectricEngineConsumption')) in (float, int):
             return True
 
     @property
@@ -1611,6 +1787,7 @@ async def main():
                     #await vehicle.stop_combustion_engine_heating()
                     for instrument in vehicle.dashboard().instruments:
                         print(f' - {instrument.name} (domain:{instrument.component}) - {instrument.str_state}')
+                    
                     #print(vehicle.last_connected)
                     #print(vehicle.service_inspection)
                     #print(vehicle.position)
