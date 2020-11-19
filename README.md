@@ -3,7 +3,7 @@
 ![Downloads](https://img.shields.io/github/downloads/lendy007/skodaconnect/total)
 ![Downloads PyPi](https://img.shields.io/pypi/dm/skodaconnect)
 
-# Skoda Connect v1.0.6
+# Skoda Connect v1.0.8
 
 Fork of https://github.com/robinostlund/volkswagencarnet where it was modified to support also Skoda Connect
 
@@ -15,7 +15,8 @@ No licence, public domain, no guarantees, feel free to use for anything. Please 
 
 ## Thanks to
 
-- [RobinostLund](https://github.com/robinostlund/volkswagencarnet)
+- [RobinostLund](https://github.com/robinostlund/volkswagencarnet) for initial project for Volkswagen Carnet I was able to fork
+- [Farfar](https://github.com/Farfar) for modifications related to electric engines
 
 ## Other related repositories
 
@@ -66,7 +67,9 @@ RESOURCES = [
     'battery_level',
     'fuel_level',
     'service_inspection',
+	'service_inspection_km',
     'oil_inspection',
+	'oil_inspection_km',
     'last_connected',
     'charging_time_left',
     'electric_range',
@@ -86,7 +89,8 @@ RESOURCES = [
     'trip_last_average_electric_consumption',
     'trip_last_average_fuel_consumption',
     'trip_last_duration',
-    'trip_last_length'
+    'trip_last_length',
+	'outside_temperature'
 ]
 
 def is_enabled(attr):

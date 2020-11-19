@@ -501,15 +501,27 @@ def create_instruments():
         ),
         Sensor(
             attr="service_inspection",
-            name="Service inspection",
+            name="Service inspection days",
             icon="mdi:garage",
-            unit="",
+            unit="days",
+        ),
+        Sensor(
+            attr="service_inspection_km",
+            name="Service inspection km",
+            icon="mdi:garage",
+            unit="km",
         ),
         Sensor(
             attr="oil_inspection",
-            name="Oil inspection",
+            name="Oil inspection days",
             icon="mdi:oil",
-            unit="",
+            unit="days",
+        ),
+        Sensor(
+            attr="oil_inspection_km",
+            name="Oil inspection km",
+            icon="mdi:oil",
+            unit="km",
         ),
         Sensor(
             attr="last_connected",
@@ -607,6 +619,12 @@ def create_instruments():
             icon="mdi:radiator",
             unit="",
         ),
+        Sensor(
+            attr="outside_temperature",
+            name="Outside temperature",
+            icon="mdi:thermometer",
+            unit="°C",
+        ),
         BinarySensor(
             attr="external_power",
             name="External power",
@@ -662,6 +680,24 @@ def create_instruments():
             attr="trunk_closed",
             name="Trunk closed",
             device_class="door",
+            reverse_state=True
+        ),
+        BinarySensor(
+            attr="hood_closed",
+            name="Hood closed",
+            device_class="door",
+            reverse_state=True
+        ),
+        BinarySensor(
+            attr="charging_cable_connected",
+            name="Charging cable connected",
+            device_class="plug",
+            reverse_state=True
+        ),
+        BinarySensor(
+            attr="charging_cable_locked",
+            name="Charging cable locked",
+            device_class="lock",
             reverse_state=True
         ),
         BinarySensor(
