@@ -1000,7 +1000,7 @@ class Vehicle:
         """Return status of climatisation."""
         climatisation_type = self.attrs.get('climater', {}).get('settings', {}).get('heaterSource', {}).get('content', '')
         status = self.attrs.get('climater', {}).get('status', {}).get('climatisationStatusData', {}).get('climatisationState', {}).get('content', '')
-        if status in ['on', 'HEATING', 'COOLING'] and climatisation_type == 'electric':
+        if status == 'on' and climatisation_type == 'electric':
             return True
         else:
             return False
@@ -1175,12 +1175,11 @@ class Vehicle:
 
     @property
     def hood_closed(self):
+        """Return true if hood is closed"""
         response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040011'].get('value',0))
         if response == 3:
-            _LOGGER.debug("Hood state is Closed?: %s" % response)
             return True
         else:
-            _LOGGER.debug("Hood state is Open?: %s" % response)
             return False
 
     @property
