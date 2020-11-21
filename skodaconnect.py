@@ -523,7 +523,11 @@ class Vehicle:
 
             res = await self.post(query, **data)
             #heating actions
-            if res.get('action', {}).get('actionId', False):
+            if res.get('performActionResponse', {}).get('requestId', False):
+                _LOGGER.info('Message delivered, requestId=%s', res.get('performActionResponse', {}).get('requestId', 0))
+                return res.get('performActionResponse', {}).get('requestId', False)
+            # Electric climater and charger
+            elif res.get('action', {}).get('actionId', False):
                 _LOGGER.info('Message delivered, actionId=%s', res.get('action', {}).get('actionId', 0))
                 return str(res.get('action', {}).get('actionId', False))
             #status refresh actions
@@ -534,6 +538,10 @@ class Vehicle:
             elif res.get('rluActionResponse', {}).get('requestId', False):
                 _LOGGER.info('Message delivered, requestId=%s', res.get('rluActionResponse', {}).get('requestId', 0))
                 return res.get('rluActionResponse', {}).get('requestId', False)
+            #climatisation action
+            elif res.get('climatisationActionResponse', {}).get('requestId', False):
+                _LOGGER.info('Message delivered, requestId=%s', res.get('climatisationActionResponse', {}).get('requestId', 0))
+                return res.get('climatisationActionResponse', {}).get('requestId', False)
             else:
                 _LOGGER.warning(f'Failed to execute {query}, response is:{str(res)}')
                 return
@@ -558,12 +566,21 @@ class Vehicle:
                 url = "fs-car/bs/$sectionId/v1/Skoda/CZ/vehicles/$vin/charger/actions/$requestId"
             else:
                 url = "fs-car/bs/$sectionId/v1/Skoda/CZ/vehicles/$vin/requests/$requestId/status"
-          #      url = re.sub("\$requestId", requestId, url)
             url = re.sub("\$sectionId", sectionId, url)
             url = re.sub("\$requestId", requestId, url)
 
             res = await self.get(url)
-            if res.get('action', {}).get('actionState', False):
+            if res.get('requestStatusResponse', {}).get('status', False):
+                if res.get('requestStatusResponse', {}).get('status', False) == "request_in_progress":
+                    _LOGGER.debug(f'Request {requestId}, sectionId {sectionId} still in progress, sleeping for 5 seconds and check status again...')
+                    time.sleep(5)
+                    return await self.getRequestProgressStatus(requestId, sectionId, retryCount)
+                else:
+                    result=res.get('requestStatusResponse', {}).get('status', False)
+                    _LOGGER.debug(f'Request result: {result}')
+                    return True
+            # For electric charging and climatisation
+            elif res.get('action', {}).get('actionState', False):
                 if res.get('action', {}).get('actionState', False) == "queued":
                     _LOGGER.debug(f'Request {requestId}, sectionId {sectionId} still in progress, sleeping for 5 seconds and check status again...')
                     time.sleep(5)
@@ -652,7 +669,9 @@ class Vehicle:
     def climatisation_target_temperature(self):
         value = self.attrs.get('climater').get('settings').get('targetTemperature').get('content')
         if value:
-            return float((value-2730)/10)
+            reply = float((value-2730)/10) 
+            self._climatisation_target_temperature=reply
+            return reply
 
     @property
     def is_climatisation_target_temperature_supported(self):
@@ -714,7 +733,6 @@ class Vehicle:
                 return True
             else:
                 return False
-    
     @property
     def oil_inspection_km(self):
         """Return time left for service inspection"""
@@ -736,7 +754,13 @@ class Vehicle:
     def is_adblue_level_supported(self):
         if self.attrs.get('StoredVehicleDataResponseParsed', {}):
             if '0x02040C0001' in self.attrs.get('StoredVehicleDataResponseParsed'):
-                return True
+                if "value" in self.attrs.get('StoredVehicleDataResponseParsed')['0x02040C0001']:
+                    if self.attrs.get('StoredVehicleDataResponseParsed')['0x02040C0001'].get('value',0) is None:
+                        return False
+                    else:
+                        return True
+                else:
+                    return False
             else:
                 return False
 
@@ -765,7 +789,7 @@ class Vehicle:
 
     @property
     def charge_max_ampere(self):
-        value = self.attrs.get('charger').get('settings').get('maxChargeCurrent').get('content')
+        value = int(self.attrs.get('charger').get('settings').get('maxChargeCurrent').get('content'))
         if value == 254:
             return "Max"
         if value == 0:
@@ -782,7 +806,6 @@ class Vehicle:
                     return True
             else:
                 return False
-
 
     @property
     def parking_light(self):
@@ -801,13 +824,13 @@ class Vehicle:
                 return True
             else:
                 return False
-    
+
     @property
     def outside_temperature(self):
         """Return true if parking light is on"""
         response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301020001'].get('value',0))
         if response:
-            return float((response-2730)/10)        
+            return float((response-2730)/10)
         else:
             return False
 
@@ -1027,7 +1050,7 @@ class Vehicle:
         ret = False
         status_front = self.attrs.get('climater', {}).get('status', {}).get('windowHeatingStatusData', {}).get('windowHeatingStateFront', {}).get('content', '')
         if status_front == 'on':
-            ret = True            
+            ret = True
 
         status_rear = self.attrs.get('climater', {}).get('status', {}).get('windowHeatingStatusData', {}).get('windowHeatingStateRear', {}).get('content', '')
         if status_rear == 'on':
@@ -1085,7 +1108,7 @@ class Vehicle:
             return True
         else:
             return False
-        
+
     @property
     def is_window_closed_left_front_supported(self):
         """Return true if window state is supported"""
@@ -1148,7 +1171,7 @@ class Vehicle:
 
     @property
     def sunroof_closed(self):
-        response = self.attrs.get('StoredVehicleDataResponseParsed')['0x030105000B'].get('value',0)
+        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x030105000B'].get('value',0))
         if response == 3:
             return True
         else:
@@ -1406,7 +1429,8 @@ class Vehicle:
 
     @property
     def trip_last_average_electric_consumption(self):
-        return self.trip_last_entry.get('averageElectricEngineConsumption')
+        value = self.trip_last_entry.get('averageElectricEngineConsumption')
+        return float(value/10)
 
     @property
     def is_trip_last_average_electric_consumption_supported(self):
@@ -1600,23 +1624,28 @@ class Vehicle:
     async def start_window_heater(self):
         """Turn on/off window heater."""
         if self.is_window_heater_supported:
-            data = {"action": {"type": "stopClimatisation"}}
+            data = {"action": {"type": "startWindowHeating"}}
             resp = await self.call('fs-car/bs/climatisation/v1/Skoda/CZ/vehicles/$vin/climater/actions', json=data)
-            resp = await self.call('-/emanager/trigger-windowheating', triggerAction=True)
             if not resp:
                 _LOGGER.warning('Failed to start window heater')
             else:
+                await self.getRequestProgressStatus(resp,"climatisation")
                 await self.update()
                 return resp
         else:
-            _LOGGER.error('No climatization support.')
+            _LOGGER.error('No window heating support.')
 
     async def stop_window_heater(self):
         """Turn on/off window heater."""
         if self.is_window_heater_supported:
-            resp = await self.call('-/emanager/trigger-windowheating', triggerAction=False)
+            data = {"action": {"type": "stopWindowHeating"}}
+            resp = await self.call('fs-car/bs/climatisation/v1/Skoda/CZ/vehicles/$vin/climater/actions', json=data)
             if not resp:
                 _LOGGER.warning('Failed to stop window heater')
+            else:
+                 await self.getRequestProgressStatus(resp,"climatisation")
+                 await self.update()
+                 return resp
         else:
             await self.update()
             _LOGGER.error('No window heating support.')
