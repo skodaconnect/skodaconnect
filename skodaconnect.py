@@ -1655,14 +1655,22 @@ class Vehicle:
             if self.is_combustion_engine_heating_supported:
                 secToken = await self.requestSecToken(spin)                                
                 url = "fs-car/bs/rs/v1/skoda/CZ/vehicles/$vin/action"
-                data = "{ \"performAction\": { \"quickstart\": { \"climatisationDuration\": "+str(combustionengineheatingduration)+", \"startMode\": \"heating\", \"active\": true } } }"
+                
                 if "Content-Type" in self._connection._session_headers:
                     contType = self._connection._session_headers["Content-Type"]
                 else:
                     contType = ''
 
-                try:
+                if ("vwg-connect.com" in self._connection._session_auth_ref_url):
+                    #MY2021
+                    data = '<performAction xmlns="http://audi.de/connect/rs"><quickstart><active>true</active><startMode>heating</startMode><climatisationDuration>30</climatisationDuration></quickstart></performAction>'
+                    self._connection._session_headers["Content-Type"] = "application/vnd.vwg.mbb.RemoteStandheizung_v2_0_2+xml"
+                else:
+                    #MY 2020                                        
+                    data = "{ \"performAction\": { \"quickstart\": { \"climatisationDuration\": "+str(combustionengineheatingduration)+", \"startMode\": \"heating\", \"active\": true } } }"
                     self._connection._session_headers["Content-Type"] = "application/vnd.vwg.mbb.RemoteStandheizung_v2_0_2+json"
+                
+                try:                    
                     self._connection._session_headers["x-mbbSecToken"] = secToken
                     resp = await self.call(url, data=data)
                     if not resp:
@@ -1685,12 +1693,20 @@ class Vehicle:
 
     async def stop_combustion_engine_heating(self):
         if self.is_combustion_engine_heating_supported or self.is_combustion_climatisation_supported:
-            url = "fs-car/bs/rs/v1/skoda/CZ/vehicles/$vin/action"
-            data = "{ \"performAction\": { \"quickstop\": { \"active\": false } } }"
+            url = "fs-car/bs/rs/v1/skoda/CZ/vehicles/$vin/action"            
             if "Content-Type" in self._connection._session_headers:
                 contType = self._connection._session_headers["Content-Type"]
             else:
                 contType = ''
+
+            if ("vwg-connect.com" in self._connection._session_auth_ref_url):
+                #MY2021
+                data = '<performAction xmlns="http://audi.de/connect/rs"><quickstop><active>false</active></quickstop></performAction>'
+                self._connection._session_headers["Content-Type"] = "application/vnd.vwg.mbb.RemoteStandheizung_v2_0_2+xml"
+            else:
+                #MY 2020                                        
+                data = "{ \"performAction\": { \"quickstop\": { \"active\": false } } }"
+                self._connection._session_headers["Content-Type"] = "application/vnd.vwg.mbb.RemoteStandheizung_v2_0_2+json"
 
             try:
                 self._connection._session_headers["Content-Type"] = "application/vnd.vwg.mbb.RemoteStandheizung_v2_0_2+json"                
