@@ -146,7 +146,7 @@ class Connection:
             self._session_auth_headers['Referer'] = pe_url
             self._session_auth_headers['Origin'] = authissuer
             excepted = False
-            
+
             req = await self._session.post(
                 url=pw_url,
                 headers=self._session_auth_headers,
@@ -175,12 +175,12 @@ class Connection:
             # skodaconnect://oidc.login/#code=xxx&access_token=xxx&expires_in=3600&token_type=bearer&id_token=xxx 
             skodaURL = req.headers.get('location')
 
-            # get tokens
+            # Exchange Auth code for JWT tokens
             # https://tokenrefreshservice.apps.emea.vwapps.io/exchangeAuthCode
             jwtauth_code = parse_qs(urlparse(skodaURL).fragment).get('code')[0]
             jwtaccess_token = parse_qs(urlparse(skodaURL).fragment).get('access_token')[0]
             jwtid_token = parse_qs(urlparse(skodaURL).fragment).get('id_token')[0]
-            
+
             tokenBody = {
                 "auth_code": jwtauth_code,
                 "id_token":  jwtid_token,
@@ -195,12 +195,12 @@ class Connection:
             )
             if req.status != 200:
                 return ""
-            
+
             vwtok = await req.json()
             atoken = vwtok["access_token"]
             rtoken = vwtok["refresh_token"]
-            
-            # another tokens
+
+            # Get VW API tokens
             # https://mbboauth-1d.prd.ece.vwg-connect.com/mbbcoauth/mobile/oauth2/v1/token
             tokenBody2 =  {
                 "grant_type": "id_token",
@@ -228,8 +228,8 @@ class Connection:
             rtokens = await req.json()
             atoken = rtokens["access_token"]
             rtoken = rtokens["refresh_token"]
- 
-            # Update headers for requests            
+
+            # Update headers for requests
             self._session_headers['Authorization'] = "Bearer " + atoken            
             self._session_logged_in = True
             return True
@@ -242,7 +242,7 @@ class Connection:
     async def _request(self, method, url, **kwargs):
         """Perform a query to the Skoda Connect"""
         # try:
-        _LOGGER.debug("Request for %s", url)        
+        _LOGGER.debug("Request for %s", url)
 
         async with self._session.request(
             method,
@@ -523,9 +523,9 @@ class Vehicle:
 
             res = await self.post(query, **data)
             #heating actions
-            if res.get('performActionResponse', {}).get('requestId', False):
-                _LOGGER.info('Message delivered, requestId=%s', res.get('performActionResponse', {}).get('requestId', 0))
-                return res.get('performActionResponse', {}).get('requestId', False)
+            if res.get('action', {}).get('actionId', False):
+                _LOGGER.info('Message delivered, actionId=%s', res.get('action', {}).get('actionId', 0))
+                return str(res.get('action', {}).get('actionId', False))
             #status refresh actions
             elif res.get('CurrentVehicleDataResponse', {}).get('requestId', False):
                 _LOGGER.info('Message delivered, requestId=%s', res.get('CurrentVehicleDataResponse', {}).get('requestId', 0))
@@ -534,17 +534,13 @@ class Vehicle:
             elif res.get('rluActionResponse', {}).get('requestId', False):
                 _LOGGER.info('Message delivered, requestId=%s', res.get('rluActionResponse', {}).get('requestId', 0))
                 return res.get('rluActionResponse', {}).get('requestId', False)
-            #climatisation action
-            elif res.get('climatisationActionResponse', {}).get('requestId', False):
-                _LOGGER.info('Message delivered, requestId=%s', res.get('climatisationActionResponse', {}).get('requestId', 0))
-                return res.get('climatisationActionResponse', {}).get('requestId', False)
             else:
                 _LOGGER.warning(f'Failed to execute {query}, response is:{str(res)}')
                 return
 
         except Exception as error:
             _LOGGER.warning(f'Failure to execute: {error}')
-    
+
     async def getRequestProgressStatus(self, requestId, sectionId, retryCount=36):
         #retry count means that after 36x5seconds=3 minutes it will give up and not wait for status
         retryCount -= 1
@@ -556,19 +552,24 @@ class Vehicle:
             if not await self._connection.validate_login:
                 _LOGGER.info('Session expired, reconnecting to skoda connect.')
                 await self._connection._login()
-            
-            url = "fs-car/bs/$sectionId/v1/Skoda/CZ/vehicles/$vin/requests/$requestId/status"
-            url = re.sub("\$requestId", requestId, url)
+            if sectionId == 'climatisation':
+                url = "fs-car/bs/$sectionId/v1/Skoda/CZ/vehicles/$vin/climater/actions/$requestId"
+            elif sectionId == 'batterycharge':
+                url = "fs-car/bs/$sectionId/v1/Skoda/CZ/vehicles/$vin/charger/actions/$requestId"
+            else:
+                url = "fs-car/bs/$sectionId/v1/Skoda/CZ/vehicles/$vin/requests/$requestId/status"
+          #      url = re.sub("\$requestId", requestId, url)
             url = re.sub("\$sectionId", sectionId, url)
-            
+            url = re.sub("\$requestId", requestId, url)
+
             res = await self.get(url)
-            if res.get('requestStatusResponse', {}).get('status', False):
-                if res.get('requestStatusResponse', {}).get('status', False) == "request_in_progress":
+            if res.get('action', {}).get('actionState', False):
+                if res.get('action', {}).get('actionState', False) == "queued":
                     _LOGGER.debug(f'Request {requestId}, sectionId {sectionId} still in progress, sleeping for 5 seconds and check status again...')
-                    time.sleep(5)                    
+                    time.sleep(5)
                     return await self.getRequestProgressStatus(requestId, sectionId, retryCount)
                 else:
-                    result=res.get('requestStatusResponse', {}).get('status', False)
+                    result=res.get('action', {}).get('actionState', False)
                     _LOGGER.debug(f'Request result: {result}')
                     return True
             else:
@@ -651,9 +652,7 @@ class Vehicle:
     def climatisation_target_temperature(self):
         value = self.attrs.get('climater').get('settings').get('targetTemperature').get('content')
         if value:
-            reply = float((value-2730)/10) 
-            self._climatisation_target_temperature=reply
-            return reply
+            return float((value-2730)/10)
 
     @property
     def is_climatisation_target_temperature_supported(self):
@@ -737,13 +736,7 @@ class Vehicle:
     def is_adblue_level_supported(self):
         if self.attrs.get('StoredVehicleDataResponseParsed', {}):
             if '0x02040C0001' in self.attrs.get('StoredVehicleDataResponseParsed'):
-                if "value" in self.attrs.get('StoredVehicleDataResponseParsed')['0x02040C0001']:
-                    if self.attrs.get('StoredVehicleDataResponseParsed')['0x02040C0001'].get('value',0) is None:
-                        return False
-                    else:
-                        return True
-                else:
-                    return False
+                return True
             else:
                 return False
 
@@ -772,7 +765,7 @@ class Vehicle:
 
     @property
     def charge_max_ampere(self):
-        value = int(self.attrs.get('charger').get('settings').get('maxChargeCurrent').get('content'))
+        value = self.attrs.get('charger').get('settings').get('maxChargeCurrent').get('content')
         if value == 254:
             return "Max"
         if value == 0:
@@ -1000,7 +993,7 @@ class Vehicle:
         """Return status of climatisation."""
         climatisation_type = self.attrs.get('climater', {}).get('settings', {}).get('heaterSource', {}).get('content', '')
         status = self.attrs.get('climater', {}).get('status', {}).get('climatisationStatusData', {}).get('climatisationState', {}).get('content', '')
-        if status == 'on' and climatisation_type == 'electric':
+        if status != 'off' and climatisation_type == 'electric':
             return True
         else:
             return False
@@ -1155,7 +1148,7 @@ class Vehicle:
 
     @property
     def sunroof_closed(self):
-        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x030105000B'].get('value',0))
+        response = self.attrs.get('StoredVehicleDataResponseParsed')['0x030105000B'].get('value',0)
         if response == 3:
             return True
         else:
@@ -1413,8 +1406,7 @@ class Vehicle:
 
     @property
     def trip_last_average_electric_consumption(self):
-        value = self.trip_last_entry.get('averageElectricEngineConsumption')        
-        return float(value/10)
+        return self.trip_last_entry.get('averageElectricEngineConsumption')
 
     @property
     def is_trip_last_average_electric_consumption_supported(self):
@@ -1577,115 +1569,57 @@ class Vehicle:
     async def start_electric_climatisation(self):
         """Turn on/off climatisation."""
         if self.is_electric_climatisation_supported:
-            temperatureToSet = (self._climatisation_target_temperature*10)+2730
-            url = "fs-car/bs/climatisation/v1/skoda/CZ/vehicles/$vin/climater/actions"
-            data = "{ \"action\": { \"type\": \"startClimatisation\", \"settings\": { \"targetTemperature\": "+temperatureToSet+", \"heaterSource\": \"electric\"} } }"
-            if "Content-Type" in self._connection._session_headers:
-                contType = self._connection._session_headers["Content-Type"]
-            else:
-                contType = ''
-
+            data = {"action":{"type": "startClimatisation"}}
             try:
-                self._connection._session_headers["Content-Type"] = "application/vnd.vwg.mbb.climateraction_v1_0_0+json"
-                resp = await self.call(url, data=data)
+                resp = await self.call('fs-car/bs/climatisation/v1/Skoda/CZ/vehicles/$vin/climater/actions', json=data)
                 if not resp:
-                    _LOGGER.warning('Failed to start electric climatisation')
+                    _LOGGER.warning('Failed to start climatisation')
                 else:
-                    await self.getRequestProgressStatus(resp,"climatisation")
-                    await self.update()                        
-                    return 
+                    await self.getRequestProgressStatus(resp,'climatisation')
+                    await self.update()
+                    return resp
             except Exception as error:
-                _LOGGER.error('Failed to start electric climatisation - %s' % error)
-            
-            #Cleanup headers
-            if "Content-Type" in self._connection._session_headers: del self._connection._session_headers["Content-Type"]
-            if contType: self._connection._session_headers["Content-Type"]=contType
+                _LOGGER.warning('Failed to start climatisation - %s' % error)
         else:
             _LOGGER.error('No climatization support.')
 
     async def stop_electric_climatisation(self):
         """Turn on/off climatisation."""
         if self.is_electric_climatisation_supported:
-            url = "fs-car/bs/climatisation/v1/skoda/CZ/vehicles/$vin/climater/actions"
-            data = "{ \"action\": { \"type\": \"stopClimatisation\" } }"
-            if "Content-Type" in self._connection._session_headers:
-                contType = self._connection._session_headers["Content-Type"]
+            data = {"action": {"type": "stopClimatisation"}}
+            resp = await self.call('fs-car/bs/climatisation/v1/Skoda/CZ/vehicles/$vin/climater/actions', json=data)
+            if not resp:
+                _LOGGER.warning('Failed to stop climatisation')
             else:
-                contType = ''
-
-            try:
-                self._connection._session_headers["Content-Type"] = "application/vnd.vwg.mbb.climateraction_v1_0_0+json"
-                resp = await self.call(url, data=data)
-                if not resp:
-                    _LOGGER.warning('Failed to stop electric climatisation')
-                else:
-                    await self.getRequestProgressStatus(resp,"climatisation")
-                    await self.update()                        
-                    return 
-            except Exception as error:
-                _LOGGER.error('Failed to stop electric climatisation - %s' % error)
-            
-            #Cleanup headers
-            if "Content-Type" in self._connection._session_headers: del self._connection._session_headers["Content-Type"]
-            if contType: self._connection._session_headers["Content-Type"]=contType
+                await self.getRequestProgressStatus(resp,"climatisation")
+                await self.update()
+                return resp
         else:
             _LOGGER.error('No climatization support.')
 
     async def start_window_heater(self):
         """Turn on/off window heater."""
         if self.is_window_heater_supported:
-            url = "fs-car/bs/climatisation/v1/skoda/CZ/vehicles/$vin/climater/actions"
-            data = "{ \"action\": { \"type\": \"startWindowHeating\" } }"
-            if "Content-Type" in self._connection._session_headers:
-                contType = self._connection._session_headers["Content-Type"]
+            data = {"action": {"type": "stopClimatisation"}}
+            resp = await self.call('fs-car/bs/climatisation/v1/Skoda/CZ/vehicles/$vin/climater/actions', json=data)
+            resp = await self.call('-/emanager/trigger-windowheating', triggerAction=True)
+            if not resp:
+                _LOGGER.warning('Failed to start window heater')
             else:
-                contType = ''
-
-            try:
-                self._connection._session_headers["Content-Type"] = "application/vnd.vwg.mbb.climateraction_v1_0_0+json"
-                resp = await self.call(url, data=data)
-                if not resp:
-                    _LOGGER.warning('Failed to start window heater')
-                else:
-                    await self.getRequestProgressStatus(resp,"climatisation")
-                    await self.update()                        
-                    return 
-            except Exception as error:
-                _LOGGER.error('Failed to start window heater - %s' % error)
-            
-            #Cleanup headers
-            if "Content-Type" in self._connection._session_headers: del self._connection._session_headers["Content-Type"]
-            if contType: self._connection._session_headers["Content-Type"]=contType
+                await self.update()
+                return resp
         else:
-            _LOGGER.error('No combustion window heater support.')
+            _LOGGER.error('No climatization support.')
 
     async def stop_window_heater(self):
         """Turn on/off window heater."""
         if self.is_window_heater_supported:
-            url = "fs-car/bs/climatisation/v1/skoda/CZ/vehicles/$vin/climater/actions"
-            data = "{ \"action\": { \"type\": \"stopWindowHeating\" } }"
-            if "Content-Type" in self._connection._session_headers:
-                contType = self._connection._session_headers["Content-Type"]
-            else:
-                contType = ''
-
-            try:
-                self._connection._session_headers["Content-Type"] = "application/vnd.vwg.mbb.climateraction_v1_0_0+json"
-                resp = await self.call(url, data=data)
-                if not resp:
-                    _LOGGER.warning('Failed to start window heater')
-                else:
-                    await self.getRequestProgressStatus(resp,"climatisation")
-                    await self.update()                        
-                    return 
-            except Exception as error:
-                _LOGGER.error('Failed to start window heater - %s' % error)
-            
-            #Cleanup headers
-            if "Content-Type" in self._connection._session_headers: del self._connection._session_headers["Content-Type"]
-            if contType: self._connection._session_headers["Content-Type"]=contType
+            resp = await self.call('-/emanager/trigger-windowheating', triggerAction=False)
+            if not resp:
+                _LOGGER.warning('Failed to stop window heater')
         else:
-            _LOGGER.error('No combustion window heater support.')
+            await self.update()
+            _LOGGER.error('No window heating support.')
 
     async def start_combustion_engine_heating(self, spin, combustionengineheatingduration):
         if spin:
@@ -1706,11 +1640,11 @@ class Vehicle:
                         _LOGGER.warning('Failed to start combustion engine heating')
                     else:
                         await self.getRequestProgressStatus(resp,"rs")
-                        await self.update()                        
+                        await self.update()
                         return 
                 except Exception as error:
                     _LOGGER.error('Failed to start combustion engine heating - %s' % error)
-                
+
                 #Cleanup headers
                 if "x-mbbSecToken" in self._connection._session_headers: del self._connection._session_headers["x-mbbSecToken"]
                 if "Content-Type" in self._connection._session_headers: del self._connection._session_headers["Content-Type"]
@@ -1740,7 +1674,7 @@ class Vehicle:
                     return 
             except Exception as error:
                 _LOGGER.error('Failed to stop combustion engine heating - %s' % error)
-            
+
             #Cleanup headers
             if "Content-Type" in self._connection._session_headers: del self._connection._session_headers["Content-Type"]
             if contType: self._connection._session_headers["Content-Type"]=contType
@@ -1769,7 +1703,7 @@ class Vehicle:
                         await self.update()
                 except Exception as error:
                     _LOGGER.error('Failed to start combustion engine climatisation - %s' % error)
-                
+
                 #Cleanup headers
                 if "x-mbbSecToken" in self._connection._session_headers: del self._connection._session_headers["x-mbbSecToken"]
                 if "Content-Type" in self._connection._session_headers: del self._connection._session_headers["Content-Type"]
@@ -1783,12 +1717,14 @@ class Vehicle:
         return await self.stop_combustion_engine_heating()
 
     async def start_charging(self):
-        """Turn on/off window heater."""
+        """Turn on/off charging."""
         if self.is_charging_supported:
-            resp = await self.call('-/emanager/charge-battery', triggerAction=True, batteryPercent='100')
+            data = {"action": {"type": "start"}}
+            resp = await self.call('fs-car/bs/batterycharge/v1/Skoda/CZ/vehicles/$vin/charger/actions', json=data)
             if not resp:
                 _LOGGER.warning('Failed to start charging')
             else:
+                await self.getRequestProgressStatus(resp, 'batterycharge')
                 await self.update()
                 return resp
         else:
@@ -1797,10 +1733,12 @@ class Vehicle:
     async def stop_charging(self):
         """Turn on/off window heater."""
         if self.is_charging_supported:
-            resp = await self.call('-/emanager/charge-battery', triggerAction=False, batteryPercent='99')
+            data = {"action": {"type": "stop"}}
+            resp = await self.call('fs-car/bs/batterycharge/v1/Skoda/CZ/vehicles/$vin/charger/actions', json=data)
             if not resp:
                 _LOGGER.warning('Failed to stop charging')
             else:
+                await self.getRequestProgressStatus(resp, 'batterycharge')
                 await self.update()
                 return resp
         else:
@@ -1809,7 +1747,13 @@ class Vehicle:
     async def set_climatisation_target_temperature(self, target_temperature):
         """Turn on/off window heater."""
         if self.is_electric_climatisation_supported:
-            self._climatisation_target_temperature=target_temperature
+        #or self.is_combustion_climatisation_supported:
+            resp = await self.call('-/emanager/set-settings', chargerMaxCurrent=None, climatisationWithoutHVPower=None, minChargeLimit=None, targetTemperature=target_temperature)
+            if not resp:
+                _LOGGER.warning('Failed to set target temperature for climatisation')
+            else:
+                await self.update()
+                return resp
         else:
             _LOGGER.error('No climatisation support.')
 
