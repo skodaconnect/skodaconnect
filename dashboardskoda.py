@@ -173,7 +173,6 @@ class Switch(Instrument):
         return self.state
 
     def turn_on(self):
-        _LOGGER.debug("Turning on (switch class)")
         pass
 
     def turn_off(self):
@@ -369,11 +368,9 @@ class ElectricClimatisation(Switch):
         return self.vehicle.electric_climatisation
 
     async def turn_on(self):
-        _LOGGER.debug("AFTER turn ON Electric Climatisation")
         await self.vehicle.start_electric_climatisation()
 
     async def turn_off(self):
-        _LOGGER.debug("AFTER Turn OFF Electric Climatisation")
         await self.vehicle.stop_electric_climatisation()
 
     @property
