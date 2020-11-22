@@ -100,7 +100,7 @@ def is_enabled(attr):
 async def main():
     """Main method."""
     async with ClientSession(headers={'Connection': 'keep-alive'}) as session:
-        connection = volkswagencarnet.Connection(session, USERNAME, PASSWORD)
+        connection = skodaconnect.Connection(session, USERNAME, PASSWORD)
         if await connection._login():
             if await connection.update():
                 # Print overall state
