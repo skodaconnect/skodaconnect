@@ -451,12 +451,12 @@ class Connection:
         try:
             response = await self.get('https://mal-1a.prd.ece.vwg-connect.com/api/cs/vds/v1/vehicles/$vin/homeRegion', vin)
             self._session_auth_ref_url = response['homeRegion']['baseUri']['content'].split("/api")[0].replace("mal-", "fal-") if response['homeRegion']['baseUri']['content'] != "https://mal-1a.prd.ece.vwg-connect.com/api" else "https://msg.volkswagen.de"
-            self._session_spin_ref_url = response['homeRegion']['baseUri']['content'].split("/api")[0] if response['homeRegion']['baseUri']['content'] != "https://mal-1a.prd.ece.vwg-connect.com/api" else "https://msg.volkswagen.de"
+            self._session_spin_ref_url = response['homeRegion']['baseUri']['content'].split("/api")[0] 
         except:
             _LOGGER.debug(f'Retrying homeregion for %s' % vin)
             response = await self.get('https://mal-1a.prd.ece.vwg-connect.com/api/cs/vds/v1/vehicles/$vin/homeRegion', vin)
             self._session_auth_ref_url = response['homeRegion']['baseUri']['content'].split("/api")[0].replace("mal-", "fal-") if response['homeRegion']['baseUri']['content'] != "https://mal-1a.prd.ece.vwg-connect.com/api" else "https://msg.volkswagen.de"
-            self._session_spin_ref_url = response['homeRegion']['baseUri']['content'].split("/api")[0] if response['homeRegion']['baseUri']['content'] != "https://mal-1a.prd.ece.vwg-connect.com/api" else "https://msg.volkswagen.de"
+            self._session_spin_ref_url = response['homeRegion']['baseUri']['content'].split("/api")[0] 
 
     def vehicle(self, vin):
         """Return vehicle for given vin."""
