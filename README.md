@@ -3,7 +3,7 @@
 ![Downloads](https://img.shields.io/github/downloads/lendy007/skodaconnect/total)
 ![Downloads PyPi](https://img.shields.io/pypi/dm/skodaconnect)
 
-# Skoda Connect v1.0.10
+# Skoda Connect v1.0.11
 
 Fork of https://github.com/robinostlund/volkswagencarnet where it was modified to support also Skoda Connect
 
@@ -17,6 +17,7 @@ No licence, public domain, no guarantees, feel free to use for anything. Please 
 
 - [RobinostLund](https://github.com/robinostlund/volkswagencarnet) for initial project for Volkswagen Carnet I was able to fork
 - [Farfar](https://github.com/Farfar) for modifications related to electric engines
+- [tanelvakker](https://github.com/tanelvakker) for modifications related to correct SPIN handling for various actions and using correct URLs also for MY2021
 
 ## Other related repositories
 
