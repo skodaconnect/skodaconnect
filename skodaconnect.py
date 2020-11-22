@@ -530,7 +530,7 @@ class Vehicle:
             #heating actions
             if res.get('performActionResponse', {}).get('requestId', False):
                 _LOGGER.info('Message delivered, requestId=%s', res.get('performActionResponse', {}).get('requestId', 0))
-                return res.get('performActionResponse', {}).get('requestId', False)
+                return str(res.get('performActionResponse', {}).get('requestId', False))
             # Electric climater and charger
             elif res.get('action', {}).get('actionId', False):
                 _LOGGER.info('Message delivered, actionId=%s', res.get('action', {}).get('actionId', 0))
@@ -538,15 +538,15 @@ class Vehicle:
             #status refresh actions
             elif res.get('CurrentVehicleDataResponse', {}).get('requestId', False):
                 _LOGGER.info('Message delivered, requestId=%s', res.get('CurrentVehicleDataResponse', {}).get('requestId', 0))
-                return res.get('CurrentVehicleDataResponse', {}).get('requestId', False)
+                return str(res.get('CurrentVehicleDataResponse', {}).get('requestId', False))
             #car lock action
             elif res.get('rluActionResponse', {}).get('requestId', False):
                 _LOGGER.info('Message delivered, requestId=%s', res.get('rluActionResponse', {}).get('requestId', 0))
-                return res.get('rluActionResponse', {}).get('requestId', False)
+                return str(res.get('rluActionResponse', {}).get('requestId', False))
             #climatisation action
             elif res.get('climatisationActionResponse', {}).get('requestId', False):
                 _LOGGER.info('Message delivered, requestId=%s', res.get('climatisationActionResponse', {}).get('requestId', 0))
-                return res.get('climatisationActionResponse', {}).get('requestId', False)
+                return str(res.get('climatisationActionResponse', {}).get('requestId', False))
             else:
                 _LOGGER.warning(f'Failed to execute {query}, response is:{str(res)}')
                 return
