@@ -64,6 +64,7 @@ class Connection:
         self._session_guest_language_id = guest_lang
 
         self._session_auth_ref_url = BASE_SESSION
+        self._session_spin_ref_url = BASE_SESSION
         self._session_logged_in = False
         self._session_first_update = False
         self._session_auth_username = username
@@ -278,8 +279,10 @@ class Connection:
         if ("://" in replacedUrl):
             #already server contained in URL
             return replacedUrl
+        elif "rolesrights" in replacedUrl:
+            return urljoin(self._session_spin_ref_url, replacedUrl)
         else:
-            return urljoin( self._session_auth_ref_url, replacedUrl)
+            return urljoin(self._session_auth_ref_url, replacedUrl)
 
     async def get(self, url, vin=''):
         """Perform a get query to the online service."""
@@ -448,10 +451,12 @@ class Connection:
         try:
             response = await self.get('https://mal-1a.prd.ece.vwg-connect.com/api/cs/vds/v1/vehicles/$vin/homeRegion', vin)
             self._session_auth_ref_url = response['homeRegion']['baseUri']['content'].split("/api")[0].replace("mal-", "fal-") if response['homeRegion']['baseUri']['content'] != "https://mal-1a.prd.ece.vwg-connect.com/api" else "https://msg.volkswagen.de"
+            self._session_spin_ref_url = response['homeRegion']['baseUri']['content'].split("/api")[0] if response['homeRegion']['baseUri']['content'] != "https://mal-1a.prd.ece.vwg-connect.com/api" else "https://msg.volkswagen.de"
         except:
             _LOGGER.debug(f'Retrying homeregion for %s' % vin)
             response = await self.get('https://mal-1a.prd.ece.vwg-connect.com/api/cs/vds/v1/vehicles/$vin/homeRegion', vin)
             self._session_auth_ref_url = response['homeRegion']['baseUri']['content'].split("/api")[0].replace("mal-", "fal-") if response['homeRegion']['baseUri']['content'] != "https://mal-1a.prd.ece.vwg-connect.com/api" else "https://msg.volkswagen.de"
+            self._session_spin_ref_url = response['homeRegion']['baseUri']['content'].split("/api")[0] if response['homeRegion']['baseUri']['content'] != "https://mal-1a.prd.ece.vwg-connect.com/api" else "https://msg.volkswagen.de"
 
     def vehicle(self, vin):
         """Return vehicle for given vin."""
@@ -597,16 +602,21 @@ class Vehicle:
             _LOGGER.warning(f'Failure during get request progress status: {error}')
             return
     
-    async def requestSecToken(self,spin):
-        try:             
-            response = await self.get(self._connection._make_url('https://mal-1a.prd.ece.vwg-connect.com/api/rolesrights/authorization/v2/vehicles/$vin/services/rheating_v1/operations/P_QSACT/security-pin-auth-requested', vin=self.vin))
+    async def requestSecToken(self,spin,action="heating"):
+        urls = {
+            "lock":   "/api/rolesrights/authorization/v2/vehicles/$vin/services/rlu_v1/operations/LOCK/security-pin-auth-requested",
+            "unlock":   "/api/rolesrights/authorization/v2/vehicles/$vin/services/rlu_v1/operations/UNLOCK/security-pin-auth-requested",
+            "heating":  "/api/rolesrights/authorization/v2/vehicles/$vin/services/rheating_v1/operations/P_QSACT/security-pin-auth-requested"
+        }
+        try:
+            response = await self.get(self._connection._make_url(urls.get(action), vin=self.vin))
             secToken = response["securityPinAuthInfo"]["securityToken"]
             challenge = response["securityPinAuthInfo"]["securityPinTransmission"]["challenge"]
             securpin = await self.generateSecurPin(challenge, spin)
             body = "{ \"securityPinAuthentication\": { \"securityPin\": { \"challenge\": \""+challenge+"\", \"securityPinHash\": \""+securpin+"\" }, \"securityToken\": \""+secToken+"\" }}"
 
             self._connection._session_headers["Content-Type"]="application/json"
-            response = await self.post('https://mal-1a.prd.ece.vwg-connect.com/api/rolesrights/authorization/v2/security-pin-auth-completed', data=body)
+            response = await self.post(self._connection._make_url('/api/rolesrights/authorization/v2/security-pin-auth-completed', vin=self.vin), data=body)
             del self._connection._session_headers["Content-Type"]
             return response["securityToken"]
         except Exception as err:
@@ -1520,7 +1530,7 @@ class Vehicle:
     async def lock_car(self, spin):        
         if spin:
             if self.is_door_locked_supported:
-                secToken = await self.requestSecToken(spin)                                
+                secToken = await self.requestSecToken(spin, "lock")                                
                 url = "fs-car/bs/rlu/v1/skoda/CZ/vehicles/$vin/actions"
                 data = "<rluAction xmlns=\"http://audi.de/connect/rlu\"><action>lock</action></rluAction>"
                 if "Content-Type" in self._connection._session_headers:
@@ -1528,16 +1538,9 @@ class Vehicle:
                 else:
                     contType = ''
 
-                try:                                                                         
+                try:
                     self._connection._session_headers["Content-Type"] = "application/vnd.vwg.mbb.RemoteLockUnlock_v1_0_0+xml"
                     self._connection._session_headers["x-mbbSecToken"] = secToken
-                    #self._connection._session_headers["X-App-Id"] = "cz.skodaauto.connect"
-                    #self._connection._session_headers["X-App-Name"] = "ConnectApp"
-                    #self._connection._session_headers["X-Language-Id"] = "en"
-                    #self._connection._session_headers["Accept-Language"] = "en-CZ"
-                    #self._connection._session_headers["User-Agent"] = 
-                    #self._connection._session_headers["X-Platform"] = "apple"
-                    #self._connection._session_headers["X-Country-Id"] = "CZ"
                     resp = await self.call(url, data=data)
                     if not resp:
                         _LOGGER.warning('Failed to lock car')
@@ -1560,17 +1563,17 @@ class Vehicle:
     async def unlock_car(self, spin):
         if spin:
             if self.is_door_locked_supported:
-                secToken = await self.requestSecToken(spin)                                
+                secToken = await self.requestSecToken(spin, "unlock")
                 url = "fs-car/bs/rlu/v1/skoda/CZ/vehicles/$vin/actions"
-                data = '<rluAction xmlns="http://audi.de/connect/rlu"><action>unlock</action></rluAction>'
+                data = "<rluAction xmlns=\"http://audi.de/connect/rlu\"><action>unlock</action></rluAction>"
                 if "Content-Type" in self._connection._session_headers:
                     contType = self._connection._session_headers["Content-Type"]
                 else:
                     contType = ''
 
                 try:
-                    self._connection._session_headers["Content-Type"] = "application/vnd.vwg.mbb.RemoteLockUnlock_v1_0_0+xml; charset=UTF-8"
-                    self._connection._session_headers["x-mbbSecToken"] = secToken
+                    self._connection._session_headers["Content-Type"] = "application/vnd.vwg.mbb.RemoteLockUnlock_v1_0_0+xml"
+                    self._connection._session_headers["x-MbbSecToken"] = secToken
                     resp = await self.call(url, data=data)
                     if not resp:
                         _LOGGER.warning('Failed to unlock car')
@@ -1653,7 +1656,7 @@ class Vehicle:
     async def start_combustion_engine_heating(self, spin, combustionengineheatingduration):
         if spin:
             if self.is_combustion_engine_heating_supported:
-                secToken = await self.requestSecToken(spin)                                
+                secToken = await self.requestSecToken(spin, "heating")                                
                 url = "fs-car/bs/rs/v1/skoda/CZ/vehicles/$vin/action"
                 data = "{ \"performAction\": { \"quickstart\": { \"climatisationDuration\": "+str(combustionengineheatingduration)+", \"startMode\": \"heating\", \"active\": true } } }"
                 if "Content-Type" in self._connection._session_headers:
@@ -1713,7 +1716,7 @@ class Vehicle:
     async def start_combustion_climatisation(self, spin, combustionengineclimatisationduration):
         if spin:
             if self.is_combustion_climatisation_supported:
-                secToken = await self.requestSecToken(spin)                                
+                secToken = await self.requestSecToken(spin, "heating")                                
                 url = "fs-car/bs/rs/v1/skoda/CZ/vehicles/$vin/action"
                 data = "{ \"performAction\": { \"quickstart\": { \"climatisationDuration\": "+str(combustionengineclimatisationduration)+", \"startMode\": \"ventilation\", \"active\": true } } }"
                 if "Content-Type" in self._connection._session_headers:
