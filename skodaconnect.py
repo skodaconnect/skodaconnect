@@ -463,8 +463,8 @@ class Connection:
             else:
                 _LOGGER.debug(f'Could not fetch pre-heating: {response}')
         except aiohttp.client_exceptions.ClientResponseError as err:
-            if (err.status == 403):
-                _LOGGER.debug(f'Could not fetch pre-heating, error 403 (not supported on car?), error: {err}')
+            if (err.status == 403 or err.status == 502):
+                _LOGGER.debug(f'Could not fetch pre-heating, error 403/502 (not supported on car?), error: {err}')
             else:
                 _LOGGER.warning(f'Could not fetch pre-heating (ClientResponseError), error: {err}')        
         except Exception as err:
