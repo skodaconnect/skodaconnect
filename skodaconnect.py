@@ -361,7 +361,7 @@ class Connection:
             else:
                 _LOGGER.debug(f'Could not fetch carportData: {response}')
         except Exception as err:
-            _LOGGER.debug(f'Could not fetch carportData, error: {err}')
+            _LOGGER.warning(f'Could not fetch carportData, error: {err}')
 
         # Position data
         #https://msg.volkswagen.de/fs-car/bs/cf/v1/skoda/CZ/vehicles/$vin/position
@@ -371,10 +371,19 @@ class Connection:
                 self._state[url].update(
                     {'findCarResponse': response.get('findCarResponse', {})}
                 )
+                self._state[url]["findCarResponse"].update({"isMoving": False})                
             else:
                 _LOGGER.debug(f'Could not fetch position: {response}')
+        except aiohttp.client_exceptions.ClientResponseError as err:
+            if (err.status == 204):
+                _LOGGER.debug(f'Seems car is moving, HTTP 204 received from position')
+                self._state[url].update(
+                    {'findCarResponse':  { "isMoving" : True} }
+                )
+            else:
+                _LOGGER.warning(f'Could not fetch position (ClientResponseError), error: {err}')
         except Exception as err:
-            _LOGGER.debug(f'Could not fetch position, error: {err}')
+            _LOGGER.warning(f'Could not fetch position, error: {err}')
 
         # Stored car data
         #https://msg.volkswagen.de/fs-car/bs/vsr/v1/skoda/CZ/vehicles/$vin/status
@@ -390,7 +399,7 @@ class Connection:
             else:
                 _LOGGER.debug(f'Could not fetch StoredVehicleDataResponse: {response}')
         except Exception as err:
-            _LOGGER.debug(f'Could not fetch StoredVehicleDataResponse, error: {err}')
+            _LOGGER.warning(f'Could not fetch StoredVehicleDataResponse, error: {err}')
         
         # TRIP DATA
         #https://msg.volkswagen.de/fs-car/bs/tripstatistics/v1/skoda/CZ/vehicles/TMBJJ7NS3L8500308/tripdata/shortTerm?newest
@@ -404,7 +413,7 @@ class Connection:
             else:
                 _LOGGER.debug(f'Could not fetch tripstatistics: {response}')
         except Exception as err:
-            _LOGGER.debug(f'Could not fetch tripstatistics, error: {err}')
+            _LOGGER.warning(f'Could not fetch tripstatistics, error: {err}')
 
         # CLIMATISATION DATA
         #https://msg.volkswagen.de/fs-car/bs/climatisation/v1/skoda/CZ/vehicles/<VIN>/climater
@@ -416,8 +425,13 @@ class Connection:
                 )
             else:
                 _LOGGER.debug(f'Could not fetch climatisation: {response}')
+        except aiohttp.client_exceptions.ClientResponseError as err:
+            if (err.status == 403):
+                _LOGGER.debug(f'Could not fetch climatisation, error 403 (not supported on car?), error: {err}')
+            else:
+                _LOGGER.warning(f'Could not fetch climatisation (ClientResponseError), error: {err}')
         except Exception as err:
-            _LOGGER.debug(f'Could not fetch climatisation, error: {err}')
+            _LOGGER.warning(f'Could not fetch climatisation, error: {err}')
 
         # CHARGING DATA
         #https://msg.volkswagen.de/fs-car/bs/batterycharge/v1/skoda/CZ/vehicles/<VIN>/charger
@@ -429,8 +443,13 @@ class Connection:
                 )
             else:
                 _LOGGER.debug(f'Could not fetch charger: {response}')
+        except aiohttp.client_exceptions.ClientResponseError as err:
+            if (err.status == 403):
+                _LOGGER.debug(f'Could not fetch charger, error 403 (not supported on car?), error: {err}')
+            else:
+                _LOGGER.warning(f'Could not fetch charger (ClientResponseError), error: {err}')
         except Exception as err:
-            _LOGGER.debug(f'Could not fetch charger, error: {err}')
+            _LOGGER.warning(f'Could not fetch charger, error: {err}')
 
         # Pre-heater status (auxiliary heating)
         # https://msg.volkswagen.de/fs-car/bs/rs/v1/skoda/CZ/vehicles/$vin/status
@@ -443,8 +462,13 @@ class Connection:
                 )
             else:
                 _LOGGER.debug(f'Could not fetch pre-heating: {response}')
+        except aiohttp.client_exceptions.ClientResponseError as err:
+            if (err.status == 403):
+                _LOGGER.debug(f'Could not fetch pre-heating, error 403 (not supported on car?), error: {err}')
+            else:
+                _LOGGER.warning(f'Could not fetch pre-heating (ClientResponseError), error: {err}')        
         except Exception as err:
-            _LOGGER.debug(f'Could not fetch pre-heating, error: {err}')
+            _LOGGER.warning(f'Could not fetch pre-heating, error: {err}')
     
     async def getHomeRegion(self, vin):
         _LOGGER.debug("Getting homeregion for %s" % vin)
@@ -889,6 +913,24 @@ class Vehicle:
     def is_position_supported(self):
         """Return true if vehichle has position."""
         if self.attrs.get('findCarResponse', {}).get('Position', {}).get('carCoordinate', {}).get('latitude', False):
+            return True
+    
+    @property
+    def vehicleMoving(self):
+        return self.attrs.get('findCarResponse', {}).get('isMoving', False)
+
+    @property
+    def is_vehicleMoving_supported(self):
+        if 'isMoving' in self.attrs.get('findCarResponse', {}):
+            return True
+    
+    @property
+    def parkingTime(self):
+        return self.attrs.get('findCarResponse', {}).get('parkingTimeUTC', False)
+
+    @property
+    def is_parkingTime_supported(self):
+        if 'parkingTimeUTC' in self.attrs.get('findCarResponse', {}):
             return True
 
     @property

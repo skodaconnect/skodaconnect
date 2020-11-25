@@ -533,6 +533,12 @@ def create_instruments():
             unit="",
         ),
         Sensor(
+            attr="parkingTime",
+            name="Parking time",
+            icon="mdi:clock",
+            unit="",
+        ),
+        Sensor(
             attr="charging_time_left",
             name="Charging time left",
             icon="mdi:battery-charging-100",
@@ -738,6 +744,11 @@ def create_instruments():
             name="Window closed right back",
             device_class="window",
             reverse_state=True
+        ),
+        BinarySensor(
+            attr="vehicleMoving",
+            name="Vehicle Moving",
+            device_class="moving"
         )
         # BinarySensor(
         #     attr="request_in_progress",
