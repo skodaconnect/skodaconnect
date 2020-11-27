@@ -640,6 +640,11 @@ def create_instruments():
             device_class="plug"
         ),
         BinarySensor(
+            attr="energy_flow",
+            name="Energy flow",
+            device_class="power"
+        ),
+        BinarySensor(
             attr="parking_light",
             name="Parking light",
             device_class="light"
