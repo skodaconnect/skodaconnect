@@ -260,7 +260,19 @@ class Connection:
             else:
                 self._jarCookie = response.cookies
 
-            res = await response.json(loads=json_loads)
+            try:
+                if response.status == 204:
+                    res = {'status_code': response.status}
+                elif response.status >= 200 or response.status <= 300:
+                    res = await response.json(loads=json_loads)
+                else:                    
+                    res = {}                
+                    _LOGGER.debug(f'Not success status code [{response.status}] response: {response}')
+            except:
+                res = {}
+                _LOGGER.debug(f'Something went wrong [{response.status}] response: {response}')
+                return res
+
             _LOGGER.debug(f'Received [{response.status}] response: {res}')
             return res
         # except Exception as error:
@@ -371,7 +383,12 @@ class Connection:
                 self._state[url].update(
                     {'findCarResponse': response.get('findCarResponse', {})}
                 )
-                self._state[url]["findCarResponse"].update({"isMoving": False})                
+                self._state[url]["findCarResponse"].update({"isMoving": False})
+            elif response.get('status_code', 0) == 204:
+                _LOGGER.debug(f'Seems car is moving, HTTP 204 received from position')
+                self._state[url].update(
+                    {'findCarResponse':  { "isMoving" : True} }
+                )
             else:
                 _LOGGER.debug(f'Could not fetch position: {response}')
         except aiohttp.client_exceptions.ClientResponseError as err:
