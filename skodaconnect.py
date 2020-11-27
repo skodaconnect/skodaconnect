@@ -383,20 +383,16 @@ class Connection:
                 self._state[url].update(
                     {'findCarResponse': response.get('findCarResponse', {})}
                 )
-                self._state[url]["findCarResponse"].update({"isMoving": False})
+                self._state[url]["vehicleIsMoving"].update({"isMoving": False})
             elif response.get('status_code', 0) == 204:
                 _LOGGER.debug(f'Seems car is moving, HTTP 204 received from position')
-                self._state[url].update(
-                    {'findCarResponse':  { "isMoving" : True} }
-                )
+                self._state[url]["vehicleIsMoving"].update({"isMoving": True})
             else:
                 _LOGGER.debug(f'Could not fetch position: {response}')
         except aiohttp.client_exceptions.ClientResponseError as err:
             if (err.status == 204):
                 _LOGGER.debug(f'Seems car is moving, HTTP 204 received from position')
-                self._state[url].update(
-                    {'findCarResponse':  { "isMoving" : True} }
-                )
+                self._state[url]["vehicleIsMoving"].update({"isMoving": True})
             else:
                 _LOGGER.warning(f'Could not fetch position (ClientResponseError), error: {err}')
         except Exception as err:
@@ -915,33 +911,30 @@ class Vehicle:
     @property
     def position(self):
         """Return  position."""
-        if not vehicleMoving:
-            posObj = self.attrs.get('findCarResponse')
-            lat = int(posObj.get('Position').get('carCoordinate').get('latitude'))/1000000
-            lng = int(posObj.get('Position').get('carCoordinate').get('longitude'))/1000000
-            parkingTime = posObj.get('parkingTimeUTC')
-            output = {
-                "lat" : lat,
-                "lng" : lng,
-                "timestamp" : parkingTime
-            }
-            return output
+        posObj = self.attrs.get('findCarResponse')
+        lat = int(posObj.get('Position').get('carCoordinate').get('latitude'))/1000000
+        lng = int(posObj.get('Position').get('carCoordinate').get('longitude'))/1000000
+        parkingTime = posObj.get('parkingTimeUTC')
+        output = {
+            "lat" : lat,
+            "lng" : lng,
+            "timestamp" : parkingTime
+        }
+        return output
 
     @property
     def is_position_supported(self):
         """Return true if vehichle has position."""
         if self.attrs.get('findCarResponse', {}).get('Position', {}).get('carCoordinate', {}).get('latitude', False):
             return True
-        if self.attrs.get('findCarResponse', {}).get('isMoving', False):
-            return True
 
     @property
     def vehicleMoving(self):
-        return self.attrs.get('findCarResponse', {}).get('isMoving', False)
+        return self.attrs.get('vehicleIsMoving', {}).get('isMoving', False)
 
     @property
     def is_vehicleMoving_supported(self):
-        if is_position_suppported:
+        if self.attrs.get('vehicleIsMoving', {}).get('isMoving', {}):
             return True
 
     @property
