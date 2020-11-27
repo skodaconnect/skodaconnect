@@ -377,26 +377,29 @@ class Connection:
 
         # Position data
         #https://msg.volkswagen.de/fs-car/bs/cf/v1/skoda/CZ/vehicles/$vin/position
-        try:            
+        try:
             response = await self.get('fs-car/bs/cf/v1/skoda/CZ/vehicles/$vin/position', vin=url)
             if response.get('findCarResponse', {}) :
                 self._state[url].update(
                     {'findCarResponse': response.get('findCarResponse', {})}
                 )
-                self._state[url]["vehicleMoving"].update({"isMoving": False})
+                self._state[url].update({ 'isMoving': False })
             elif response.get('status_code', 0) == 204:
                 _LOGGER.debug(f'Seems car is moving, HTTP 204 received from position')
-                self._state[url].update(
-                    {'vehicleMoving':  { "isMoving" : True} }
-                )
+                self._state[url].update({ 'isMoving': True })
+#                self._state[url]["vehicleMoving"] = e({"isMoving": False})
+#                self._state[url].update(
+#                    {'vehicleMoving':  { "isMoving" : True} }
+#                )
             else:
                 _LOGGER.debug(f'Could not fetch position: {response}')
         except aiohttp.client_exceptions.ClientResponseError as err:
             if (err.status == 204):
                 _LOGGER.debug(f'Seems car is moving, HTTP 204 received from position')
-                self._state[url].update(
-                    {'vehicleMoving':  { "isMoving" : True} }
-                )
+                self._state[url].update({ 'isMoving': False })
+#                self._state[url].update(
+#                    {'vehicleMoving':  { "isMoving" : True} }
+#                )
             else:
                 _LOGGER.warning(f'Could not fetch position (ClientResponseError), error: {err}')
         except Exception as err:
@@ -934,11 +937,11 @@ class Vehicle:
 
     @property
     def vehicleMoving(self):
-        return self.attrs.get('vehicleMoving', {}).get('isMoving', False)
+        return self.attrs.get('isMoving', False)
 
     @property
     def is_vehicleMoving_supported(self):
-        if 'isMoving' in self.attrs.get('vehicleMoving', {}):
+        if self.is_position_supported:
             return True
 
     @property
