@@ -377,7 +377,7 @@ class Connection:
 
         # Position data
         #https://msg.volkswagen.de/fs-car/bs/cf/v1/skoda/CZ/vehicles/$vin/position
-        try:            
+        try:
             response = await self.get('fs-car/bs/cf/v1/skoda/CZ/vehicles/$vin/position', vin=url)
             if response.get('findCarResponse', {}) :
                 self._state[url].update(
@@ -404,7 +404,7 @@ class Connection:
 
         # Stored car data
         #https://msg.volkswagen.de/fs-car/bs/vsr/v1/skoda/CZ/vehicles/$vin/status
-        try:            
+        try:
             response = await self.get('fs-car/bs/vsr/v1/skoda/CZ/vehicles/$vin/status', vin=url)
             if response.get('StoredVehicleDataResponse', {}).get('vehicleData', {}).get('data', {})[0].get('field', {})[0] :
                 self._state[url].update(
@@ -931,16 +931,18 @@ class Vehicle:
         """Return true if vehichle has position."""
         if self.attrs.get('findCarResponse', {}).get('Position', {}).get('carCoordinate', {}).get('latitude', False):
             return True
-    
+        if self.attrs.get('findCarResponse', {}).get('isMoving', False):
+            return True
+
     @property
     def vehicleMoving(self):
         return self.attrs.get('findCarResponse', {}).get('isMoving', False)
 
     @property
     def is_vehicleMoving_supported(self):
-        if 'isMoving' in self.attrs.get('findCarResponse', {}):
+        if is_position_suppported:
             return True
-    
+
     @property
     def parkingTime(self):
         return self.attrs.get('findCarResponse', {}).get('parkingTimeUTC', False)
