@@ -377,7 +377,7 @@ class Connection:
 
         # Position data
         #https://msg.volkswagen.de/fs-car/bs/cf/v1/skoda/CZ/vehicles/$vin/position
-        try:            
+        try:
             response = await self.get('fs-car/bs/cf/v1/skoda/CZ/vehicles/$vin/position', vin=url)
             if response.get('findCarResponse', {}) :
                 self._state[url].update(
@@ -392,7 +392,7 @@ class Connection:
         except aiohttp.client_exceptions.ClientResponseError as err:
             if (err.status == 204):
                 _LOGGER.debug(f'Seems car is moving, HTTP 204 received from position')
-                self._state[url].update({ 'isMoving': False })
+                self._state[url].update({ 'isMoving': True })
             else:
                 _LOGGER.warning(f'Could not fetch position (ClientResponseError), error: {err}')
         except Exception as err:
@@ -400,12 +400,12 @@ class Connection:
 
         # Stored car data
         #https://msg.volkswagen.de/fs-car/bs/vsr/v1/skoda/CZ/vehicles/$vin/status
-        try:            
+        try:
             response = await self.get('fs-car/bs/vsr/v1/skoda/CZ/vehicles/$vin/status', vin=url)
             if response.get('StoredVehicleDataResponse', {}).get('vehicleData', {}).get('data', {})[0].get('field', {})[0] :
                 self._state[url].update(
                     {'StoredVehicleDataResponse': response.get('StoredVehicleDataResponse', {})}
-                )                
+                )
                 self._state[url].update(
                     {'StoredVehicleDataResponseParsed' :  dict([(e["id"],e if "value" in e else "") for f in [s["field"] for s in response["StoredVehicleDataResponse"]["vehicleData"]["data"]] for e in f]) }
                 )
@@ -413,7 +413,7 @@ class Connection:
                 _LOGGER.debug(f'Could not fetch StoredVehicleDataResponse: {response}')
         except Exception as err:
             _LOGGER.warning(f'Could not fetch StoredVehicleDataResponse, error: {err}')
-        
+
         # TRIP DATA
         #https://msg.volkswagen.de/fs-car/bs/tripstatistics/v1/skoda/CZ/vehicles/TMBJJ7NS3L8500308/tripdata/shortTerm?newest
         # -or- shortTerm?type=list -or- longTerm?type=list
@@ -838,11 +838,13 @@ class Vehicle:
     def charge_max_ampere(self):
         value = int(self.attrs.get('charger').get('settings').get('maxChargeCurrent').get('content'))
         if value == 254:
-            return "Max"
+            return "Maximum"
+        if value == 252:
+            return "Reduced"
         if value == 0:
             return "Unknown"
         else:
-            return "Reduced"
+            return value
 
     @property
     def is_charge_max_ampere_supported(self):
@@ -914,7 +916,7 @@ class Vehicle:
         posObj = self.attrs.get('findCarResponse')
         lat = int(posObj.get('Position').get('carCoordinate').get('latitude'))/1000000
         lng = int(posObj.get('Position').get('carCoordinate').get('longitude'))/1000000
-        parkingTime = posObj.get('parkingTimeUTC')  
+        parkingTime = posObj.get('parkingTimeUTC')
         output = {
             "lat" : lat,
             "lng" : lng,
@@ -927,7 +929,7 @@ class Vehicle:
         """Return true if vehichle has position."""
         if self.attrs.get('findCarResponse', {}).get('Position', {}).get('carCoordinate', {}).get('latitude', False):
             return True
-    
+
     @property
     def vehicleMoving(self):
         return self.attrs.get('isMoving', False)
@@ -936,7 +938,7 @@ class Vehicle:
     def is_vehicleMoving_supported(self):
         if self.is_position_supported:
             return True
-    
+
     @property
     def parkingTime(self):
         return self.attrs.get('findCarResponse', {}).get('parkingTimeUTC', 'Unknown')
@@ -1075,6 +1077,20 @@ class Vehicle:
         if self.attrs.get('charger', {}).get('status', {}).get('chargingStatusData', {}).get('externalPowerSupplyState', False):
             return True
 
+    @property
+    def energy_flow(self):
+        """Return true if energy is flowing through charging port."""
+        check = self.attrs.get('charger', {}).get('status', {}).get('chargingStatusData', {}).get('energyFlow', {}).get('content', 'off')
+        if check == 'on':
+            return True
+        else:
+            return False
+
+    @property
+    def is_energy_flow_supported(self):
+        """Energy flow supported."""
+        if self.attrs.get('charger', {}).get('status', {}).get('chargingStatusData', {}).get('energyFlow', False):
+            return True
 
     @property
     def electric_climatisation(self):

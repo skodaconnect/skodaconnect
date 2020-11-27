@@ -3,7 +3,7 @@
 ![Downloads](https://img.shields.io/github/downloads/lendy007/skodaconnect/total)
 ![Downloads PyPi](https://img.shields.io/pypi/dm/skodaconnect)
 
-# Skoda Connect v1.0.17
+# Skoda Connect v1.0.18
 
 Fork of https://github.com/robinostlund/volkswagencarnet where it was modified to support also Skoda Connect
 
@@ -68,9 +68,9 @@ RESOURCES = [
     'battery_level',
     'fuel_level',
     'service_inspection',
-	'service_inspection_km',
+    'service_inspection_km',
     'oil_inspection',
-	'oil_inspection_km',
+    'oil_inspection_km',
     'last_connected',
     'charging_time_left',
     'electric_range',
@@ -79,6 +79,7 @@ RESOURCES = [
     'charge_max_ampere',
     'climatisation_target_temperature',
     'external_power',
+    'energy_flow',
     'parking_light',
     'climatisation_without_external_power',
     'door_locked',
@@ -91,7 +92,7 @@ RESOURCES = [
     'trip_last_average_fuel_consumption',
     'trip_last_duration',
     'trip_last_length',
-	'outside_temperature'
+    'outside_temperature'
 ]
 
 def is_enabled(attr):
