@@ -915,16 +915,17 @@ class Vehicle:
     @property
     def position(self):
         """Return  position."""
-        posObj = self.attrs.get('findCarResponse')
-        lat = int(posObj.get('Position').get('carCoordinate').get('latitude'))/1000000
-        lng = int(posObj.get('Position').get('carCoordinate').get('longitude'))/1000000
-        parkingTime = posObj.get('parkingTimeUTC')  
-        output = {
-            "lat" : lat,
-            "lng" : lng,
-            "timestamp" : parkingTime
-        }
-        return output
+        if not vehicleMoving:
+            posObj = self.attrs.get('findCarResponse')
+            lat = int(posObj.get('Position').get('carCoordinate').get('latitude'))/1000000
+            lng = int(posObj.get('Position').get('carCoordinate').get('longitude'))/1000000
+            parkingTime = posObj.get('parkingTimeUTC')
+            output = {
+                "lat" : lat,
+                "lng" : lng,
+                "timestamp" : parkingTime
+            }
+            return output
 
     @property
     def is_position_supported(self):
