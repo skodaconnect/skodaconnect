@@ -9,7 +9,7 @@ import asyncio
 import hashlib
 
 from sys import version_info, argv
-from datetime import timedelta, datetime
+from datetime import timedelta, datetime, timezone
 from urllib.parse import urlsplit, urljoin, parse_qs, urlparse
 from json import dumps as to_json
 from collections import OrderedDict
@@ -28,7 +28,7 @@ _LOGGER = logging.getLogger(__name__)
 TIMEOUT = timedelta(seconds=30)
 
 HEADERS_SESSION = {
-    'Connection': 'keep-alive',    
+    'Connection': 'keep-alive',
     'Content-Type': 'application/json',
     "X-Client-Id": '7f045eee-7003-4379-9968-9355ed2adb06%40apps_vw-dilab_com',
     "X-App-Version": '3.2.6',
@@ -231,7 +231,7 @@ class Connection:
             rtoken = rtokens["refresh_token"]
 
             # Update headers for requests
-            self._session_headers['Authorization'] = "Bearer " + atoken            
+            self._session_headers['Authorization'] = "Bearer " + atoken
             self._session_logged_in = True
             return True
 
@@ -261,13 +261,16 @@ class Connection:
                 self._jarCookie = response.cookies
 
             try:
+                _LOGGER.debug("Response headers: %s" % response.headers)
                 if response.status == 204:
                     res = {'status_code': response.status}
                 elif response.status >= 200 or response.status <= 300:
                     res = await response.json(loads=json_loads)
-                else:                    
-                    res = {}                
+                else:
+                    res = {}
                     _LOGGER.debug(f'Not success status code [{response.status}] response: {response}')
+                if "X-RateLimit-Remaining" in response.headers:
+                    res['rate_limit_remaining'] = response.headers.get("X-RateLimit-Remaining", "")
             except:
                 res = {}
                 _LOGGER.debug(f'Something went wrong [{response.status}] response: {response}')
@@ -286,8 +289,8 @@ class Connection:
         # remove cookies from session as we have logged out
         self._clear_cookies()
 
-    def _make_url(self, ref, vin=''):  
-        replacedUrl = re.sub("\$vin", vin, ref)  
+    def _make_url(self, ref, vin=''):
+        replacedUrl = re.sub("\$vin", vin, ref)
         if ("://" in replacedUrl):
             #already server contained in URL
             return replacedUrl
@@ -315,11 +318,11 @@ class Connection:
                     _LOGGER.info('Session expired, creating new login session to skoda connect.')
                     await self._login()
             else:
-                self._session_first_update = True                
+                self._session_first_update = True
 
             # fetch vehicles
             _LOGGER.debug('Fetching vehicles')
-            
+
             # get vehicles
             if "Content-Type" in self._session_headers:
                 del self._session_headers["Content-Type"]
@@ -377,7 +380,7 @@ class Connection:
 
         # Position data
         #https://msg.volkswagen.de/fs-car/bs/cf/v1/skoda/CZ/vehicles/$vin/position
-        try:            
+        try:
             response = await self.get('fs-car/bs/cf/v1/skoda/CZ/vehicles/$vin/position', vin=url)
             if response.get('findCarResponse', {}) :
                 self._state[url].update(
@@ -387,12 +390,14 @@ class Connection:
             elif response.get('status_code', 0) == 204:
                 _LOGGER.debug(f'Seems car is moving, HTTP 204 received from position')
                 self._state[url].update({ 'isMoving': True })
+                self._requests_remaining = 15
             else:
                 _LOGGER.debug(f'Could not fetch position: {response}')
         except aiohttp.client_exceptions.ClientResponseError as err:
             if (err.status == 204):
                 _LOGGER.debug(f'Seems car is moving, HTTP 204 received from position')
-                self._state[url].update({ 'isMoving': False })
+                self._state[url].update({ 'isMoving': True })
+                self._requests_remaining = 15
             else:
                 _LOGGER.warning(f'Could not fetch position (ClientResponseError), error: {err}')
         except Exception as err:
@@ -400,12 +405,12 @@ class Connection:
 
         # Stored car data
         #https://msg.volkswagen.de/fs-car/bs/vsr/v1/skoda/CZ/vehicles/$vin/status
-        try:            
+        try:
             response = await self.get('fs-car/bs/vsr/v1/skoda/CZ/vehicles/$vin/status', vin=url)
             if response.get('StoredVehicleDataResponse', {}).get('vehicleData', {}).get('data', {})[0].get('field', {})[0] :
                 self._state[url].update(
                     {'StoredVehicleDataResponse': response.get('StoredVehicleDataResponse', {})}
-                )                
+                )
                 self._state[url].update(
                     {'StoredVehicleDataResponseParsed' :  dict([(e["id"],e if "value" in e else "") for f in [s["field"] for s in response["StoredVehicleDataResponse"]["vehicleData"]["data"]] for e in f]) }
                 )
@@ -413,7 +418,7 @@ class Connection:
                 _LOGGER.debug(f'Could not fetch StoredVehicleDataResponse: {response}')
         except Exception as err:
             _LOGGER.warning(f'Could not fetch StoredVehicleDataResponse, error: {err}')
-        
+
         # TRIP DATA
         #https://msg.volkswagen.de/fs-car/bs/tripstatistics/v1/skoda/CZ/vehicles/TMBJJ7NS3L8500308/tripdata/shortTerm?newest
         # -or- shortTerm?type=list -or- longTerm?type=list
@@ -540,7 +545,8 @@ class Connection:
 class Vehicle:
     def __init__(self, conn, url):
         self._connection = conn
-        self._url = url        
+        self._url = url
+        self._requests_remaining = -1
 
     async def update(self):
         # await self._connection.update(request_data=False)
@@ -554,6 +560,9 @@ class Vehicle:
     async def post(self, query, **data):
         """Perform a query to the online service."""
         req = await self._connection.post(query, self._url, **data)
+        # Get the number of requests left to throttled:
+        if req.get("rate_limit_remaining", False):
+            self._requests_remaining = int(req.get("rate_limit_remaining", -1))
         return req
 
     async def call(self, query, **data):
@@ -659,10 +668,10 @@ class Vehicle:
         except Exception as err:
             _LOGGER.error(f'Could not generate security token for active  (maybe wrong SPIN?), error: {err}')
 
-    async def generateSecurPin(self,challenge, pin):                
-        pinArray = bytearray.fromhex(pin);        
-        byteChallenge = bytearray.fromhex(challenge);                     
-        pinArray.extend(byteChallenge)        
+    async def generateSecurPin(self,challenge, pin):
+        pinArray = bytearray.fromhex(pin);
+        byteChallenge = bytearray.fromhex(challenge);
+        pinArray.extend(byteChallenge)
         return hashlib.sha512(pinArray).hexdigest()
 
     @property
@@ -694,21 +703,14 @@ class Vehicle:
 
     @property
     def last_connected(self):
-        """Return when vehicle was last connected to skoda connect"""
-        last_connected = self.attrs.get('StoredVehicleDataResponse').get('vehicleData').get('data')[0].get('field')[0].get('tsCarSentUtc')
-        #if last_connected:
-            #last_connected = f'{last_connected[0]}  {last_connected[1]}'
-         #   date_patterns = ["%Y-%m-%dT%H:%M:%S", "%d.%m.%Y %H:%M", "%d-%m-%Y %H:%M"]
-            #for date_pattern in date_patterns:
-                #try:
-                    #return datetime.strptime(last_connected, date_pattern).strftime("%Y-%m-%d %H:%M:%S")
-                #except ValueError:
-                    #pass
+        """Return when vehicle was last connected to skoda connect."""
+        last_connected_utc = self.attrs.get('StoredVehicleDataResponse').get('vehicleData').get('data')[0].get('field')[0].get('tsCarSentUtc')
+        last_connected = last_connected_utc.replace(tzinfo=timezone.utc).astimezone(tz=None)
         return last_connected
 
     @property
     def is_last_connected_supported(self):
-        """Return when vehicle was last connected to skoda connect"""
+        """Return when vehicle was last connected to skoda connect."""
         if self.attrs.get('StoredVehicleDataResponse', {}).get('vehicleData', {}).get('data', {})[0].get('field', {})[0].get('tsCarSentUtc', []):
             return True
 
@@ -838,11 +840,13 @@ class Vehicle:
     def charge_max_ampere(self):
         value = int(self.attrs.get('charger').get('settings').get('maxChargeCurrent').get('content'))
         if value == 254:
-            return "Max"
+            return "Maximum"
+        if value == 252:
+            return "Reduced"
         if value == 0:
             return "Unknown"
         else:
-            return "Reduced"
+            return value
 
     @property
     def is_charge_max_ampere_supported(self):
@@ -914,7 +918,7 @@ class Vehicle:
         posObj = self.attrs.get('findCarResponse')
         lat = int(posObj.get('Position').get('carCoordinate').get('latitude'))/1000000
         lng = int(posObj.get('Position').get('carCoordinate').get('longitude'))/1000000
-        parkingTime = posObj.get('parkingTimeUTC')  
+        parkingTime = posObj.get('parkingTimeUTC')
         output = {
             "lat" : lat,
             "lng" : lng,
@@ -927,7 +931,7 @@ class Vehicle:
         """Return true if vehichle has position."""
         if self.attrs.get('findCarResponse', {}).get('Position', {}).get('carCoordinate', {}).get('latitude', False):
             return True
-    
+
     @property
     def vehicleMoving(self):
         return self.attrs.get('isMoving', False)
@@ -936,7 +940,7 @@ class Vehicle:
     def is_vehicleMoving_supported(self):
         if self.is_position_supported:
             return True
-    
+
     @property
     def parkingTime(self):
         return self.attrs.get('findCarResponse', {}).get('parkingTimeUTC', 'Unknown')
@@ -1075,6 +1079,20 @@ class Vehicle:
         if self.attrs.get('charger', {}).get('status', {}).get('chargingStatusData', {}).get('externalPowerSupplyState', False):
             return True
 
+    @property
+    def energy_flow(self):
+        """Return true if energy is flowing through charging port."""
+        check = self.attrs.get('charger', {}).get('status', {}).get('chargingStatusData', {}).get('energyFlow', {}).get('content', 'off')
+        if check == 'on':
+            return True
+        else:
+            return False
+
+    @property
+    def is_energy_flow_supported(self):
+        """Energy flow supported."""
+        if self.attrs.get('charger', {}).get('status', {}).get('chargingStatusData', {}).get('energyFlow', False):
+            return True
 
     @property
     def electric_climatisation(self):
@@ -1476,6 +1494,14 @@ class Vehicle:
         response = self.attrs.get('vehicleStatus', {}).get('requestStatus', {})
         if response or response is None:
             return True
+
+    @property
+    def requests_remaining(self):
+        return self._requests_remaining
+
+    @property
+    def is_requests_remaining_supported(self):
+        return True if self._requests_remaining else False
 
     # trips
     @property
