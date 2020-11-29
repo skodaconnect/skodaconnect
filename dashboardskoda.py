@@ -634,10 +634,21 @@ def create_instruments():
             icon="mdi:thermometer",
             unit="°C",
         ),
+        Sensor(
+            attr="requests_remaining",
+            name="Requests remaining",
+            icon="mdi:chat-alert",
+            unit="",
+        ),
         BinarySensor(
             attr="external_power",
             name="External power",
             device_class="plug"
+        ),
+        BinarySensor(
+            attr="energy_flow",
+            name="Energy flow",
+            device_class="power"
         ),
         BinarySensor(
             attr="parking_light",
