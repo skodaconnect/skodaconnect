@@ -263,7 +263,7 @@ class Connection:
             try:
                 _LOGGER.debug("Response headers: %s" % response.headers)
                 if response.status == 204:
-                    res = {'status_code': response.status, "rate_limit_remaining": 15}
+                    res = {'status_code': response.status}
                 elif response.status >= 200 or response.status <= 300:
                     res = await response.json(loads=json_loads)
                 else:
@@ -390,12 +390,14 @@ class Connection:
             elif response.get('status_code', 0) == 204:
                 _LOGGER.debug(f'Seems car is moving, HTTP 204 received from position')
                 self._state[url].update({ 'isMoving': True })
+                self._requests_remaining = 15
             else:
                 _LOGGER.debug(f'Could not fetch position: {response}')
         except aiohttp.client_exceptions.ClientResponseError as err:
             if (err.status == 204):
                 _LOGGER.debug(f'Seems car is moving, HTTP 204 received from position')
                 self._state[url].update({ 'isMoving': True })
+                self._requests_remaining = 15
             else:
                 _LOGGER.warning(f'Could not fetch position (ClientResponseError), error: {err}')
         except Exception as err:
