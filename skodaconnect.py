@@ -71,6 +71,7 @@ class Connection:
         self._session_auth_password = password
 
         self._vin = ""
+        self._vehicles = []
 
         _LOGGER.debug('Using service <%s>', self._session_base)
 
@@ -338,6 +339,7 @@ class Connection:
                     vehicle_url = vehicle
                     _LOGGER.debug('Vehicle_URL %s', vehicle_url)
                     self._state.update({vehicle_url: dict()})
+                    self._vehicles.append(Vehicle(self, vehicle_url))
                     # if vehicle_url not in self._state:
                     #     _LOGGER.debug('Vehicle_URL not in states, adding')
                     #     self._state.update({vehicle_url: dict()})
@@ -513,7 +515,8 @@ class Connection:
     @property
     def vehicles(self):
         """Return vehicle state."""
-        return (Vehicle(self, url) for url in self._state)
+        #return (Vehicle(self, url) for url in self._state)
+        return self._vehicles
 
     def vehicle_attrs(self, vehicle_url):
         return self._state.get(vehicle_url)
