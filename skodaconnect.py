@@ -270,20 +270,9 @@ class Connection:
             cookies=self._jarCookie,
             **kwargs
         ) as response:
-            #try:
+            #if response.status not in (200, 204, 401, 429, 503):
             #    response.raise_for_status()
-            #except aiohttp.client_exceptions.ClientResponseError as error:
-            #    if response.status == 401:
-            #        _LOGGER.debug(f'Error in aiohttp request: {error}')
-            #        _LOGGER.debug(f'Headers: {self._session_tokens}')
-            #        self._session_logged_in = False
-            #        return False
-            #    pass
-            #else:
-            #    pass
-            if response.status not in (200, 204, 401, 429, 503):
-                response.raise_for_status()
-                #raise aiohttp.ClientResponseError()
+            response.raise_for_status()
 
             # Update cookie jar
             if self._jarCookie != "":
@@ -568,6 +557,7 @@ class Connection:
                     {'findCarResponse': response.get('findCarResponse', {})}
                 )
                 self._state[vin].update({ 'isMoving': False })
+                self._state[vin].pop('rate_limit_remaining')
                 return True
             elif response.get('status_code', 0) == 204:
                 _LOGGER.debug(f'Seems car is moving, HTTP 204 received from position')
@@ -576,8 +566,10 @@ class Connection:
                 return True
             else:
                 _LOGGER.debug(f'Could not fetch position: {response}')
+                self._state[vin].pop('rate_limit_remaining')
             return False
         except aiohttp.client_exceptions.ClientResponseError as err:
+            self._state[vin].pop('rate_limit_remaining')
             if (err.status == 403 or err.status == 502):
                 _LOGGER.debug(f'Could not fetch position, error 403/502 (not supported on car?), error: {err}')
             elif err.status == 401:
@@ -1333,8 +1325,8 @@ class Vehicle:
             minutes = self.attrs.get('charger', {}).get('status', {}).get('batteryStatusData', {}).get('remainingChargingTime', {}).get('content', 0)
             if minutes:
                 try:
-                    if minutes == 65535: minutes = -1
-                    return int(minutes)
+                    if minutes == 65535: return -1
+                    return "%02d:%02d" % divmod(minutes, 60)
                 except Exception:
                     pass
         return 0
@@ -1598,21 +1590,18 @@ class Vehicle:
   # Parking heater
     @property
     def pheater_duration(self):
-        _LOGGER.debug(f'pheater getter, value is {self._climate_duration}')
         return self._climate_duration
 
     @pheater_duration.setter
     def pheater_duration(self, value):  
-        _LOGGER.debug(f'pheater setter, value is {self.pheater_duration}')
         if value in [10, 20, 30, 40, 50, 60]:
-            _LOGGER.debug(f'pheater setter, set value to: {value}')
             self._climate_duration = value
-            _LOGGER.debug(f'pheater setter, value is now {self.pheater_duration}')
         else:
             _LOGGER.warning(f'Invalid value for duration: {value}')
 
+    @property
     def is_pheater_duration_supported(self):
-        return True #self.is_pheater_heating_supported
+        return self.is_pheater_heating_supported
 
     @property
     def pheater_ventilation(self):
@@ -2035,7 +2024,6 @@ class Vehicle:
     def requests_remaining(self):
         """Get remaining requests before throttled."""
         if self.attrs.get('rate_limit_remaining', False):
-            _LOGGER.debug('rate_limit_remaining is set, update requests remaining to: %s' % self.attrs.get('rate_limit_remaining', ''))
             self.requests_remaining = self.attrs.get('rate_limit_remaining')
         return self._requests_remaining
 

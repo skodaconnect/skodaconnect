@@ -3,7 +3,7 @@
 ![Downloads](https://img.shields.io/github/downloads/lendy007/skodaconnect/total)
 ![Downloads PyPi](https://img.shields.io/pypi/dm/skodaconnect)
 
-# Skoda Connect v1.0.18
+# Skoda Connect v1.0.18-test
 
 Fork of https://github.com/robinostlund/volkswagencarnet where it was modified to support also Skoda Connect
 
@@ -21,7 +21,7 @@ No licence, public domain, no guarantees, feel free to use for anything. Please 
 
 ## Other related repositories
 
-- [HomeAssistant Component](https://github.com/lendy007/homeassistant-skodaconnect) a custom component for Home Assistant
+- [HomeAssistant Component](https://github.com/lendy007/homeassistant-skodaconnect) a custom component for Home Assistant. Please use branch test to make use of this branch of the library.
 
 ## Installation
 
@@ -57,13 +57,26 @@ COMPONENTS = {
 }
 
 RESOURCES = [
+    'nickname',
+    'deactivated',
     'position',
     'distance',
+    'climatisation_target_temperature',
+    'climatisation_without_external_power',
     'electric_climatisation',
-    'combustion_climatisation',
+    'auxiliary_climatisation',
+    'pheater_climatisation',
+    'pheater_heating',
+    'pheater_status',
+    'pheater_duration',
     'window_heater',
-    'combustion_engine_heating',
     'charging',
+    'charging_cable_connected',
+    'charging_cable_locked',
+    'charging_time_left',
+    'charge_max_ampere',
+    'external_power',
+    'energy_flow',
     'adblue_level',
     'battery_level',
     'fuel_level',
@@ -72,20 +85,22 @@ RESOURCES = [
     'oil_inspection',
     'oil_inspection_km',
     'last_connected',
-    'charging_time_left',
     'electric_range',
     'combustion_range',
     'combined_range',
-    'charge_max_ampere',
-    'climatisation_target_temperature',
-    'external_power',
-    'energy_flow',
+    'request_in_progress',
+    'requests_remaining',
+    'request_result',
     'parking_light',
-    'climatisation_without_external_power',
     'door_locked',
     'trunk_locked',
-    'request_in_progress',
     'windows_closed',
+    'window_closed_left_front',
+    'window_closed_right_front',
+    'window_closed_left_back',
+    'window_closed_right_back',
+    'trunk_closed',
+    'hood_closed',
     'sunroof_closed',
     'trip_last_average_speed',
     'trip_last_average_electric_consumption',

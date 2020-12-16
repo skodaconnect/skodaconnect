@@ -77,21 +77,42 @@ class Sensor(Instrument):
     def __init__(self, attr, name, icon, unit):
         super().__init__(component="sensor", attr=attr, name=name, icon=icon)
         self.unit = unit
+        self.convert = False
 
-    def configurate(self, scandinavian_miles=False, **config):
-        if self.unit and scandinavian_miles:
+    def configurate(self, scandinavian_miles=False, imperial_units=False, **config):
+        if self.unit and imperial_units:
             if "km" == self.unit:
-                self.unit = "mil"
+                self.unit = "mi"
+                self.convert = True
             elif "km/h" == self.unit:
-                self.unit = "mil/h"
+                self.unit = "mi/h"
+                self.convert = True
             elif "l/100 km" == self.unit:
-                self.unit = "l/100 mil"
+                self.unit = "gal/100 mi"
+                self.convert = True
             elif "kWh/100 km" == self.unit:
-                self.unit = "kWh/100 mil"
+                self.unit = "kWh/100 mi"
+                self.convert = True
+            elif "C" == self.unit or "°C" == self.unit:
+                self.unit = "°F"
+                self.convert = True
+        elif self.unit and scandinavian_miles:
+            if "km" == self.unit:
+                self.unit = "mi"
+                self.convert = True
+            elif "km/h" == self.unit:
+                self.unit = "mi/h"
+                self.convert = True
+            elif "l/100 km" == self.unit:
+                self.unit = "l/100 mi"
+                self.convert = True
+            elif "kWh/100 km" == self.unit:
+                self.unit = "kWh/100 mi"
+                self.convert = True
+
         config.get('parkingheater', 30)
         if "pheater_duration" == self.attr:
             setValue = config.get('climatisation_duration', 30)
-            _LOGGER.debug(f'Set Parking Heater duration sensor value to {setValue}')
             self.vehicle.pheater_duration = setValue
 
     @property
@@ -108,8 +129,16 @@ class Sensor(Instrument):
     @property
     def state(self):
         val = super().state
-        if val and self.unit in ['mil', 'mil/h']:
-            return val / 10
+        if val and self.unit and "mi" in self.unit and self.convert == True:
+            return int(round(val / 1.609344))
+        if val and self.unit and "mi/h" in self.unit and self.convert == True:
+            return int(round(val / 1.609344))
+        if val and self.unit and "gal/100 mi" in self.unit and self.convert == True:
+            return round(val * 0.4251438, 1)
+        if val and self.unit and "kWh/100 mi" in self.unit and self.convert == True:
+            return round(val * 0.4251438, 1)
+        if val and self.unit and self.unit in ["°C", "C"] and self.convert == True:
+            return round((val * 9/5) + 32, 1)
         else:
             return val
 
@@ -593,7 +622,7 @@ def create_instruments():
             attr="charging_time_left",
             name="Charging time left",
             icon="mdi:battery-charging-100",
-            unit="min",
+            unit="h",
         ),
         Sensor(
             attr="electric_range",
