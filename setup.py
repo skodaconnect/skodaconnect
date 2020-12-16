@@ -11,7 +11,7 @@ def local_scheme(version):
 
 setup(
     name='skodaconnect',
-    version='1.0.18',
+    version='1.0.20',
     description='Communicate with Skoda Connect',
     author='lendy007',
     author_email='lendik@gmail.com',
