@@ -761,12 +761,12 @@ class Vehicle:
                 return False
 
     @property
-    def service_inspection_km(self):
+    def service_inspection_distance(self):
         """Return time left for service inspection"""
         return self.attrs.get('StoredVehicleDataResponseParsed')['0x0203010003'].get('value')
 
     @property
-    def is_service_inspection_km_supported(self):
+    def is_service_inspection_distance_supported(self):
         if self.attrs.get('StoredVehicleDataResponseParsed', {}):
             if '0x0203010003' in self.attrs.get('StoredVehicleDataResponseParsed'):
                 return True
@@ -786,12 +786,12 @@ class Vehicle:
             else:
                 return False
     @property
-    def oil_inspection_km(self):
+    def oil_inspection_distance(self):
         """Return time left for service inspection"""
         return self.attrs.get('StoredVehicleDataResponseParsed')['0x0203010001'].get('value')
 
     @property
-    def is_oil_inspection_km_supported(self):
+    def is_oil_inspection_distance_supported(self):
         if self.attrs.get('StoredVehicleDataResponseParsed', {}):
             if '0x0203010001' in self.attrs.get('StoredVehicleDataResponseParsed'):
                 return True
