@@ -92,7 +92,7 @@ class Sensor(Instrument):
             elif "kWh/100 km" == self.unit:
                 self.unit = "kWh/100 mi"
                 self.convert = True
-            elif "C" == self.unit or "°C" == self.unit:
+            elif "°C" == self.unit:
                 self.unit = "°F"
                 self.convert = True
         elif self.unit and scandinavian_miles:
@@ -125,13 +125,13 @@ class Sensor(Instrument):
         val = super().state
         if val and self.unit and "mi" in self.unit and self.convert == True:
             return int(round(val / 1.609344))
-        if val and self.unit and "mi/h" in self.unit and self.convert == True:
+        elif val and self.unit and "mi/h" in self.unit and self.convert == True:
             return int(round(val / 1.609344))
-        if val and self.unit and "gal/100 mi" in self.unit and self.convert == True:
+        elif val and self.unit and "gal/100 mi" in self.unit and self.convert == True:
             return round(val * 0.4251438, 1)
-        if val and self.unit and "kWh/100 mi" in self.unit and self.convert == True:
+        elif val and self.unit and "kWh/100 mi" in self.unit and self.convert == True:
             return round(val * 0.4251438, 1)
-        if val and self.unit and self.unit in ["°C", "C"] and self.convert == True:
+        elif val and self.unit and "°C" in self.unit and self.convert == True:
             return round((val * 9/5) + 32, 1)
         else:
             return val
@@ -536,8 +536,8 @@ def create_instruments():
             unit="days",
         ),
         Sensor(
-            attr="service_inspection_km",
-            name="Service inspection km",
+            attr="service_inspection_distance",
+            name="Service inspection distance",
             icon="mdi:garage",
             unit="km",
         ),
@@ -548,8 +548,8 @@ def create_instruments():
             unit="days",
         ),
         Sensor(
-            attr="oil_inspection_km",
-            name="Oil inspection km",
+            attr="oil_inspection_distance",
+            name="Oil inspection distance",
             icon="mdi:oil",
             unit="km",
         ),
