@@ -6,7 +6,6 @@ from utilities import camel2slug
 
 _LOGGER = logging.getLogger(__name__)
 
-
 class Instrument:
     def __init__(self, component, attr, name, icon=None):
         self.attr = attr
@@ -68,10 +67,6 @@ class Instrument:
             return getattr(self.vehicle, supported)
         else:
             return False
-        # if hasattr(self.vehicle, self.attr):
-        #     return True
-        # return self.vehicle.has_attr(self.attr)
-
 
 class Sensor(Instrument):
     def __init__(self, attr, name, icon, unit):
@@ -93,7 +88,7 @@ class Sensor(Instrument):
             elif "kWh/100 km" == self.unit:
                 self.unit = "kWh/100 mi"
                 self.convert = True
-            elif "C" == self.unit or "°C" == self.unit:
+            elif "°C" == self.unit: # <- Not needed since HA converts C<->F ?
                 self.unit = "°F"
                 self.convert = True
         elif self.unit and scandinavian_miles:
@@ -122,8 +117,10 @@ class Sensor(Instrument):
     @property
     def str_state(self):
         if self.unit:
+            _LOGGER.debug(f'String state: {self.state} {self.unit} for sensor {self.name}')
             return f'{self.state} {self.unit}'
         else:
+            _LOGGER.debug(f'Non-string state: {self.state} {self.unit} for sensor {self.name}')
             return f'{self.state}'
 
     @property
@@ -131,14 +128,15 @@ class Sensor(Instrument):
         val = super().state
         if val and self.unit and "mi" in self.unit and self.convert == True:
             return int(round(val / 1.609344))
-        if val and self.unit and "mi/h" in self.unit and self.convert == True:
+        elif val and self.unit and "mi/h" in self.unit and self.convert == True:
             return int(round(val / 1.609344))
-        if val and self.unit and "gal/100 mi" in self.unit and self.convert == True:
+        elif val and self.unit and "gal/100 mi" in self.unit and self.convert == True:
             return round(val * 0.4251438, 1)
-        if val and self.unit and "kWh/100 mi" in self.unit and self.convert == True:
+        elif val and self.unit and "kWh/100 mi" in self.unit and self.convert == True:
             return round(val * 0.4251438, 1)
-        if val and self.unit and self.unit in ["°C", "C"] and self.convert == True:
-            return round((val * 9/5) + 32, 1)
+        elif val and self.unit and "°F" in self.unit and self.convert == True:
+            temp = round((val * 9/5) + 32, 1)
+            return temp
         else:
             return val
 
@@ -537,6 +535,60 @@ class PHeaterVentilation(Switch):
         return False
 
 
+class Timer1(Instrument):
+    def __init__(self, attr, name, icon, unit):
+        super().__init__(component="sensor", attr=attr, name=name, icon=icon)
+        self.unit = unit
+
+    @property
+    def is_mutable(self):
+        return False
+
+    @property
+    def state(self):
+        return self.vehicle.timer1
+
+class Timer2(Instrument):
+    def __init__(self, attr, name, icon, unit):
+        super().__init__(component="sensor", attr=attr, name=name, icon=icon)
+        self.unit = unit
+
+    @property
+    def is_mutable(self):
+        return False
+
+    @property
+    def str_state(self):
+        if self.unit:
+            return f'{self.state} {self.unit}'
+        else:
+            return f'{self.state}'
+
+    @property
+    def state(self):
+        return val
+
+class Timer3(Instrument):
+    def __init__(self, attr, name, icon, unit):
+        super().__init__(component="sensor", attr=attr, name=name, icon=icon)
+        self.unit = unit
+
+    @property
+    def is_mutable(self):
+        return False
+
+    @property
+    def str_state(self):
+        if self.unit:
+            return f'{self.state} {self.unit}'
+        else:
+            return f'{self.state}'
+
+    @property
+    def state(self):
+        return val
+
+
 def create_instruments():
     return [
         Position(),
@@ -589,8 +641,8 @@ def create_instruments():
             unit="days",
         ),
         Sensor(
-            attr="service_inspection_km",
-            name="Service inspection km",
+            attr="service_inspection_distance",
+            name="Service inspection distance",
             icon="mdi:garage",
             unit="km",
         ),
@@ -601,8 +653,8 @@ def create_instruments():
             unit="days",
         ),
         Sensor(
-            attr="oil_inspection_km",
-            name="Oil inspection km",
+            attr="oil_inspection_distance",
+            name="Oil inspection distance",
             icon="mdi:oil",
             unit="km",
         ),

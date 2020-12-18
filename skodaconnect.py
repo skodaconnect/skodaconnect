@@ -36,7 +36,8 @@ TIMEOUT = timedelta(seconds=30)
 HEADERS_SESSION = {
     'Connection': 'keep-alive',
     'Content-Type': 'application/json',
-    "X-Client-Id": '7f045eee-7003-4379-9968-9355ed2adb06%40apps_vw-dilab_com',
+    'X-Client-Id': '28cd30c6-dee7-4529-a0e6-b1e07ff90b79',
+    #"X-Client-Id": '7f045eee-7003-4379-9968-9355ed2adb06%40apps_vw-dilab_com',
     "X-App-Version": '3.2.6',
     "X-App-Name": 'cz.skodaauto.connect',
     "Accept-charset": "UTF-8",
@@ -55,6 +56,7 @@ HEADERS_AUTH = {
 BASE_SESSION = 'https://msg.volkswagen.de'
 BASE_AUTH = 'https://identity.vwgroup.io'
 CLIENT_ID = '7f045eee-7003-4379-9968-9355ed2adb06%40apps_vw-dilab_com'
+# Another CLIENT_ID: f9a2359a-b776-46d9-bd0c-db1904343117@apps_vw-dilab_com
 
 class Connection:
     """ Connection to Skoda connect """
@@ -197,18 +199,17 @@ class Connection:
 
             _LOGGER.debug('Succesfully sent password, extract authorization code and get tokens.')
             # Extract code and tokens
-            self._session_tokens['jwt'] = {}
-            jwtauth_code = parse_qs(urlparse(ref).fragment).get('code')[0]
-            self._session_tokens['jwt']['access_token'] = parse_qs(urlparse(ref).fragment).get('access_token')[0]
-            self._session_tokens['jwt']['id_token'] = parse_qs(urlparse(ref).fragment).get('id_token')[0]
+            jwt_auth_code = parse_qs(urlparse(ref).fragment).get('code')[0]
+            jwt_access_token = parse_qs(urlparse(ref).fragment).get('access_token')[0]
+            jwt_id_token = parse_qs(urlparse(ref).fragment).get('id_token')[0]
 
             # Exchange Auth code for Skoda tokens
             tokenBody = {
-                "auth_code": jwtauth_code,
-                "id_token":  self._session_tokens['jwt']['id_token'], #jwtid_token,
-                "brand": "skoda"
+                'auth_code': jwt_auth_code,
+                'id_token':  jwt_id_token,
+                'brand': 'skoda'
             }
-            tokenURL = "https://tokenrefreshservice.apps.emea.vwapps.io/exchangeAuthCode"
+            tokenURL = 'https://tokenrefreshservice.apps.emea.vwapps.io/exchangeAuthCode'
             req = await self._session.post(
                 url=tokenURL,
                 headers=self._session_auth_headers,
@@ -218,13 +219,17 @@ class Connection:
             if req.status != 200:
                 return ""
             # Save tokens as "skoda", we will need this later for token refresh
-            self._session_tokens['skoda'] = await req.json()
+            self._session_tokens['identity'] = await req.json()
+            if not await self.verify_tokens(self._session_tokens['identity']['id_token'], 'identity'):
+                _LOGGER.warning('Identity token could not be verified!')
+            else:
+                _LOGGER.debug('Identity token verified OK.')
 
             # Get VW Group API tokens
             # https://mbboauth-1d.prd.ece.vwg-connect.com/mbbcoauth/mobile/oauth2/v1/token
             tokenBody2 =  {
                 "grant_type": "id_token",
-                "token": self._session_tokens['skoda']['id_token'],
+                "token": self._session_tokens['identity']['id_token'],
                 "scope": "sc2:fal"
             }
             req = await self._session.post(
@@ -244,9 +249,12 @@ class Connection:
                 _LOGGER.debug("Tokens wrong")
                 return ""
             else:
-                _LOGGER.debug("Tokens OK")
+                self._session_tokens['vwg'] = await req.json()
+                if not await self.verify_tokens(self._session_tokens['vwg']['access_token'], 'vwg'):
+                    _LOGGER.warning('VWG token could not be verified!')
+                else:
+                    _LOGGER.debug("VWG tokens OK.")
             # Save tokens as "vwg", use theese for get/posts to VW Group API
-            self._session_tokens['vwg'] = await req.json()
 
             # Update headers for requests, default to VWG token
             self._session_headers['Authorization'] = "Bearer " + self._session_tokens['vwg']['access_token'] #atoken
@@ -361,8 +369,8 @@ class Connection:
                     _LOGGER.debug('Vehicle JSON string exists')
                     for vehicle in loaded_vehicles.get('userVehicles').get('vehicle'):
                         vehicle_url = vehicle
-                    self._state.update({vehicle_url: dict()})
-                    self._vehicles.append(Vehicle(self, vehicle_url))
+                        self._state.update({vehicle_url: dict()})
+                        self._vehicles.append(Vehicle(self, vehicle_url))
                 self._session_first_update = True
 
 
@@ -429,9 +437,9 @@ class Connection:
     async def getRealCarData(self, vin):
         """Get car information from customer profile, VIN, nickname, etc."""
         try:
-            atoken = self._session_tokens['skoda']['access_token']
+            atoken = self._session_tokens['identity']['access_token']
             sub = jwt.decode(atoken, verify=False).get('sub', None)
-            await self.set_token('skoda')
+            await self.set_token('identity')
             response = await self.get(
                 'https://customer-profile.apps.emea.vwapps.io/v1/customers/{subject}/realCarData'.format(subject=sub)
             )
@@ -557,7 +565,7 @@ class Connection:
                     {'findCarResponse': response.get('findCarResponse', {})}
                 )
                 self._state[vin].update({ 'isMoving': False })
-                self._state[vin].pop('rate_limit_remaining')
+                #self._state[vin].pop('rate_limit_remaining')
                 return True
             elif response.get('status_code', 0) == 204:
                 _LOGGER.debug(f'Seems car is moving, HTTP 204 received from position')
@@ -566,10 +574,10 @@ class Connection:
                 return True
             else:
                 _LOGGER.debug(f'Could not fetch position: {response}')
-                self._state[vin].pop('rate_limit_remaining')
+                #self._state[vin].pop('rate_limit_remaining')
             return False
         except aiohttp.client_exceptions.ClientResponseError as err:
-            self._state[vin].pop('rate_limit_remaining')
+            #self._state[vin].pop('rate_limit_remaining')
             if (err.status == 403 or err.status == 502):
                 _LOGGER.debug(f'Could not fetch position, error 403/502 (not supported on car?), error: {err}')
             elif err.status == 401:
@@ -714,7 +722,7 @@ class Connection:
     @property
     async def validate_tokens(self):
         """Function to validate expiry of tokens."""
-        idtoken = self._session_tokens['skoda']['id_token']
+        idtoken = self._session_tokens['identity']['id_token']
         atoken = self._session_tokens['vwg']['access_token']
         id_exp = jwt.decode(idtoken, verify=False).get('exp', None)
         at_exp = jwt.decode(atoken, verify=False).get('exp', None)
@@ -740,6 +748,42 @@ class Connection:
             _LOGGER.debug(f'Tokens valid until {expString}')
         return True
 
+    async def verify_tokens(self, token, type):
+        """Function to verify JWT against JWK(s)."""
+        if type == 'identity':
+            req = await self._session.get(url = 'https://identity.vwgroup.io/oidc/v1/keys')
+            keys = await req.json()
+            audience = [
+                CLIENT_ID, 
+                "VWGMBB01DELIV1", 
+                "https://api.vas.eu.dp15.vwg-connect.com", 
+                "https://api.vas.eu.wcardp.io"
+            ]
+        elif type == 'vwg':
+            req = await self._session.get(url = 'https://mbboauth-1d.prd.ece.vwg-connect.com/mbbcoauth/public/jwk/v1')
+            keys = await req.json()
+            audience = 'mal.prd.ece.vwg-connect.com'
+        else:
+            _LOGGER.debug('Not implemented')
+            return False
+        try:
+            pubkeys = {}
+            for jwk in keys['keys']:
+                kid = jwk['kid']
+                if jwk['kty'] == 'RSA':
+                    pubkeys[kid] = jwt.algorithms.RSAAlgorithm.from_jwk(to_json(jwk))
+
+            token_kid = jwt.get_unverified_header(token)['kid']
+            if type == 'vwg':
+                token_kid = 'VWGMBB01DELIV1.' + token_kid
+
+            pubkey = pubkeys[token_kid]
+            payload = jwt.decode(token, key=pubkey, algorithms=['RS256'], audience=audience)
+            return True
+        except Exception as error:
+            _LOGGER.debug('Failed to verify token, error: %s' % error)
+            return False
+
     async def refresh_tokens(self):
         """Function to refresh tokens."""
         try:
@@ -756,8 +800,8 @@ class Connection:
 
             body = {
                 'grant_type': 'refresh_token',
-                'brand': 'skoda',
-                'refresh_token': self._session_tokens['skoda']['refresh_token']
+                'brand': 'Skoda',
+                'refresh_token': self._session_tokens['identity']['refresh_token']
             }
             response = await self._session.post(
                 url = "https://tokenrefreshservice.apps.emea.vwapps.io/refreshTokens",
@@ -766,8 +810,11 @@ class Connection:
             )
             if response.status == 200:
                 tokens = await response.json()
+                # Verify Token
+                if not await self.verify_tokens(tokens['id_token'], 'identity'):
+                    _LOGGER.warning('Token could not be verified!')
                 for token in tokens:
-                    self._session_tokens['skoda'][token] = tokens[token]
+                    self._session_tokens['identity'][token] = tokens[token]
             else:
                 _LOGGER.warning('Something went wrong when refreshing Skoda tokens.')
                 return False
@@ -775,9 +822,8 @@ class Connection:
             body = {
                 'grant_type': 'id_token',
                 'scope': 'sc2:fal',
-                'token': self._session_tokens['skoda']['id_token']
+                'token': self._session_tokens['identity']['id_token']
             }
-            #tHeaders['host'] = 'mbboauth-1d.prd.ece.vwg-connect.com'
 
             response = await self._session.post(
                 url = "https://mbboauth-1d.prd.ece.vwg-connect.com/mbbcoauth/mobile/oauth2/v1/token",
@@ -787,6 +833,8 @@ class Connection:
             )
             if response.status == 200:
                 tokens = await response.json()
+                if not await self.verify_tokens(tokens['access_token'], 'vwg'):
+                    _LOGGER.warning('Token could not be verified!')
                 for token in tokens:
                     self._session_tokens['vwg'][token] = tokens[token]
             else:
@@ -1154,12 +1202,12 @@ class Vehicle:
                 return False
 
     @property
-    def service_inspection_km(self):
+    def service_inspection_distance(self):
         """Return time left for service inspection"""
-        return self.attrs.get('StoredVehicleDataResponseParsed')['0x0203010003'].get('value')
+        return int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0203010003'].get('value'))
 
     @property
-    def is_service_inspection_km_supported(self):
+    def is_service_inspection_distance_supported(self):
         if self.attrs.get('StoredVehicleDataResponseParsed', {}):
             if '0x0203010003' in self.attrs.get('StoredVehicleDataResponseParsed'):
                 return True
@@ -1179,12 +1227,12 @@ class Vehicle:
             else:
                 return False
     @property
-    def oil_inspection_km(self):
+    def oil_inspection_distance(self):
         """Return time left for service inspection"""
-        return self.attrs.get('StoredVehicleDataResponseParsed')['0x0203010001'].get('value')
+        return int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0203010001'].get('value'))
 
     @property
-    def is_oil_inspection_km_supported(self):
+    def is_oil_inspection_distance_supported(self):
         if self.attrs.get('StoredVehicleDataResponseParsed', {}):
             if '0x0203010001' in self.attrs.get('StoredVehicleDataResponseParsed'):
                 return True
@@ -1986,19 +2034,31 @@ class Vehicle:
     def timer1(self):
         timerSettings = self.attrs.get('timers',{}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', [])[0]
         timerProfile = self.attrs.get('timers',{}).get('timersAndProfiles', {}).get('timerProfileList', {}).get('timerProfile', [])[0]
-        return {**timerSettings, **timerProfile}        
+        return {**timerSettings, **timerProfile}
+
+    @property
+    def is_timer1_supported(self):
+        return self.attrs.get('timers', False)
 
     @property
     def timer2(self):
         timerSettings = self.attrs.get('timers',{}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', [])[1]
         timerProfile = self.attrs.get('timers',{}).get('timersAndProfiles', {}).get('timerProfileList', {}).get('timerProfile', [])[1]
-        return {**timerSettings, **timerProfile}        
+        return {**timerSettings, **timerProfile}
+
+    @property
+    def is_timer2_supported(self):
+        return self.attrs.get('timers', False)
 
     @property
     def timer3(self):
         timerSettings = self.attrs.get('timers',{}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', [])[2]
         timerProfile = self.attrs.get('timers',{}).get('timersAndProfiles', {}).get('timerProfileList', {}).get('timerProfile', [])[2]
-        return {**timerSettings, **timerProfile}        
+        return {**timerSettings, **timerProfile}
+
+    @property
+    def is_timer3_supported(self):
+        return self.attrs.get('timers', False)
 
   # Requests data
     @property
@@ -2025,6 +2085,7 @@ class Vehicle:
         """Get remaining requests before throttled."""
         if self.attrs.get('rate_limit_remaining', False):
             self.requests_remaining = self.attrs.get('rate_limit_remaining')
+            self.attrs.pop('rate_limit_remaining')
         return self._requests_remaining
 
     @requests_remaining.setter
@@ -2245,21 +2306,17 @@ class Vehicle:
         try:
             # Fetch current departuretimers from VAG servers
             needSPIN = False
-            timerdata = {'action':{'timersAndProfiles':{}, 'type': 'setTimersAndProfiles'}}
+            timerdata = {'action':{'type': 'setTimersAndProfiles', 'timersAndProfiles':{}}}
             if self.attrs.get('timers', False):
                 settings = self.attrs.get('timers').get('timersAndProfiles', {})
                 timers = self.attrs.get('timers').get('timersAndProfiles').get('timerList').get('timer', {})
                 profiles = self.attrs.get('timers').get('timersAndProfiles').get('timerProfileList').get('timerProfile', {})
                 for d in timers:
-                    d.pop('timestamp')
-                    d['timerID'] = int(d['timerID'])
-                    d['profileID'] = int(d['profileID'])
-                    d['currentCalendarProvider'] = {}
+                    if d.get('timestamp', False):
+                        d.pop('timestamp')
                 for d in profiles:
-                    d.pop('timestamp')
-                    d['profileID'] = int(d['profileID'])
-                    d['targetChargeLevel'] = int(d['targetChargeLevel'])
-                    d['chargeMaxCurrent'] = int(d['chargeMaxCurrent'])
+                    if d.get('timestamp', False):
+                        d.pop('timestamp')
                 _LOGGER.debug("Settings: %s" % settings)
             else:
                 _LOGGER.error("Timers and profiles didn't return data.")
@@ -2284,7 +2341,6 @@ class Vehicle:
                             needSPIN = True
             # Prepare data to send
             timerdata['action']['timersAndProfiles'] = settings
-            _LOGGER.debug("Settings now: %s" % settings)
             _LOGGER.debug("Update departure timers: %s" % timerdata)
 
             # Prepare headers
@@ -2296,14 +2352,14 @@ class Vehicle:
 
             try:
                 url = "fs-car/bs/departuretimer/v1/skoda/CZ/vehicles/$vin/timer/actions"
-                #data = dict(timerdata)
                 # Get security token if needed (if aux heater is to be activated)
                 if needSPIN:
                     secToken = await self.requestSecToken(spin, "departuretimer")
                     self._connection._session_headers["x-mbbSecToken"] = secToken
                 _LOGGER.debug('Sending data with headers: %s' % self._connection._session_headers)
+
                 # Send data and wait for response
-                resp = await self.call(url, json=timerdata)
+                resp = await self.call(url, json=to_json(timerdata))
                 if not resp:
                     _LOGGER.warning('Failed to set departure timers!')
                     return False
