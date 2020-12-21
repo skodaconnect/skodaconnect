@@ -77,6 +77,7 @@ class Sensor(Instrument):
     def __init__(self, attr, name, icon, unit):
         super().__init__(component="sensor", attr=attr, name=name, icon=icon)
         self.unit = unit
+        self.convert = False
 
     def configurate(self, scandinavian_miles=False, imperial_units=False, **config):
         if self.unit and imperial_units:
