@@ -2,7 +2,7 @@
 # Thanks to molobrakos
 
 import logging
-from utilities import camel2slug
+from skodaconnect.utilities import camel2slug
 
 _LOGGER = logging.getLogger(__name__)
 
