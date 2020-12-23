@@ -2,3 +2,4 @@ lxml
 beautifulsoup4
 aiohttp
 pytest-asyncio
+pyjwt
