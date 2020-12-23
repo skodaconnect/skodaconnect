@@ -108,7 +108,7 @@ class Connection:
 
             # Get authorization
             # https://identity.vwgroup.io/oidc/v1/authorize?nonce=yVOPHxDmksgkMo1HDUp6IIeGs9HvWSSWbkhPcxKTGNU&response_type=code id_token token&scope=openid mbb&ui_locales=de&redirect_uri=skodaconnect://oidc.login/&client_id=7f045eee-7003-4379-9968-9355ed2adb06%40apps_vw-dilab_com
-             params = {
+            params = {
                 'nonce': getNonce(),
                 'response_type':  'code id_token token',
                 'scope': 'openid profile address cars email birthdate badge mbb phone driversLicense dealers',

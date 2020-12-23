@@ -7,7 +7,7 @@ XCLIENT_ID = '28cd30c6-dee7-4529-a0e6-b1e07ff90b79'
 XAPPVERSION = '3.2.6'
 XAPPNAME = 'cz.skodaauto.connect'
 USER_AGENT = 'okhttp/3.7.0'
-APP_URI = 'skodaconnect://oidc.login/''
+APP_URI = 'skodaconnect://oidc.login/'
 
 HEADERS_SESSION = {
     'Connection': 'keep-alive',
