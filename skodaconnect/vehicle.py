@@ -22,13 +22,17 @@ from aiohttp.hdrs import METH_GET, METH_POST
 _LOGGER = logging.getLogger(__name__)
 
 
-
 class Vehicle:
     def __init__(self, conn, url):
         self._connection = conn
         self._url = url
         self._requests_remaining = -1
+        self._request_in_progress = False
+        self._request_result = 'None'
+        self._climate_duration = 30
 
+ #### API functions, parent class ####
+  # Base methods
     async def update(self):
         # await self._connection.update(request_data=False)
         await self._connection.update_vehicle(self)
@@ -46,39 +50,46 @@ class Vehicle:
             self._requests_remaining = int(req.get("rate_limit_remaining", -1))
         return req
 
+  # Request handling
     async def call(self, query, **data):
         """Make remote method call."""
         try:
-            if not await self._connection.validate_login:
-                _LOGGER.info('Session expired, reconnecting to skoda connect.')
+            if not await self._connection.validate_tokens:
+                _LOGGER.info('Session has expired. Initiating new login to Skoda Connect.')
                 await self._connection._login()
 
+            self._request_result = 'In queue'
+            self._request_in_progress = True
+            await self._connection.set_token('vwg')
             res = await self.post(query, **data)
-            #heating actions
+            # Parking heater actions
             if res.get('performActionResponse', {}).get('requestId', False):
                 _LOGGER.info('Message delivered, requestId=%s', res.get('performActionResponse', {}).get('requestId', 0))
                 return str(res.get('performActionResponse', {}).get('requestId', False))
-            # Electric climater and charger
+            # Electric climatisation, charger and departuretimer
             elif res.get('action', {}).get('actionId', False):
                 _LOGGER.info('Message delivered, actionId=%s', res.get('action', {}).get('actionId', 0))
                 return str(res.get('action', {}).get('actionId', False))
-            #status refresh actions
+            # Status refresh actions
             elif res.get('CurrentVehicleDataResponse', {}).get('requestId', False):
                 _LOGGER.info('Message delivered, requestId=%s', res.get('CurrentVehicleDataResponse', {}).get('requestId', 0))
                 return str(res.get('CurrentVehicleDataResponse', {}).get('requestId', False))
-            #car lock action
+            # Car lock/unlock action
             elif res.get('rluActionResponse', {}).get('requestId', False):
                 _LOGGER.info('Message delivered, requestId=%s', res.get('rluActionResponse', {}).get('requestId', 0))
                 return str(res.get('rluActionResponse', {}).get('requestId', False))
-            #climatisation action
+            # Climatisation action
             elif res.get('climatisationActionResponse', {}).get('requestId', False):
                 _LOGGER.info('Message delivered, requestId=%s', res.get('climatisationActionResponse', {}).get('requestId', 0))
                 return str(res.get('climatisationActionResponse', {}).get('requestId', False))
             else:
                 _LOGGER.warning(f'Failed to execute {query}, response is:{str(res)}')
+                self._request_in_progress = False
                 return
 
         except Exception as error:
+            self._request_result = 'Failed to execute'
+            self._request_in_progress = False
             _LOGGER.warning(f'Failure to execute: {error}')
 
     async def getRequestProgressStatus(self, requestId, sectionId, retryCount=36):
@@ -86,54 +97,95 @@ class Vehicle:
         retryCount -= 1
         if (retryCount == 0):
             _LOGGER.warning(f'Timeout of waiting for result of {requestId} in section {sectionId}. It doesnt mean it wasnt success...')
-            return
+            self._request_result = 'Timeout'
+            self._request_in_progress = False
+             return
 
         try:
-            if not await self._connection.validate_login:
-                _LOGGER.info('Session expired, reconnecting to skoda connect.')
+            if not await self._connection.validate_tokens:
+                _LOGGER.info('Session has expired. Initiating new login to Skoda Connect.')
                 await self._connection._login()
+
             if sectionId == 'climatisation':
                 url = "fs-car/bs/$sectionId/v1/Skoda/CZ/vehicles/$vin/climater/actions/$requestId"
             elif sectionId == 'batterycharge':
                 url = "fs-car/bs/$sectionId/v1/Skoda/CZ/vehicles/$vin/charger/actions/$requestId"
+            elif sectionId == 'departuretimer':
+                url = "fs-car/bs/$sectionId/v1/Skoda/CZ/vehicles/$vin/timer/actions/$requestId"
+            elif sectionId == 'vsr':
+                url = "fs-car/bs/$sectionId/v1/Skoda/CZ/vehicles/$vin/requests/$requestId/jobstatus"
             else:
                 url = "fs-car/bs/$sectionId/v1/Skoda/CZ/vehicles/$vin/requests/$requestId/status"
             url = re.sub("\$sectionId", sectionId, url)
             url = re.sub("\$requestId", requestId, url)
 
             res = await self.get(url)
+            # VSR refresh, parking heater and lock/unlock
             if res.get('requestStatusResponse', {}).get('status', False):
-                if res.get('requestStatusResponse', {}).get('status', False) == "request_in_progress":
+                 result = res.get('requestStatusResponse', {}).get('status', False)
+                 if result == 'request_in_progress':
+                    self._request_result = 'In progress'
                     _LOGGER.debug(f'Request {requestId}, sectionId {sectionId} still in progress, sleeping for 5 seconds and check status again...')
                     time.sleep(5)
                     return await self.getRequestProgressStatus(requestId, sectionId, retryCount)
-                else:
-                    result=res.get('requestStatusResponse', {}).get('status', False)
+                 elif result == 'request_fail':
+                    self._request_result = 'Failed'
+                    self._request_in_progress = False
+                    error = res.get('requestStatusResponse', {}).get('error', None)
+                    _LOGGER.warning(f'Request {requestId}, sectionId {sectionId} failed, error: {error}.')
+                    return False
+                 elif result == 'request_successful':
+                    self._request_result = 'Success'
+                    self._request_in_progress = False
+                    _LOGGER.debug(f'Request was successful, result: {result}')
+                    return True
+                 else:
+                    self._request_result = result
+                    self._request_in_progress = False
                     _LOGGER.debug(f'Request result: {result}')
                     return True
-            # For electric charging and climatisation
+            # For electric charging, climatisation and departure timers
             elif res.get('action', {}).get('actionState', False):
-                if res.get('action', {}).get('actionState', False) == "queued":
+                result=res.get('action', {}).get('actionState', False)
+                if result == 'queued' or result == 'fetched':
+                    self._request_result = 'In progress'
                     _LOGGER.debug(f'Request {requestId}, sectionId {sectionId} still in progress, sleeping for 5 seconds and check status again...')
                     time.sleep(5)
                     return await self.getRequestProgressStatus(requestId, sectionId, retryCount)
+                elif result == 'failed':
+                    self._request_result = 'Failed'
+                    self._request_in_progress = False
+                    error = res.get('action', {}).get('errorCode', None)
+                    _LOGGER.warning(f'Request {requestId}, sectionId {sectionId} failed, error: {error}.')
+                elif result == 'succeeded':
+                    self._request_result = 'Success'
+                    self._request_in_progress = False
+                    _LOGGER.debug(f'Request was successful, result: {result}')
                 else:
-                    result=res.get('action', {}).get('actionState', False)
+                    self._request_result = result
+                    self._request_in_progress = False
                     _LOGGER.debug(f'Request result: {result}')
                     return True
             else:
+                self._request_result = 'Unknown'
+                self._request_in_progress = False
                 _LOGGER.warning(f'Incorrect response for status response for request={requestId}, section={sectionId}, response is:{str(res)}')
                 return
 
         except Exception as error:
+            self._request_result = 'Task exception'
+            self._request_in_progress = False
             _LOGGER.warning(f'Failure during get request progress status: {error}')
             return
-    
+
+  # SPIN Token handling
     async def requestSecToken(self,spin,action="heating"):
         urls = {
-            "lock":   "/api/rolesrights/authorization/v2/vehicles/$vin/services/rlu_v1/operations/LOCK/security-pin-auth-requested",
-            "unlock":   "/api/rolesrights/authorization/v2/vehicles/$vin/services/rlu_v1/operations/UNLOCK/security-pin-auth-requested",
-            "heating":  "/api/rolesrights/authorization/v2/vehicles/$vin/services/rheating_v1/operations/P_QSACT/security-pin-auth-requested"
+            'lock':    '/api/rolesrights/authorization/v2/vehicles/$vin/services/rlu_v1/operations/LOCK/security-pin-auth-requested',
+            'unlock':  '/api/rolesrights/authorization/v2/vehicles/$vin/services/rlu_v1/operations/UNLOCK/security-pin-auth-requested',
+            'heating': '/api/rolesrights/authorization/v2/vehicles/$vin/services/rheating_v1/operations/P_QSACT/security-pin-auth-requested'
+            'timer':   '/api/rolesrights/authorization/v2/vehicles/$vin/services/timerprogramming_v1/operations/P_SETTINGS_AU/security-pin-auth-requested',
+            'rclima':  '/api/rolesrights/authorization/v2/vehicles/$vin/services/rclima_v1/operations/P_START_CLIMA_AU/security-pin-auth-requested'
         }
         try:
             response = await self.get(self._connection._make_url(urls.get(action), vin=self.vin))
@@ -147,14 +199,16 @@ class Vehicle:
             del self._connection._session_headers["Content-Type"]
             return response["securityToken"]
         except Exception as err:
-            _LOGGER.error(f'Could not generate security token for active  (maybe wrong SPIN?), error: {err}')
+            _LOGGER.error(f'Could not generate security token (maybe wrong SPIN?), error: {err}')
 
-    async def generateSecurPin(self,challenge, pin):
+    async def generateSecurPin(self, challenge, pin):
         pinArray = bytearray.fromhex(pin);
         byteChallenge = bytearray.fromhex(challenge);
         pinArray.extend(byteChallenge)
         return hashlib.sha512(pinArray).hexdigest()
 
+ #### Vehicle Attributes ####
+  # Vehicle info
     @property
     def attrs(self):
         return self._connection.vehicle_attrs(self._url)
@@ -169,59 +223,114 @@ class Vehicle:
         #Classic python notation
         from skodaconnect.dashboard import Dashboard
         return Dashboard(self, **config)
-        #HA notation
-        #from . import dashboardskoda        
-        #return dashboardskoda.Dashboard(self, **config)
 
     @property
     def vin(self):
-        #return self.attrs.get('vin').lower()
         return self._url
 
     @property
     def unique_id(self):
         return self.vin
 
+ #### Information from vehicle states ####
+  # Car information
+    @property
+    def nickname(self):
+        return self.attrs.get('carData', {}).get('nickname', None)
+
+    @property
+    def is_nickname_supported(self):
+        if self.attrs.get('carData', {}).get('nickname', False):
+            return True
+
+    @property
+    def deactivated(self):
+        return self.attrs.get('carData', {}).get('deactivated', None)
+
+    @property
+    def is_deactivated_supported(self):
+        if self.attrs.get('carData', {}).get('deactivated', False):
+            return True
+
+    @property
+    def model(self):
+        """Return model"""
+        return self.attrs.get('carportData', {}).get('modelName', None)
+
+    @property
+    def is_model_supported(self):
+        if self.attrs.get('carportData', {}).get('modelName', False):
+            return True
+
+    @property
+    def model_year(self):
+        """Return model year"""
+        return self.attrs.get('carportData', {}).get('modelYear', None)
+
+    @property
+    def is_model_year_supported(self):
+        if self.attrs.get('carportData', {}).get('modelYear', False):
+            return True
+
+    @property
+    def model_image(self):
+        #Not implemented for SKODA
+        """Return model image"""
+        return self.attrs.get('imageUrl')
+
+    @property
+    def is_model_image_supported(self):
+        #Not implemented for SKODA
+        if self.attrs.get('imageUrl', False):
+            return True
+
+  # Lights
+    @property
+    def parking_light(self):
+        """Return true if parking light is on"""
+        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301010001'].get('value',0))
+        if response != 2:
+            return True
+        else:
+            return False
+
+    @property
+    def is_parking_light_supported(self):
+        """Return true if parking light is supported"""
+        if self.attrs.get('StoredVehicleDataResponseParsed', {}):
+            if '0x0301010001' in self.attrs.get('StoredVehicleDataResponseParsed'):
+                return True
+            else:
+                return False
+
+  # Connection status
     @property
     def last_connected(self):
         """Return when vehicle was last connected to skoda connect."""
         last_connected_utc = self.attrs.get('StoredVehicleDataResponse').get('vehicleData').get('data')[0].get('field')[0].get('tsCarSentUtc')
         last_connected = last_connected_utc.replace(tzinfo=timezone.utc).astimezone(tz=None)
-        return last_connected
+        return last_connected.strftime('%Y-%m-%d %H:%M:%S')
 
     @property
     def is_last_connected_supported(self):
         """Return when vehicle was last connected to skoda connect."""
-        if self.attrs.get('StoredVehicleDataResponse', {}).get('vehicleData', {}).get('data', {})[0].get('field', {})[0].get('tsCarSentUtc', []):
+        if next(iter(next(iter(self.attrs.get('StoredVehicleDataResponse', {}).get('vehicleData', {}).get('data', {})), None).get('field', {})), None).get('tsCarSentUtc', []):
             return True
 
+  # Service information
     @property
-    def climatisation_target_temperature(self):
-        value = self.attrs.get('climater').get('settings').get('targetTemperature').get('content')
+    def distance(self):
+        """Return vehicle odometer."""
+        value = self.attrs.get('StoredVehicleDataResponseParsed')['0x0101010002'].get('value',0)
         if value:
-            reply = float((value-2730)/10) 
-            self._climatisation_target_temperature=reply
-            return reply
+            return int(value)
 
     @property
-    def is_climatisation_target_temperature_supported(self):
-        if self.attrs.get('climater', {}):
-            if 'settings' in self.attrs.get('climater', {}):
-                if 'targetTemperature' in self.attrs.get('climater', {})['settings']:
-                    return True
-            else:
-                return False
-
-    @property
-    def climatisation_without_external_power(self):
-        return self.attrs.get('climater').get('settings').get('climatisationWithoutHVpower').get('content', False)
-
-    @property
-    def is_climatisation_without_external_power_supported(self):
-        if self.attrs.get('climater', {}):
-            if 'settings' in self.attrs.get('climater', {}):
-                if 'climatisationWithoutHVpower' in self.attrs.get('climater', {})['settings']:
-                    return True
+    def is_distance_supported(self):
+        """Return true if odometer is supported"""
+        if self.attrs.get('StoredVehicleDataResponseParsed', {}):
+            if '0x0101010002' in self.attrs.get('StoredVehicleDataResponseParsed'):
+                return True
             else:
                 return False
 
@@ -278,10 +387,12 @@ class Vehicle:
 
     @property
     def adblue_level(self):
+        """Return adblue level."""
         return self.attrs.get('StoredVehicleDataResponseParsed')['0x02040C0001'].get('value',0)
 
     @property
     def is_adblue_level_supported(self):
+        """Return true if adblue level is supported."""
         if self.attrs.get('StoredVehicleDataResponseParsed', {}):
             if '0x02040C0001' in self.attrs.get('StoredVehicleDataResponseParsed'):
                 if "value" in self.attrs.get('StoredVehicleDataResponseParsed')['0x02040C0001']:
@@ -294,175 +405,7 @@ class Vehicle:
             else:
                 return False
 
-    @property
-    def battery_level(self):
-        """Return battery level"""
-        return self.attrs.get('charger').get('status').get('batteryStatusData').get('stateOfCharge').get('content', 0)
-
-    @property
-    def is_battery_level_supported(self):
-        """Return true if battery level is supported"""
-        if self.attrs.get('charger', {}):
-            if 'status' in self.attrs.get('charger'):
-                if 'batteryStatusData' in self.attrs.get('charger')['status']:
-                    if 'stateOfCharge' in self.attrs.get('charger')['status']['batteryStatusData']:
-                        return True
-                    else:
-                        return False
-                else:
-                    return False
-            else:
-                return False
-        else:
-            return False
-
-
-    @property
-    def charge_max_ampere(self):
-        value = int(self.attrs.get('charger').get('settings').get('maxChargeCurrent').get('content'))
-        if value == 254:
-            return "Maximum"
-        if value == 252:
-            return "Reduced"
-        if value == 0:
-            return "Unknown"
-        else:
-            return value
-
-    @property
-    def is_charge_max_ampere_supported(self):
-        """Return true if Charger Max Ampere is supported"""
-        if self.attrs.get('charger', {}):
-            if 'settings' in self.attrs.get('charger', {}):
-                if 'maxChargeCurrent' in self.attrs.get('charger', {})['settings']:
-                    return True
-            else:
-                return False
-
-    @property
-    def parking_light(self):
-        """Return true if parking light is on"""
-        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301010001'].get('value',0))
-        if response != 2:
-            return True
-        else:
-            return False
-
-    @property
-    def is_parking_light_supported(self):
-        """Return true if parking light is supported"""
-        if self.attrs.get('StoredVehicleDataResponseParsed', {}):
-            if '0x0301010001' in self.attrs.get('StoredVehicleDataResponseParsed'):
-                return True
-            else:
-                return False
-
-    @property
-    def outside_temperature(self):
-        """Return true if parking light is on"""
-        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301020001'].get('value',0))
-        if response:
-            return float((response-2730)/10)
-        else:
-            return False
-
-    @property
-    def is_outside_temperature_supported(self):
-        """Return true if parking light is supported"""
-        if self.attrs.get('StoredVehicleDataResponseParsed', {}):
-            if '0x0301020001' in self.attrs.get('StoredVehicleDataResponseParsed'):
-                if "value" in self.attrs.get('StoredVehicleDataResponseParsed')['0x0301020001']:
-                    return True
-                else:
-                    return False
-            else:
-                return False
-
-    @property
-    def distance(self):
-        value = self.attrs.get('StoredVehicleDataResponseParsed')['0x0101010002'].get('value',0)
-        if value:
-            return int(value)
-
-    @property
-    def is_distance_supported(self):
-        """Return true if distance is supported"""
-        if self.attrs.get('StoredVehicleDataResponseParsed', {}):
-            if '0x0101010002' in self.attrs.get('StoredVehicleDataResponseParsed'):
-                return True
-            else:
-                return False
-
-    @property
-    def position(self):
-        """Return  position."""
-        posObj = self.attrs.get('findCarResponse')
-        lat = int(posObj.get('Position').get('carCoordinate').get('latitude'))/1000000
-        lng = int(posObj.get('Position').get('carCoordinate').get('longitude'))/1000000
-        parkingTime = posObj.get('parkingTimeUTC')
-        output = {
-            "lat" : lat,
-            "lng" : lng,
-            "timestamp" : parkingTime
-        }
-        return output
-
-    @property
-    def is_position_supported(self):
-        """Return true if vehichle has position."""
-        if self.attrs.get('findCarResponse', {}).get('Position', {}).get('carCoordinate', {}).get('latitude', False):
-            return True
-
-    @property
-    def vehicleMoving(self):
-        return self.attrs.get('isMoving', False)
-
-    @property
-    def is_vehicleMoving_supported(self):
-        if self.is_position_supported:
-            return True
-
-    @property
-    def parkingTime(self):
-        return self.attrs.get('findCarResponse', {}).get('parkingTimeUTC', 'Unknown')
-
-    @property
-    def is_parkingTime_supported(self):
-        if 'parkingTimeUTC' in self.attrs.get('findCarResponse', {}):
-            return True
-
-    @property
-    def model(self):
-        """Return model"""
-        return self.attrs.get('carportData').get('modelName')
-
-    @property
-    def is_model_supported(self):
-        if self.attrs.get('carportData').get('modelName',False):
-            return True
-
-    @property
-    def model_year(self):
-        """Return model year"""
-        return self.attrs.get('carportData').get('modelYear')
-
-    @property
-    def is_model_year_supported(self):
-        if self.attrs.get('carportData').get('modelYear',False):
-            return True
-
-    @property
-    def model_image(self):
-        #Not implemented for SKODA
-        """Return model image"""
-        return self.attrs.get('imageUrl')
-
-    @property
-    def is_model_image_supported(self):
-        #Not implemented for SKODA
-        if self.attrs.get('imageUrl', False):
-            return True
-
+  # Charger related states for EV and PHEV
     @property
     def charging(self):
         """Return battery level"""
@@ -486,6 +429,183 @@ class Vehicle:
         else:
             return False
 
+    @property
+    def battery_level(self):
+        """Return battery level"""
+        return self.attrs.get('charger').get('status').get('batteryStatusData').get('stateOfCharge').get('content', 0)
+
+    @property
+    def is_battery_level_supported(self):
+        """Return true if battery level is supported"""
+        if self.attrs.get('charger', {}):
+            if 'status' in self.attrs.get('charger'):
+                if 'batteryStatusData' in self.attrs.get('charger')['status']:
+                    if 'stateOfCharge' in self.attrs.get('charger')['status']['batteryStatusData']:
+                        return True
+                    else:
+                        return False
+                else:
+                    return False
+            else:
+                return False
+        else:
+            return False
+
+    @property
+    def charge_max_ampere(self):
+        """Return charger max ampere setting."""
+        value = int(self.attrs.get('charger').get('settings').get('maxChargeCurrent').get('content'))
+        if value == 254:
+            return "Maximum"
+        if value == 252:
+            return "Reduced"
+        if value == 0:
+            return "Unknown"
+        else:
+            return value
+
+    @property
+    def is_charge_max_ampere_supported(self):
+        """Return true if Charger Max Ampere is supported"""
+        if self.attrs.get('charger', {}):
+            if 'settings' in self.attrs.get('charger', {}):
+                if 'maxChargeCurrent' in self.attrs.get('charger', {})['settings']:
+                    return True
+            else:
+                return False
+
+    @property
+    def charging_cable_locked(self):
+        """Return plug locked state"""
+        response = self.attrs.get('charger')['status']['plugStatusData']['lockState'].get('content',0)
+        if response == 'locked':
+            return True
+        else:
+            return False
+
+    @property
+    def is_charging_cable_locked_supported(self):
+        """Return true if plug locked state is supported"""
+        if self.attrs.get('charger', {}):
+            if 'status' in self.attrs.get('charger', {}):
+                if 'plugStatusData' in self.attrs.get('charger').get('status', {}):
+                    if 'lockState' in self.attrs.get('charger')['status'].get('plugStatusData', {}):
+                        return True
+        return False
+
+    @property
+    def charging_cable_connected(self):
+        """Return plug locked state"""
+        response = self.attrs.get('charger')['status']['plugStatusData']['plugState'].get('content',0)
+        if response == 'connected':
+            return False
+        else:
+            return True
+
+    @property
+    def is_charging_cable_connected_supported(self):
+        """Return true if charging cable connected is supported"""
+        if self.attrs.get('charger', {}):
+            if 'status' in self.attrs.get('charger', {}):
+                if 'plugStatusData' in self.attrs.get('charger').get('status', {}):
+                    if 'plugState' in self.attrs.get('charger')['status'].get('plugStatusData', {}):
+                        return True
+        return False
+
+    @property
+    def charging_time_left(self):
+        """Return minutes to charing complete"""
+        if self.external_power:
+            minutes = self.attrs.get('charger', {}).get('status', {}).get('batteryStatusData', {}).get('remainingChargingTime', {}).get('content', 0)
+            if minutes:
+                try:
+                    if minutes == 65535: return "00:00"
+                    return "%02d:%02d" % divmod(minutes, 60)
+                except Exception:
+                    pass
+        return 0
+
+    @property
+    def is_charging_time_left_supported(self):
+        """Return true if charging is supported"""
+        return self.is_charging_supported
+
+    @property
+    def external_power(self):
+        """Return true if external power is connected."""
+        check = self.attrs.get('charger', {}).get('status', {}).get('chargingStatusData', {}).get('externalPowerSupplyState', {}).get('content', '')
+        if check in ['stationConnected', 'available']:
+            return True
+        else:
+            return False
+
+    @property
+    def is_external_power_supported(self):
+        """External power supported."""
+        if self.attrs.get('charger', {}).get('status', {}).get('chargingStatusData', {}).get('externalPowerSupplyState', False):
+            return True
+
+    @property
+    def energy_flow(self):
+        """Return true if energy is flowing through charging port."""
+        check = self.attrs.get('charger', {}).get('status', {}).get('chargingStatusData', {}).get('energyFlow', {}).get('content', 'off')
+        if check == 'on':
+            return True
+        else:
+            return False
+
+    @property
+    def is_energy_flow_supported(self):
+        """Energy flow supported."""
+        if self.attrs.get('charger', {}).get('status', {}).get('chargingStatusData', {}).get('energyFlow', False):
+            return True
+
+  # Vehicle location states
+    @property
+    def position(self):
+        """Return  position."""
+        posObj = self.attrs.get('findCarResponse')
+        lat = int(posObj.get('Position').get('carCoordinate').get('latitude'))/1000000
+        lng = int(posObj.get('Position').get('carCoordinate').get('longitude'))/1000000
+        parkingTime = posObj.get('parkingTimeUTC')
+        output = {
+            "lat" : lat,
+            "lng" : lng,
+            "timestamp" : parkingTime
+        }
+        return output
+
+    @property
+    def is_position_supported(self):
+        """Return true if vehichle has position."""
+        if self.attrs.get('findCarResponse', {}).get('Position', {}).get('carCoordinate', {}).get('latitude', False):
+            return True
+
+    @property
+    def vehicleMoving(self):
+        """Return true if vehicle is moving."""
+        return self.attrs.get('isMoving', False)
+
+    @property
+    def is_vehicleMoving_supported(self):
+        """Return true if vehicle supports position."""
+        if self.is_position_supported:
+            return True
+
+    @property
+    def parkingTime(self):
+        """Return timestamp of last parking time."""
+        parkTime_utc = self.attrs.get('findCarResponse').get('parkingTimeUTC', 'Unknown')
+        parkTime = parkTime_utc.replace(tzinfo=timezone.utc).astimezone(tz=None)
+        return parkTime.strftime('%Y-%m-%d %H:%M:%S')
+
+    @property
+    def is_parkingTime_supported(self):
+        """Return true if vehicle parking timestamp is supported."""
+        if 'parkingTimeUTC' in self.attrs.get('findCarResponse', {}):
+            return True
+
+  # Vehicle fuel level and range
     @property
     def electric_range(self):
         value = self.attrs.get('StoredVehicleDataResponseParsed')['0x0301030008'].get('value',0)
@@ -545,67 +665,98 @@ class Vehicle:
             else:
                 return False
 
+  # Climatisation settings
     @property
-    def external_power(self):
-        """Return true if external power is connected."""
-        check = self.attrs.get('charger', {}).get('status', {}).get('chargingStatusData', {}).get('externalPowerSupplyState', {}).get('content', '')
-        if check in ['stationConnected', 'available']:
-            return True
+    def climatisation_target_temperature(self):
+        """Return the target temperature from climater."""
+        value = self.attrs.get('climater').get('settings').get('targetTemperature').get('content')
+        if value:
+            reply = float((value-2730)/10)
+            self._climatisation_target_temperature=reply
+            return reply
+
+    @property
+    def is_climatisation_target_temperature_supported(self):
+        """Return true if climatisation target temperature is supported."""
+        if self.attrs.get('climater', {}):
+            if 'settings' in self.attrs.get('climater', {}):
+                if 'targetTemperature' in self.attrs.get('climater', {})['settings']:
+                    return True
+            else:
+                return False
+
+    @property
+    def climatisation_without_external_power(self):
+        """Return state of climatisation from battery power."""
+        return self.attrs.get('climater').get('settings').get('climatisationWithoutHVpower').get('content', False)
+
+    @property
+    def is_climatisation_without_external_power_supported(self):
+        """Return true if climatisation on battery power is supported."""
+        if self.attrs.get('climater', {}):
+            if 'settings' in self.attrs.get('climater', {}):
+                if 'climatisationWithoutHVpower' in self.attrs.get('climater', {})['settings']:
+                    return True
+            else:
+                return False
+
+    @property
+    def outside_temperature(self):
+        """Return outside temperature."""
+        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301020001'].get('value',0))
+        if response:
+            return float((response-2730)/10)
         else:
             return False
 
     @property
-    def is_external_power_supported(self):
-        """External power supported."""
-        if self.attrs.get('charger', {}).get('status', {}).get('chargingStatusData', {}).get('externalPowerSupplyState', False):
-            return True
+    def is_outside_temperature_supported(self):
+        """Return true if outside temp is supported"""
+        if self.attrs.get('StoredVehicleDataResponseParsed', {}):
+            if '0x0301020001' in self.attrs.get('StoredVehicleDataResponseParsed'):
+                if "value" in self.attrs.get('StoredVehicleDataResponseParsed')['0x0301020001']:
+                    return True
+                else:
+                    return False
+            else:
+                return False
 
-    @property
-    def energy_flow(self):
-        """Return true if energy is flowing through charging port."""
-        check = self.attrs.get('charger', {}).get('status', {}).get('chargingStatusData', {}).get('energyFlow', {}).get('content', 'off')
-        if check == 'on':
-            return True
-        else:
-            return False
-
-    @property
-    def is_energy_flow_supported(self):
-        """Energy flow supported."""
-        if self.attrs.get('charger', {}).get('status', {}).get('chargingStatusData', {}).get('energyFlow', False):
-            return True
-
+  # Climatisation, electric
     @property
     def electric_climatisation(self):
         """Return status of climatisation."""
         climatisation_type = self.attrs.get('climater', {}).get('settings', {}).get('heaterSource', {}).get('content', '')
         status = self.attrs.get('climater', {}).get('status', {}).get('climatisationStatusData', {}).get('climatisationState', {}).get('content', '')
-        if status != 'off' and climatisation_type == 'electric':
+        if status in ['heating', 'on'] and climatisation_type == 'electric':
             return True
         else:
             return False
+
+    @property
+    def is_electric_climatisation_supported(self):
+        """Return true if vehichle has climater."""
+        return self.is_climatisation_supported
+
+    @property
+    def auxiliary_climatisation(self):
+        """Return status of auxiliary climatisation."""
+        climatisation_type = self.attrs.get('climater', {}).get('settings', {}).get('heaterSource', {}).get('content', '')
+        status = self.attrs.get('climater', {}).get('status', {}).get('climatisationStatusData', {}).get('climatisationState', {}).get('content', '')
+        if status in ['heating', 'heatingAuxiliary', 'on'] and climatisation_type == 'auxiliary':
+            return True
+        else:
+            return False
+
+    @property
+    def is_auxiliary_climatisation_supported(self):
+        """Return true if vehicle has climater."""
+        return self.is_climatisation_supported
 
     @property
     def is_climatisation_supported(self):
         """Return true if climatisation has State."""
         response = self.attrs.get('climater', {}).get('status', {}).get('climatisationStatusData', {}).get('climatisationState', {}).get('content', '')
         if response != '':
-            return True
-
-    @property
-    def is_electric_climatisation_supported(self):
-        """Return true if vehichle has heater."""
-        return self.is_climatisation_supported
-
-    @property
-    def combustion_climatisation(self):
-        """Return status of combustion climatisation."""
-        return self.attrs.get('heating', {}).get('climatisationStateReport', {}).get('climatisationState', False) == 'ventilation'
-
-    @property
-    def is_combustion_climatisation_supported(self):
-        """Return true if vehichle has combustion climatisation."""         
-        if self.attrs.get('heating', {}).get('climatisationStateReport', {}).get('climatisationState', False):
             return True
 
     @property
@@ -630,28 +781,56 @@ class Vehicle:
             if self.attrs.get('climater', {}).get('status', {}).get('windowHeatingStatusData', {}).get('windowHeatingStateRear', {}).get('content', '') in ['on', 'off']:
                 return True
 
+  # Parking heater
     @property
-    def combustion_engine_heatingventilation_status(self):
-        """Return status of combustion engine heating/ventilation."""
-        return self.attrs.get('heating', {}).get('climatisationStateReport', {}).get('climatisationState', 'Unknown')         
+    def pheater_duration(self):
+        return self._climate_duration
+
+    @pheater_duration.setter
+    def pheater_duration(self, value):
+        if value in [10, 20, 30, 40, 50, 60]:
+            self._climate_duration = value
+        else:
+            _LOGGER.warning(f'Invalid value for duration: {value}')
 
     @property
-    def is_combustion_engine_heatingventilation_status_supported(self):
-        """Return true if vehichle has combustion engine heating/ventilation."""
+    def is_pheater_duration_supported(self):
+        return self.is_pheater_heating_supported
+
+    @property
+    def pheater_ventilation(self):
+        """Return status of combustion climatisation."""
+        return self.attrs.get('heating', {}).get('climatisationStateReport', {}).get('climatisationState', False) == 'ventilation'
+
+    @property
+    def is_pheater_ventilation_supported(self):
+        """Return true if vehichle has combustion climatisation."""
         if self.attrs.get('heating', {}).get('climatisationStateReport', {}).get('climatisationState', False):
             return True
 
     @property
-    def combustion_engine_heating(self):
+    def pheater_heating(self):
         """Return status of combustion engine heating."""
         return self.attrs.get('heating', {}).get('climatisationStateReport', {}).get('climatisationState', False) == 'heating'
 
     @property
-    def is_combustion_engine_heating_supported(self):
+    def is_pheater_heating_supported(self):
         """Return true if vehichle has combustion engine heating."""
         if self.attrs.get('heating', {}).get('climatisationStateReport', {}).get('climatisationState', False):
             return True
 
+    @property
+    def pheater_status(self):
+        """Return status of combustion engine heating/ventilation."""
+        return self.attrs.get('heating', {}).get('climatisationStateReport', {}).get('climatisationState', 'Unknown')
+
+    @property
+    def is_pheater_status_supported(self):
+        """Return true if vehichle has combustion engine heating/ventilation."""
+        if self.attrs.get('heating', {}).get('climatisationStateReport', {}).get('climatisationState', False):
+            return True
+
+  # Windows
     @property
     def windows_closed(self):
         return (self.window_closed_left_front and self.window_closed_left_back and self.window_closed_right_front and self.window_closed_right_back)
@@ -753,83 +932,7 @@ class Vehicle:
             else:
                 return False
 
-    @property
-    def hood_closed(self):
-        """Return true if hood is closed"""
-        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040011'].get('value',0))
-        if response == 3:
-            return True
-        else:
-            return False
-
-    @property
-    def is_hood_closed_supported(self):
-        """Return true if hood state is supported"""
-        if self.attrs.get('StoredVehicleDataResponseParsed', {}):
-            if '0x0301040011' in self.attrs.get('StoredVehicleDataResponseParsed'):
-                if (int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040011'].get('value',0)) == 0):
-                    return False
-                else:
-                    return True
-            else:
-                return False
-
-    @property
-    def charging_cable_locked(self):
-        """Return plug locked state"""
-        response = self.attrs.get('charger')['status']['plugStatusData']['lockState'].get('content',0)
-        if response == 'locked':
-            return True
-        else:
-            return False
-
-    @property
-    def is_charging_cable_locked_supported(self):
-        """Return true if plug locked state is supported"""
-        if self.attrs.get('charger', {}):
-            if 'status' in self.attrs.get('charger', {}):
-                if 'plugStatusData' in self.attrs.get('charger').get('status', {}):
-                    if 'lockState' in self.attrs.get('charger')['status'].get('plugStatusData', {}):
-                        return True
-        return False
-
-    @property
-    def charging_cable_connected(self):
-        """Return plug locked state"""
-        response = self.attrs.get('charger')['status']['plugStatusData']['plugState'].get('content',0)
-        if response == 'connected':
-            return False
-        else:
-            return True
-
-    @property
-    def is_charging_cable_connected_supported(self):
-        """Return true if charging cable connected is supported"""
-        if self.attrs.get('charger', {}):
-            if 'status' in self.attrs.get('charger', {}):
-                if 'plugStatusData' in self.attrs.get('charger').get('status', {}):
-                    if 'plugState' in self.attrs.get('charger')['status'].get('plugStatusData', {}):
-                        return True
-        return False
-
-    @property
-    def charging_time_left(self):
-        """Return minutes to charing complete"""
-        if self.external_power:
-            minutes = self.attrs.get('charger', {}).get('status', {}).get('batteryStatusData', {}).get('remainingChargingTime', {}).get('content', 0)
-            if minutes:
-                try:
-                    if minutes == 65535: minutes = -1
-                    return int(minutes)
-                except Exception:
-                    pass
-        return 0
-
-    @property
-    def is_charging_time_left_supported(self):
-        """Return true if charging is supported"""
-        return self.is_charging_supported
-
+  # Locks
     @property
     def door_locked(self):
         #LEFT FRONT
@@ -856,6 +959,44 @@ class Vehicle:
         if self.attrs.get('StoredVehicleDataResponseParsed', {}):
             if '0x0301040001' in self.attrs.get('StoredVehicleDataResponseParsed'):
                 return True
+            else:
+                return False
+
+    @property
+    def trunk_locked(self):
+        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x030104000D'].get('value',0))
+        if response == 2:
+            return True
+        else:
+            return False
+
+    @property
+    def is_trunk_locked_supported(self):
+        if self.attrs.get('StoredVehicleDataResponseParsed', {}):
+            if '0x030104000D' in self.attrs.get('StoredVehicleDataResponseParsed'):
+                return True
+            else:
+                return False
+
+  # Doors, hood and trunk
+    @property
+    def hood_closed(self):
+        """Return true if hood is closed"""
+        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040011'].get('value',0))
+        if response == 3:
+            return True
+        else:
+            return False
+
+    @property
+    def is_hood_closed_supported(self):
+        """Return true if hood state is supported"""
+        if self.attrs.get('StoredVehicleDataResponseParsed', {}):
+            if '0x0301040011' in self.attrs.get('StoredVehicleDataResponseParsed'):
+                if (int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040011'].get('value',0)) == 0):
+                    return False
+                else:
+                    return True
             else:
                 return False
 
@@ -944,47 +1085,7 @@ class Vehicle:
             else:
                 return False
 
-    @property
-    def trunk_locked(self):
-        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x030104000D'].get('value',0))
-        if response == 2:
-            return True
-        else:
-            return False
-
-    @property
-    def is_trunk_locked_supported(self):
-        if self.attrs.get('StoredVehicleDataResponseParsed', {}):
-            if '0x030104000D' in self.attrs.get('StoredVehicleDataResponseParsed'):
-                return True
-            else:
-                return False
-
-    @property
-    def request_in_progress(self):
-        #Not implemented for SKODA
-        check = self.attrs.get('vehicleStatus', {}).get('requestStatus', {})
-        if check == 'REQUEST_IN_PROGRESS':
-            return True
-        else:
-            return False
-
-    @property
-    def is_request_in_progress_supported(self):
-        #Not implemented for SKODA
-        response = self.attrs.get('vehicleStatus', {}).get('requestStatus', {})
-        if response or response is None:
-            return True
-
-    @property
-    def requests_remaining(self):
-        return self._requests_remaining
-
-    @property
-    def is_requests_remaining_supported(self):
-        return True if self._requests_remaining else False
-
-    # trips
+  # Trip data
     @property
     def trip_last_entry(self):
         return self.attrs.get('tripstatistics', {})
@@ -1074,25 +1175,63 @@ class Vehicle:
         if response and type(response.get('totalElectricConsumption')) in (float, int):
             return True
 
-    # actions
+  # Requests data
+    @property
+    def request_in_progress(self):
+        return self._request_in_progress
+
+    @property
+    def is_request_in_progress_supported(self):
+        """Request in progress is always supported."""
+        return True
+
+    @property
+    def request_result(self):
+        """Get last request result."""
+        return self._request_result
+
+    @property
+    def is_request_result_supported(self):
+        """Request result is supported if in progress is supported."""
+        return self.is_request_in_progress_supported
+
+    @property
+    def requests_remaining(self):
+        """Get remaining requests before throttled."""
+        if self.attrs.get('rate_limit_remaining', False):
+            self.requests_remaining = self.attrs.get('rate_limit_remaining')
+            self.attrs.pop('rate_limit_remaining')
+        return self._requests_remaining
+
+    @requests_remaining.setter
+    def requests_remaining(self, value):
+        self._requests_remaining = value
+
+    @property
+    def is_requests_remaining_supported(self):
+        return True if self._requests_remaining else False
+
+ #### Vehicle Actions ####
+  # Data refresh
     async def trigger_request_update(self):
         if self.is_request_in_progress_supported:
             if not self.request_in_progress:
-                resp = await self.call('-/vsr/request-vsr', dummy='data')
-                if not resp or (isinstance(resp, dict) and resp.get('errorCode') != '0'):
+                resp = await self.call('fs-car/bs/vsr/v1/skoda/CZ/vehicles/$vin/requests', data=None)
+                if not resp:
                     _LOGGER.error('Failed to request vehicle update')
                 else:
+                    await self.getRequestProgressStatus(resp,"vsr")
                     await self.update()
                     return resp
             else:
-                _LOGGER.warning('Request update is already in progress')
+                _LOGGER.warning('Another request is already in progress')
         else:
             _LOGGER.error('No request update support.')
 
-    async def lock_car(self, spin):        
+    async def lock_car(self, spin):
         if spin:
             if self.is_door_locked_supported:
-                secToken = await self.requestSecToken(spin, "lock")                                
+                secToken = await self.requestSecToken(spin, "lock")
                 url = "fs-car/bs/rlu/v1/skoda/CZ/vehicles/$vin/actions"
                 data = "<rluAction xmlns=\"http://audi.de/connect/rlu\"><action>lock</action></rluAction>"
                 if "Content-Type" in self._connection._session_headers:
@@ -1108,11 +1247,11 @@ class Vehicle:
                         _LOGGER.warning('Failed to lock car')
                     else:
                         await self.getRequestProgressStatus(resp,"rlu")
-                        await self.update()                        
-                        return 
+                        await self.update()
+                        return
                 except Exception as error:
                     _LOGGER.error('Failed to lock car - %s' % error)
-                
+
                 #Cleanup headers
                 if "x-mbbSecToken" in self._connection._session_headers: del self._connection._session_headers["x-mbbSecToken"]
                 if "Content-Type" in self._connection._session_headers: del self._connection._session_headers["Content-Type"]
@@ -1120,7 +1259,7 @@ class Vehicle:
             else:
                 _LOGGER.error('No car lock support.')
         else:
-            _LOGGER.error('Invalid SPIN provided')      
+            _LOGGER.error('Invalid SPIN provided')
 
     async def unlock_car(self, spin):
         if spin:
@@ -1141,11 +1280,11 @@ class Vehicle:
                         _LOGGER.warning('Failed to unlock car')
                     else:
                         await self.getRequestProgressStatus(resp,"rlu")
-                        await self.update()                        
-                        return 
+                        await self.update()
+                        return
                 except Exception as error:
                     _LOGGER.error('Failed to unlock car - %s' % error)
-                
+
                 #Cleanup headers
                 if "x-mbbSecToken" in self._connection._session_headers: del self._connection._session_headers["x-mbbSecToken"]
                 if "Content-Type" in self._connection._session_headers: del self._connection._session_headers["Content-Type"]
@@ -1218,7 +1357,7 @@ class Vehicle:
     async def start_combustion_engine_heating(self, spin, combustionengineheatingduration):
         if spin:
             if self.is_combustion_engine_heating_supported:
-                secToken = await self.requestSecToken(spin, "heating")                                
+                secToken = await self.requestSecToken(spin, "heating")
                 url = "fs-car/bs/rs/v1/skoda/CZ/vehicles/$vin/action"
                 data = "{ \"performAction\": { \"quickstart\": { \"climatisationDuration\": "+str(combustionengineheatingduration)+", \"startMode\": \"heating\", \"active\": true } } }"
                 if "Content-Type" in self._connection._session_headers:
@@ -1235,7 +1374,7 @@ class Vehicle:
                     else:
                         await self.getRequestProgressStatus(resp,"rs")
                         await self.update()
-                        return 
+                        return
                 except Exception as error:
                     _LOGGER.error('Failed to start combustion engine heating - %s' % error)
 
@@ -1258,14 +1397,14 @@ class Vehicle:
                 contType = ''
 
             try:
-                self._connection._session_headers["Content-Type"] = "application/vnd.vwg.mbb.RemoteStandheizung_v2_0_2+json"                
+                self._connection._session_headers["Content-Type"] = "application/vnd.vwg.mbb.RemoteStandheizung_v2_0_2+json"
                 resp = await self.call(url, data=data)
                 if not resp:
                     _LOGGER.warning('Failed to stop combustion engine heating')
                 else:
                     await self.getRequestProgressStatus(resp,"rs")
                     await self.update()
-                    return 
+                    return
             except Exception as error:
                 _LOGGER.error('Failed to stop combustion engine heating - %s' % error)
 
@@ -1278,7 +1417,7 @@ class Vehicle:
     async def start_combustion_climatisation(self, spin, combustionengineclimatisationduration):
         if spin:
             if self.is_combustion_climatisation_supported:
-                secToken = await self.requestSecToken(spin, "heating")                                
+                secToken = await self.requestSecToken(spin, "heating")
                 url = "fs-car/bs/rs/v1/skoda/CZ/vehicles/$vin/action"
                 data = "{ \"performAction\": { \"quickstart\": { \"climatisationDuration\": "+str(combustionengineclimatisationduration)+", \"startMode\": \"ventilation\", \"active\": true } } }"
                 if "Content-Type" in self._connection._session_headers:
