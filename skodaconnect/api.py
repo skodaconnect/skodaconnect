@@ -378,140 +378,325 @@ class Connection:
         except Exception as err:
             _LOGGER.debug(f'Cannot get homeregion, error: {err}')
 
-        # Car Info
-        #https://msg.volkswagen.de/fs-car/promoter/portfolio/v1/skoda/CZ/vehicle/$vin/carportdata
-        try:
-            response = await self.get('fs-car/promoter/portfolio/v1/skoda/CZ/vehicle/$vin/carportdata', vin=url)
-            if response.get('carportData', {}) :
-                self._state[url].update(
-                    {'carportData': response.get('carportData', {})}
-                )
-            else:
-                _LOGGER.debug(f'Could not fetch carportData: {response}')
-        except Exception as err:
-            _LOGGER.warning(f'Could not fetch carportData, error: {err}')
+        # Request all car info and wait for all to finish
+        await asyncio.gather(
+            self.getRealCarData(url),
+            self.getCarportData(url),
+            self.getPosition(url),
+            self.getVehicleStatusData(url),
+            self.getTripStatistics(url),
+            self.getTimers(url),
+            self.getClimater(url),
+            self.getCharger(url),
+            self.getPreHeater(url),
+            return_exceptions=True
+        )
 
-        # Position data
-        #https://msg.volkswagen.de/fs-car/bs/cf/v1/skoda/CZ/vehicles/$vin/position
-        try:
-            response = await self.get('fs-car/bs/cf/v1/skoda/CZ/vehicles/$vin/position', vin=url)
-            if response.get('findCarResponse', {}) :
-                self._state[url].update(
-                    {'findCarResponse': response.get('findCarResponse', {})}
-                )
-                self._state[url].update({ 'isMoving': False })
-            elif response.get('status_code', 0) == 204:
-                _LOGGER.debug(f'Seems car is moving, HTTP 204 received from position')
-                self._state[url].update({ 'isMoving': True })
-                self._requests_remaining = 15
-            else:
-                _LOGGER.debug(f'Could not fetch position: {response}')
-        except aiohttp.client_exceptions.ClientResponseError as err:
-            if (err.status == 204):
-                _LOGGER.debug(f'Seems car is moving, HTTP 204 received from position')
-                self._state[url].update({ 'isMoving': True })
-                self._requests_remaining = 15
-            else:
-                _LOGGER.warning(f'Could not fetch position (ClientResponseError), error: {err}')
-        except Exception as err:
-            _LOGGER.warning(f'Could not fetch position, error: {err}')
-
-        # Stored car data
-        #https://msg.volkswagen.de/fs-car/bs/vsr/v1/skoda/CZ/vehicles/$vin/status
-        try:
-            response = await self.get('fs-car/bs/vsr/v1/skoda/CZ/vehicles/$vin/status', vin=url)
-            if response.get('StoredVehicleDataResponse', {}).get('vehicleData', {}).get('data', {})[0].get('field', {})[0] :
-                self._state[url].update(
-                    {'StoredVehicleDataResponse': response.get('StoredVehicleDataResponse', {})}
-                )
-                self._state[url].update(
-                    {'StoredVehicleDataResponseParsed' :  dict([(e["id"],e if "value" in e else "") for f in [s["field"] for s in response["StoredVehicleDataResponse"]["vehicleData"]["data"]] for e in f]) }
-                )
-            else:
-                _LOGGER.debug(f'Could not fetch StoredVehicleDataResponse: {response}')
-        except Exception as err:
-            _LOGGER.warning(f'Could not fetch StoredVehicleDataResponse, error: {err}')
-
-        # TRIP DATA
-        #https://msg.volkswagen.de/fs-car/bs/tripstatistics/v1/skoda/CZ/vehicles/TMBJJ7NS3L8500308/tripdata/shortTerm?newest
-        # -or- shortTerm?type=list -or- longTerm?type=list
-        try:
-            response = await self.get('fs-car/bs/tripstatistics/v1/skoda/CZ/vehicles/$vin/tripdata/shortTerm?newest', vin=url)
-            if response.get('tripData', {}):
-                self._state[url].update(
-                    {'tripstatistics': response.get('tripData', {})}
-                )
-            else:
-                _LOGGER.debug(f'Could not fetch tripstatistics: {response}')
-        except Exception as err:
-            _LOGGER.warning(f'Could not fetch tripstatistics, error: {err}')
-
-        # CLIMATISATION DATA
-        #https://msg.volkswagen.de/fs-car/bs/climatisation/v1/skoda/CZ/vehicles/<VIN>/climater
-        try:
-            response = await self.get('fs-car/bs/climatisation/v1/skoda/CZ/vehicles/$vin/climater', vin=url)
-            if response.get('climater', {}):
-                self._state[url].update(
-                    {'climater': response.get('climater', {})}
-                )
-            else:
-                _LOGGER.debug(f'Could not fetch climatisation: {response}')
-        except aiohttp.client_exceptions.ClientResponseError as err:
-            if (err.status == 403):
-                _LOGGER.debug(f'Could not fetch climatisation, error 403 (not supported on car?), error: {err}')
-            else:
-                _LOGGER.warning(f'Could not fetch climatisation (ClientResponseError), error: {err}')
-        except Exception as err:
-            _LOGGER.warning(f'Could not fetch climatisation, error: {err}')
-
-        # CHARGING DATA
-        #https://msg.volkswagen.de/fs-car/bs/batterycharge/v1/skoda/CZ/vehicles/<VIN>/charger
-        try:
-            response = await self.get('fs-car/bs/batterycharge/v1/skoda/CZ/vehicles/$vin/charger', vin=url)
-            if response.get('charger', {}):
-                self._state[url].update(
-                    {'charger': response.get('charger', {})}
-                )
-            else:
-                _LOGGER.debug(f'Could not fetch charger: {response}')
-        except aiohttp.client_exceptions.ClientResponseError as err:
-            if (err.status == 403):
-                _LOGGER.debug(f'Could not fetch charger, error 403 (not supported on car?), error: {err}')
-            else:
-                _LOGGER.warning(f'Could not fetch charger (ClientResponseError), error: {err}')
-        except Exception as err:
-            _LOGGER.warning(f'Could not fetch charger, error: {err}')
-
-        # Pre-heater status (auxiliary heating)
-        # https://msg.volkswagen.de/fs-car/bs/rs/v1/skoda/CZ/vehicles/$vin/status
-        try:
-            response = await self.get('fs-car/bs/rs/v1/skoda/CZ/vehicles/$vin/status', vin=url)
-            if response.get('statusResponse', {}) :
-                self._state[url].update(
-                    {'heating': response.get('statusResponse', {})}
-                )
-            else:
-                _LOGGER.debug(f'Could not fetch pre-heating: {response}')
-        except aiohttp.client_exceptions.ClientResponseError as err:
-            if (err.status == 403 or err.status == 502):
-                _LOGGER.debug(f'Could not fetch pre-heating, error 403/502 (not supported on car?), error: {err}')
-            else:
-                _LOGGER.warning(f'Could not fetch pre-heating (ClientResponseError), error: {err}')
-        except Exception as err:
-            _LOGGER.warning(f'Could not fetch pre-heating, error: {err}')
-
+ #### Data collect functions ####
     async def getHomeRegion(self, vin):
         _LOGGER.debug("Getting homeregion for %s" % vin)
         try:
+            await self.set_token('vwg')
             response = await self.get('https://mal-1a.prd.ece.vwg-connect.com/api/cs/vds/v1/vehicles/$vin/homeRegion', vin)
             self._session_auth_ref_url = response['homeRegion']['baseUri']['content'].split("/api")[0].replace("mal-", "fal-") if response['homeRegion']['baseUri']['content'] != "https://mal-1a.prd.ece.vwg-connect.com/api" else "https://msg.volkswagen.de"
-            self._session_spin_ref_url = response['homeRegion']['baseUri']['content'].split("/api")[0]
+            self._session_spin_ref_url = response['homeRegion']['baseUri']['content'].split("/api")[0] 
+        except aiohttp.client_exceptions.ClientResponseError as err:
+            if (err.status == 403 or err.status == 502):
+                _LOGGER.debug(f'Could not fetch homeregion, error 403/502 (not supported on car?), error: {err}')
+            elif err.status == 401:
+                _LOGGER.warning(f'Received "unauthorized" error while fetching data: {err}')
+                self._session_logged_in = False
+            elif err.satus != 200:
+                _LOGGER.warning(f'Unhandled HTTP response: {err}')
         except:
             _LOGGER.debug(f'Retrying homeregion for %s' % vin)
             response = await self.get('https://mal-1a.prd.ece.vwg-connect.com/api/cs/vds/v1/vehicles/$vin/homeRegion', vin)
             self._session_auth_ref_url = response['homeRegion']['baseUri']['content'].split("/api")[0].replace("mal-", "fal-") if response['homeRegion']['baseUri']['content'] != "https://mal-1a.prd.ece.vwg-connect.com/api" else "https://msg.volkswagen.de"
-            self._session_spin_ref_url = response['homeRegion']['baseUri']['content'].split("/api")[0]
+            self._session_spin_ref_url = response['homeRegion']['baseUri']['content'].split("/api")[0] 
 
+    async def getRealCarData(self, vin):
+        """Get car information from customer profile, VIN, nickname, etc."""
+        try:
+            atoken = self._session_tokens['identity']['access_token']
+            sub = jwt.decode(atoken, verify=False).get('sub', None)
+            await self.set_token('identity')
+            response = await self.get(
+                'https://customer-profile.apps.emea.vwapps.io/v1/customers/{subject}/realCarData'.format(subject=sub)
+            )
+            if response.get('realCars', {}):
+                carData = {}
+                carData = next(item for item in response.get('realCars', []) if item['vehicleIdentificationNumber'] == vin)
+                self._state[vin].update(
+                    {'carData': carData}
+                )
+                return True
+            else:
+                _LOGGER.debug(f'Could not fetch realCarData: {response}')
+            return False
+        except aiohttp.client_exceptions.ClientResponseError as err:
+            if (err.status == 403 or err.status == 502):
+                _LOGGER.debug(f'Could not fetch realcar data, error 403/502 (not supported on car?), error: {err}')
+            elif err.status == 401:
+                _LOGGER.warning(f'Received "unauthorized" error while fetching data: {err}')
+                self._session_logged_in = False
+            elif err.satus != 200:
+                _LOGGER.warning(f'Unhandled HTTP response: {err}')
+        except Exception as err:
+            _LOGGER.warning(f'Could not fetch realCarData, error: {err}')
+            return False
+
+    async def getCarportData(self, vin):
+        """Get carport data for vehicle, model, model year etc."""
+        try:
+            await self.set_token('vwg')
+            response = await self.get(
+                'fs-car/promoter/portfolio/v1/skoda/CZ/vehicle/$vin/carportdata',
+                vin=vin
+            )
+            if response.get('carportData', {}) :
+                self._state[vin].update(
+                    {'carportData': response.get('carportData', {})}
+                )
+                return True
+            else:
+                _LOGGER.debug(f'Could not fetch carportData: {response}')
+            return False
+        except aiohttp.client_exceptions.ClientResponseError as err:
+            if (err.status == 403 or err.status == 502):
+                _LOGGER.debug(f'Could not fetch carport data, error 403/502 (not supported on car?), error: {err}')
+            elif err.status == 401:
+                _LOGGER.warning(f'Received "unauthorized" error while fetching data: {err}')
+                self._session_logged_in = False
+            elif err.satus != 200:
+                _LOGGER.warning(f'Unhandled HTTP response: {err}')
+        except Exception as err:
+            _LOGGER.warning(f'Could not fetch carportData, error: {err}')
+            return False
+
+    async def getVehicleStatusData(self, vin):
+        """Get stored vehicle data response."""
+        try:
+            await self.set_token('vwg')
+            response = await self.get(
+                'fs-car/bs/vsr/v1/skoda/CZ/vehicles/$vin/status', 
+                vin=vin
+            )
+            if response.get('StoredVehicleDataResponse', {}).get('vehicleData', {}).get('data', {})[0].get('field', {})[0] :
+                self._state[vin].update(
+                    {'StoredVehicleDataResponse': response.get('StoredVehicleDataResponse', {})}
+                )
+                self._state[vin].update(
+                    {'StoredVehicleDataResponseParsed' :  dict([(e["id"],e if "value" in e else "") for f in [s["field"] for s in response["StoredVehicleDataResponse"]["vehicleData"]["data"]] for e in f]) }
+                )
+                return True
+            else:
+                _LOGGER.debug(f'Could not fetch StoredVehicleDataResponse: {response}')
+            return False
+        except aiohttp.client_exceptions.ClientResponseError as err:
+            if (err.status == 403 or err.status == 502):
+                _LOGGER.debug(f'Could not fetch vehicle status report, error 403/502 (not supported on car?), error: {err}')
+            elif err.status == 401:
+                _LOGGER.warning(f'Received "unauthorized" error while fetching data: {err}')
+                self._session_logged_in = False
+            elif err.satus != 200:
+                _LOGGER.warning(f'Unhandled HTTP response: {err}')
+        except Exception as err:
+            _LOGGER.warning(f'Could not fetch StoredVehicleDataResponse, error: {err}')
+            return False
+
+    async def getTripStatistics(self, vin):
+        """Get short term trip statistics."""
+        try:
+            await self.set_token('vwg')
+            response = await self.get(
+                'fs-car/bs/tripstatistics/v1/skoda/CZ/vehicles/$vin/tripdata/shortTerm?newest',
+                vin=vin
+            )
+            if response.get('tripData', {}):
+                self._state[vin].update(
+                    {'tripstatistics': response.get('tripData', {})}
+                )
+                return True
+            else:
+                _LOGGER.debug(f'Could not fetch trip statistics: {response}')
+            return False
+        except aiohttp.client_exceptions.ClientResponseError as err:
+            if (err.status == 403 or err.status == 502):
+                _LOGGER.debug(f'Could not fetch trip statistics, error 403/502 (not supported on car?), error: {err}')
+            elif err.status == 401:
+                _LOGGER.warning(f'Received "unauthorized" error while fetching data: {err}')
+                self._session_logged_in = False
+            elif err.satus != 200:
+                _LOGGER.warning(f'Unhandled HTTP response: {err}')
+        except Exception as err:
+            _LOGGER.warning(f'Could not fetch trip statistics, error: {err}')
+            return False
+
+    async def getPosition(self, vin):
+        """Get position data."""
+        try:
+            await self.set_token('vwg')
+            response = await self.get(
+                'fs-car/bs/cf/v1/skoda/CZ/vehicles/$vin/position', 
+                vin=vin
+            )
+            if response.get('findCarResponse', {}) :
+                self._state[vin].update(
+                    {'findCarResponse': response.get('findCarResponse', {})}
+                )
+                self._state[vin].update({ 'isMoving': False })
+                #self._state[vin].pop('rate_limit_remaining')
+                return True
+            elif response.get('status_code', 0) == 204:
+                _LOGGER.debug(f'Seems car is moving, HTTP 204 received from position')
+                self._state[vin].update({ 'isMoving': True })
+                self._state[vin].update({ 'rate_limit_remaining': 15 })
+                return True
+            else:
+                _LOGGER.debug(f'Could not fetch position: {response}')
+                #self._state[vin].pop('rate_limit_remaining')
+            return False
+        except aiohttp.client_exceptions.ClientResponseError as err:
+            #self._state[vin].pop('rate_limit_remaining')
+            if (err.status == 403 or err.status == 502):
+                _LOGGER.debug(f'Could not fetch position, error 403/502 (not supported on car?), error: {err}')
+            elif err.status == 401:
+                _LOGGER.warning(f'Received "unauthorized" error while fetching data: {err}')
+                self._session_logged_in = False
+            elif (err.status == 204):
+                _LOGGER.debug(f'Seems car is moving, HTTP 204 received from position')
+                self._state[vin].update({ 'isMoving': True })
+                self._state[vin].update({ 'rate_limit_remaining': 15 })
+                return True
+            elif err.satus != 200:
+                _LOGGER.warning(f'Unhandled HTTP response: {err}')
+            else:
+                _LOGGER.warning(f'Could not fetch position (ClientResponseError), error: {err}')
+            return False
+        except Exception as err:
+            _LOGGER.warning(f'Could not fetch position, error: {err}')
+            return False
+
+    async def getTimers(self, vin):
+        """Get departure timers."""
+        try:
+            await self.set_token('vwg')
+            response = await self.get(
+                'fs-car/bs/departuretimer/v1/skoda/CZ/vehicles/$vin/timer', 
+                vin=vin
+            )
+            if response.get('timer', {}):
+                self._state[vin].update(
+                    {'timers': response.get('timer', {})}
+                )
+                return True
+            else:
+                _LOGGER.debug(f'Could not fetch timers: {response}')
+            return False
+        except aiohttp.client_exceptions.ClientResponseError as err:
+            if (err.status == 403 or err.status == 502):
+                _LOGGER.debug(f'Could not fetch timers, error 403/502 (not supported on car?), error: {err}')
+            elif err.status == 401:
+                _LOGGER.warning(f'Received "unauthorized" error while fetching data: {err}')
+                self._session_logged_in = False
+            elif err.satus != 200:
+                _LOGGER.warning(f'Unhandled HTTP response: {err}')
+        except Exception as err:
+            _LOGGER.warning(f'Could not fetch timers, error: {err}')
+            return False
+
+    async def getClimater(self, vin):
+        """Get climatisation data."""
+        try:
+            await self.set_token('vwg')
+            response = await self.get(
+                'fs-car/bs/climatisation/v1/skoda/CZ/vehicles/$vin/climater',
+                vin=vin
+            )
+            if response.get('climater', {}):
+                self._state[vin].update(
+                    {'climater': response.get('climater', {})}
+                )
+                return True
+            else:
+                _LOGGER.debug(f'Could not fetch climatisation: {response}')
+            return False
+        except aiohttp.client_exceptions.ClientResponseError as err:
+            if (err.status == 403 or err.status == 502):
+                _LOGGER.debug(f'Could not fetch climatisation, error 403/502 (not supported on car?), error: {err}')
+            elif err.status == 401:
+                _LOGGER.warning(f'Received "unauthorized" error while fetching data: {err}')
+                self._session_logged_in = False
+            elif err.satus != 200:
+                _LOGGER.warning(f'Unhandled HTTP response: {err}')
+            else:
+                _LOGGER.warning(f'Could not fetch climatisation (ClientResponseError), error: {err}')
+            return False
+        except Exception as err:
+            _LOGGER.warning(f'Could not fetch climatisation, error: {err}')
+            return False
+
+    async def getCharger(self, vin):
+        """Get charger data."""
+        try:
+            await self.set_token('vwg')
+            response = await self.get(
+                'fs-car/bs/batterycharge/v1/skoda/CZ/vehicles/$vin/charger', 
+                vin=vin
+            )
+            if response.get('charger', {}):
+                self._state[vin].update(
+                    {'charger': response.get('charger', {})}
+                )
+                return True
+            else:
+                _LOGGER.debug(f'Could not fetch charger: {response}')
+            return False
+        except aiohttp.client_exceptions.ClientResponseError as err:
+            if (err.status == 403 or err.status == 502):
+                _LOGGER.debug(f'Could not fetch charger, error 403/502 (not supported on car?), error: {err}')
+            elif err.status == 401:
+                _LOGGER.warning(f'Received "unauthorized" error while fetching data: {err}')
+                self._session_logged_in = False
+            elif err.satus != 200:
+                _LOGGER.warning(f'Unhandled HTTP response: {err}')
+            else:
+                _LOGGER.warning(f'Could not fetch charger (ClientResponseError), error: {err}')
+            return False
+        except Exception as err:
+            _LOGGER.warning(f'Could not fetch charger, error: {err}')
+            return False
+
+    async def getPreHeater(self, vin):
+        """Get aux heater data."""
+        try:
+            await self.set_token('vwg')
+            response = await self.get(
+                'fs-car/bs/rs/v1/skoda/CZ/vehicles/$vin/status', 
+                vin=vin
+            )
+            if response.get('statusResponse', {}) :
+                self._state[vin].update(
+                    {'heating': response.get('statusResponse', {})}
+                )
+                return True
+            else:
+                _LOGGER.debug(f'Could not fetch pre-heating: {response}')
+            return False
+        except aiohttp.client_exceptions.ClientResponseError as err:
+            if (err.status == 403 or err.status == 502):
+                _LOGGER.debug(f'Could not fetch pre-heating, error 403/502 (not supported on car?), error: {err}')
+            elif err.status == 401:
+                _LOGGER.warning(f'Received "unauthorized" error while fetching data: {err}')
+                self._session_logged_in = False
+            elif err.satus != 200:
+                _LOGGER.warning(f'Unhandled HTTP response: {err}')
+            else:
+                _LOGGER.warning(f'Could not fetch pre-heating (ClientResponseError), error: {err}')
+            return False
+        except Exception as err:
+            _LOGGER.warning(f'Could not fetch pre-heating, error: {err}')
+            return False
  #### Token handling ####
     @property
     async def validate_tokens(self):
