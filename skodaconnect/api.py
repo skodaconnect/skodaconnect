@@ -11,14 +11,13 @@ import hashlib
 import jwt
 
 from sys import version_info, argv
-from datetime import timedelta, datetime, timezone
-from urllib.parse import urlsplit, urljoin, parse_qs, urlparse
+from datetime import timedelta, datetime
+from urllib.parse import urljoin, parse_qs, urlparse
 from json import dumps as to_json
-from collections import OrderedDict
 import aiohttp
 from bs4 import BeautifulSoup
 from base64 import b64decode, b64encode
-from skodaconnect.utilities import find_path, is_valid_path, read_config, json_loads
+from skodaconnect.utilities import read_config, json_loads
 from skodaconnect.vehicle import Vehicle
 
 from aiohttp import ClientSession, ClientTimeout
