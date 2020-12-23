@@ -2,11 +2,13 @@
 # -*- coding: utf-8 -*-
 """Communicate with Skoda Connect."""
 """Fork of https://github.com/robinostlund/volkswagencarnet where it was modified to support also Skoda Connect"""
+"""Modified to utilize Skoda App API instead of Web API"""
 import re
 import time
 import logging
 import asyncio
 import hashlib
+import jwt
 
 from sys import version_info, argv
 from datetime import timedelta, datetime, timezone
@@ -22,6 +24,10 @@ from skodaconnect.vehicle import Vehicle
 from aiohttp import ClientSession, ClientTimeout
 from aiohttp.hdrs import METH_GET, METH_POST
 
+from .const import (
+    HEADERS_SESSION
+)
+
 version_info >= (3, 0) or exit('Python 3 required')
 
 _LOGGER = logging.getLogger(__name__)
@@ -31,11 +37,10 @@ TIMEOUT = timedelta(seconds=30)
 HEADERS_SESSION = {
     'Connection': 'keep-alive',
     'Content-Type': 'application/json',
-    "X-Client-Id": '7f045eee-7003-4379-9968-9355ed2adb06%40apps_vw-dilab_com',
+    "X-Client-Id": '28cd30c6-dee7-4529-a0e6-b1e07ff90b79',
     "X-App-Version": '3.2.6',
     "X-App-Name": 'cz.skodaauto.connect',
     "Accept-charset": "UTF-8",
-    #"Accept": "application/json,*/*",
     "Accept": "application/json",
     'User-Agent': 'okhttp/3.7.0'
 }
@@ -55,6 +60,7 @@ CLIENT_ID = '7f045eee-7003-4379-9968-9355ed2adb06%40apps_vw-dilab_com'
 class Connection:
     """ Connection to Skoda connect """
 
+  # Init connection class
     def __init__(self, session, username, password, guest_lang='en'):
         """ Initialize """
         self._session = session
@@ -70,6 +76,7 @@ class Connection:
         self._session_first_update = False
         self._session_auth_username = username
         self._session_auth_password = password
+        self._session_tokens = {}
 
         self._vin = ""
         self._vehicles = []
@@ -82,6 +89,7 @@ class Connection:
     def _clear_cookies(self):
         self._session._cookie_jar._cookies.clear()
 
+  # API Login
     async def _login(self):
         """ Reset session in case we would like to login again """
         self._session_headers = HEADERS_SESSION.copy()
@@ -100,7 +108,7 @@ class Connection:
             return (b64encode(sha256.digest()).decode("utf-8")[:-1])
 
         try:
-            # remove cookies from session as we are doing a new login
+            # Remove cookies from session as we are doing a new login
             self._clear_cookies()
 
             # Request landing page and get auth URL:
@@ -115,9 +123,17 @@ class Connection:
 
             # Get authorization
             # https://identity.vwgroup.io/oidc/v1/authorize?nonce=yVOPHxDmksgkMo1HDUp6IIeGs9HvWSSWbkhPcxKTGNU&response_type=code id_token token&scope=openid mbb&ui_locales=de&redirect_uri=skodaconnect://oidc.login/&client_id=7f045eee-7003-4379-9968-9355ed2adb06%40apps_vw-dilab_com             
+             params = {
+                "nonce": getNonce(),
+                "response_type":  "code id_token token",
+                "scope": "openid profile address cars email birthdate badge mbb phone driversLicense dealers",
+                "redirect_uri": "skodaconnect://oidc.login/",
+                "client_id": CLIENT_ID
+            }
             req = await self._session.get(
-                url=authorizationEndpoint+'?nonce='+getNonce()+'&response_type=code id_token token&scope=openid mbb&ui_locales=de&redirect_uri=skodaconnect://oidc.login/&client_id='+CLIENT_ID,
-                headers=self._session_auth_headers
+                url=authorizationEndpoint,
+                headers=self._session_auth_headers,
+                params=params
             )
             if req.status != 200:
                 return ""
@@ -156,40 +172,39 @@ class Connection:
                 data = pwform,
                 allow_redirects=False
             )
-            if req.status != 302:
-                return ""
+             # Follow all redirects until we get redirected back to "our app"
+            try:
+                maxDepth = 10
+                ref = req.headers['Location']
+                while not ref.startswith("skodaconnect://oidc.login/"):
+                    response = await self._session.get(
+                        url=ref,
+                        headers=self._session_auth_headers,
+                        allow_redirects=False
+                    )
+                    ref = response.headers['Location']
+                    # Set a max limit on requests to prevent forever loop
+                    maxDepth -= 1
+                    if maxDepth == 0:
+                        _LOGGER.warning("Should have gotten a token by now.")
+                        return False
+            except:
+                # If we get excepted it should be because we can't redirect to the skodaconnect:// URL
+                _LOGGER.debug("Got code: %s" % ref)
+                pass
 
-            # https://identity.vwgroup.io/oidc/v1/oauth/sso?clientId=xxx@apps_vw-dilab_com&relayState=xxx&userId=xxxGUID&HMAC=xxxx
-            ref_url_1 = req.headers.get("location")
-            req = await self._session.get(ref_url_1, allow_redirects=False, headers=self._session_auth_headers)
-            if req.status != 302:
-                return ""
+            # Extract code and tokens
+            jwt_auth_code = parse_qs(urlparse(ref).fragment).get('code')[0]
+            jwt_access_token = parse_qs(urlparse(ref).fragment).get('access_token')[0]
+            jwt_id_token = parse_qs(urlparse(ref).fragment).get('id_token')[0]
 
-            # https://identity.vwgroup.io/oidc/v1/oauth/client/callback?clientId=xxx@apps_vw-dilab_com&relayState=xxx&userId=xxxGUID&HMAC=xxx
-            ref_url_3 = req.headers.get('location')
-            req = await self._session.get(
-                url=ref_url_3,
-                allow_redirects=False,
-                headers=self._session_auth_headers
-            )
-            if req.status != 302:
-                return ""
-
-            # skodaconnect://oidc.login/#code=xxx&access_token=xxx&expires_in=3600&token_type=bearer&id_token=xxx 
-            skodaURL = req.headers.get('location')
-
-            # Exchange Auth code for JWT tokens
-            # https://tokenrefreshservice.apps.emea.vwapps.io/exchangeAuthCode
-            jwtauth_code = parse_qs(urlparse(skodaURL).fragment).get('code')[0]
-            jwtaccess_token = parse_qs(urlparse(skodaURL).fragment).get('access_token')[0]
-            jwtid_token = parse_qs(urlparse(skodaURL).fragment).get('id_token')[0]
-
+            # Exchange Auth code for Skoda tokens
             tokenBody = {
-                "auth_code": jwtauth_code,
-                "id_token":  jwtid_token,
-                "brand": "skoda"
+                'auth_code': jwt_auth_code,
+                'id_token':  jwt_id_token,
+                'brand': 'skoda'
             }
-            tokenURL = "https://tokenrefreshservice.apps.emea.vwapps.io/exchangeAuthCode"
+            tokenURL = 'https://tokenrefreshservice.apps.emea.vwapps.io/exchangeAuthCode'
             req = await self._session.post(
                 url=tokenURL,
                 headers=self._session_auth_headers,
@@ -198,28 +213,29 @@ class Connection:
             )
             if req.status != 200:
                 return ""
+            # Save tokens as "identity", this is tokens representing the user
+            self._session_tokens['identity'] = await req.json()
+            if not await self.verify_tokens(self._session_tokens['identity']['id_token'], 'identity'):
+                _LOGGER.warning('Identity token could not be verified!')
+            else:
+                _LOGGER.debug('Identity token verified OK.')
 
-            vwtok = await req.json()
-            atoken = vwtok["access_token"]
-            rtoken = vwtok["refresh_token"]
-
-            # Get VW API tokens
+            # Get VW Group API tokens
             # https://mbboauth-1d.prd.ece.vwg-connect.com/mbbcoauth/mobile/oauth2/v1/token
             tokenBody2 =  {
-                "grant_type": "id_token",
-                "token": jwtid_token,
-                "scope": "sc2:fal"
+                'grant_type': 'id_token',
+                'token': self._session_tokens['identity']['id_token'],
+                'scope': 'sc2:fal'
             }
             req = await self._session.post(
                     url='https://mbboauth-1d.prd.ece.vwg-connect.com/mbbcoauth/mobile/oauth2/v1/token',
                     headers= {
-                        "User-Agent": "okhttp/3.7.0",
-                        "X-App-Version": "3.2.6",
-                        "X-App-Name": "cz.skodaauto.connect",
-                        "X-Client-Id": "28cd30c6-dee7-4529-a0e6-b1e07ff90b79",
-                        "Host": "mbboauth-1d.prd.ece.vwg-connect.com",
+                        'User-Agent': 'okhttp/3.7.0',
+                        'X-App-Version': '3.2.6',
+                        'X-App-Name': 'cz.skodaauto.connect',
+                        'X-Client-Id': '28cd30c6-dee7-4529-a0e6-b1e07ff90b79',
+                        'Host': 'mbboauth-1d.prd.ece.vwg-connect.com',
                     },
-                    #self._session_headers,
                     data = tokenBody2,
                     allow_redirects=False
                 )
@@ -227,13 +243,15 @@ class Connection:
                 _LOGGER.debug("Tokens wrong")
                 return ""
             else:
-                _LOGGER.debug("Tokens OK")
-            rtokens = await req.json()
-            atoken = rtokens["access_token"]
-            rtoken = rtokens["refresh_token"]
+                # Save tokens as "vwg", use theese for get/posts to VW Group API
+                self._session_tokens['vwg'] = await req.json()
+                if not await self.verify_tokens(self._session_tokens['vwg']['access_token'], 'vwg'):
+                    _LOGGER.warning('VWG token could not be verified!')
+                else:
+                    _LOGGER.debug("VWG tokens OK.")
 
-            # Update headers for requests
-            self._session_headers['Authorization'] = "Bearer " + atoken
+            # Update headers for requests, defaults to using VWG token
+            self._session_headers['Authorization'] = 'Bearer ' + self._session_tokens['vwg']['access_token']
             self._session_logged_in = True
             return True
 
@@ -242,11 +260,10 @@ class Connection:
             self._session_logged_in = False
             return False
 
+  # HTTP methods to API
     async def _request(self, method, url, **kwargs):
-        """Perform a query to the Skoda Connect"""
-        # try:
+        """Perform a query to the Skoda Connect service"""
         _LOGGER.debug("Request for %s", url)
-
         async with self._session.request(
             method,
             url,
@@ -257,13 +274,13 @@ class Connection:
         ) as response:
             response.raise_for_status()
 
+            # Update cookie jar
             if self._jarCookie != "":
                 self._jarCookie.update(response.cookies)
             else:
                 self._jarCookie = response.cookies
 
             try:
-                _LOGGER.debug("Response headers: %s" % response.headers)
                 if response.status == 204:
                     res = {'status_code': response.status}
                 elif response.status >= 200 or response.status <= 300:
@@ -280,26 +297,6 @@ class Connection:
 
             _LOGGER.debug(f'Received [{response.status}] response: {res}')
             return res
-        # except Exception as error:
-        #     _LOGGER.warning(
-        #         "Failure when communcating with the server: %s", error
-        #     )
-        #     raise
-
-    async def _logout(self):
-        await self.post('-/logout/revoke')
-        # remove cookies from session as we have logged out
-        self._clear_cookies()
-
-    def _make_url(self, ref, vin=''):
-        replacedUrl = re.sub("\$vin", vin, ref)
-        if ("://" in replacedUrl):
-            #already server contained in URL
-            return replacedUrl
-        elif "rolesrights" in replacedUrl:
-            return urljoin(self._session_spin_ref_url, replacedUrl)
-        else:
-            return urljoin(self._session_auth_ref_url, replacedUrl)
 
     async def get(self, url, vin=''):
         """Perform a get query to the online service."""
@@ -312,55 +309,68 @@ class Connection:
         else:
             return await self._request(METH_POST, self._make_url(url, vin))
 
+  # Construct URL from request, home region and variables
+    def _make_url(self, ref, vin=''):
+        replacedUrl = re.sub("\$vin", vin, ref)
+        if ("://" in replacedUrl):
+            #already server contained in URL
+            return replacedUrl
+        elif "rolesrights" in replacedUrl:
+            return urljoin(self._session_spin_ref_url, replacedUrl)
+        else:
+            return urljoin(self._session_auth_ref_url, replacedUrl)
+
+  # Change active access token
+    async def set_token(self, type):
+        """Switch between tokens."""
+        self._session_headers['Authorization'] = 'Bearer ' + self._session_tokens[type]['access_token']
+        return
+
+  # Update functions
     async def update(self):
         """Update status."""
         try:
-            if self._session_first_update:
-                if not await self.validate_login:
-                    _LOGGER.info('Session expired, creating new login session to skoda connect.')
-                    await self._login()
-            else:
-                self._session_first_update = True
+            if not await self.validate_tokens:
+                _LOGGER.info('Session has expired. Initiating new login to Skoda Connect.')
+                await self._login()
 
-            # fetch vehicles
-            _LOGGER.debug('Fetching vehicles')
+            if not self._session_first_update:
+                # Get vehicles
+                _LOGGER.debug('Fetching vehicles')
+                await self.set_token('vwg')
+                if "Content-Type" in self._session_headers:
+                    del self._session_headers["Content-Type"]
+                loaded_vehicles = await self.get(
+                    url='https://msg.volkswagen.de/fs-car/usermanagement/users/v1/skoda/CZ/vehicles'
+                )
+                _LOGGER.debug('URL loaded')
 
-            # get vehicles
-            if "Content-Type" in self._session_headers:
-                del self._session_headers["Content-Type"]
-            loaded_vehicles = await self.get(
-                url='https://msg.volkswagen.de/fs-car/usermanagement/users/v1/skoda/CZ/vehicles'
-            )
-            _LOGGER.debug('URL loaded')
-
-            # update vehicles
+            # Update list of vehicles
             if loaded_vehicles.get('userVehicles', {}).get('vehicle', []):
                 _LOGGER.debug('Vehicle JSON string exists')
                 for vehicle in loaded_vehicles.get('userVehicles').get('vehicle'):
                     vehicle_url = vehicle
-                    _LOGGER.debug('Vehicle_URL %s', vehicle_url)
                     self._state.update({vehicle_url: dict()})
                     self._vehicles.append(Vehicle(self, vehicle_url))
-                    # if vehicle_url not in self._state:
-                    #     _LOGGER.debug('Vehicle_URL not in states, adding')
-                    #     self._state.update({vehicle_url: dict()})
-                    # else:
-                    #     _LOGGER.debug('Vehicle_URL in states, updating')
-                    #     for key, value in vehicle.items():
-                    #         self._state[vehicle_url].update({key: value})
+            self._session_first_update = True
 
             _LOGGER.debug('Going to call vehicle updates')
-            # get vehicle data
+            # Get VIN numbers and update data for each
             for vehicle in self.vehicles:
-                # update data in all vehicles
+                # Wait for data update
                 await vehicle.update()
             return True
         except (IOError, OSError, LookupError) as error:
             _LOGGER.warning(f'Could not update information from skoda connect: {error}')
 
     async def update_vehicle(self, vehicle):
+        """Update data from VWG servers for given vehicle."""
         url = vehicle._url
         self._vin=url
+
+        if not self._session_logged_in:
+            await self._login()
+
         _LOGGER.debug(f'Updating vehicle status {vehicle.vin}')
 
         try:
@@ -370,7 +380,7 @@ class Connection:
 
         # Car Info
         #https://msg.volkswagen.de/fs-car/promoter/portfolio/v1/skoda/CZ/vehicle/$vin/carportdata
-        try:            
+        try:
             response = await self.get('fs-car/promoter/portfolio/v1/skoda/CZ/vehicle/$vin/carportdata', vin=url)
             if response.get('carportData', {}) :
                 self._state[url].update(
@@ -426,11 +436,11 @@ class Connection:
         #https://msg.volkswagen.de/fs-car/bs/tripstatistics/v1/skoda/CZ/vehicles/TMBJJ7NS3L8500308/tripdata/shortTerm?newest
         # -or- shortTerm?type=list -or- longTerm?type=list
         try:
-            response = await self.get('fs-car/bs/tripstatistics/v1/skoda/CZ/vehicles/$vin/tripdata/shortTerm?newest', vin=url)            
+            response = await self.get('fs-car/bs/tripstatistics/v1/skoda/CZ/vehicles/$vin/tripdata/shortTerm?newest', vin=url)
             if response.get('tripData', {}):
                 self._state[url].update(
                     {'tripstatistics': response.get('tripData', {})}
-                )                                
+                )
             else:
                 _LOGGER.debug(f'Could not fetch tripstatistics: {response}')
         except Exception as err:
@@ -475,7 +485,6 @@ class Connection:
         # Pre-heater status (auxiliary heating)
         # https://msg.volkswagen.de/fs-car/bs/rs/v1/skoda/CZ/vehicles/$vin/status
         try:
-            
             response = await self.get('fs-car/bs/rs/v1/skoda/CZ/vehicles/$vin/status', vin=url)
             if response.get('statusResponse', {}) :
                 self._state[url].update(
@@ -487,59 +496,168 @@ class Connection:
             if (err.status == 403 or err.status == 502):
                 _LOGGER.debug(f'Could not fetch pre-heating, error 403/502 (not supported on car?), error: {err}')
             else:
-                _LOGGER.warning(f'Could not fetch pre-heating (ClientResponseError), error: {err}')        
+                _LOGGER.warning(f'Could not fetch pre-heating (ClientResponseError), error: {err}')
         except Exception as err:
             _LOGGER.warning(f'Could not fetch pre-heating, error: {err}')
-    
+
     async def getHomeRegion(self, vin):
         _LOGGER.debug("Getting homeregion for %s" % vin)
         try:
             response = await self.get('https://mal-1a.prd.ece.vwg-connect.com/api/cs/vds/v1/vehicles/$vin/homeRegion', vin)
             self._session_auth_ref_url = response['homeRegion']['baseUri']['content'].split("/api")[0].replace("mal-", "fal-") if response['homeRegion']['baseUri']['content'] != "https://mal-1a.prd.ece.vwg-connect.com/api" else "https://msg.volkswagen.de"
-            self._session_spin_ref_url = response['homeRegion']['baseUri']['content'].split("/api")[0] 
+            self._session_spin_ref_url = response['homeRegion']['baseUri']['content'].split("/api")[0]
         except:
             _LOGGER.debug(f'Retrying homeregion for %s' % vin)
             response = await self.get('https://mal-1a.prd.ece.vwg-connect.com/api/cs/vds/v1/vehicles/$vin/homeRegion', vin)
             self._session_auth_ref_url = response['homeRegion']['baseUri']['content'].split("/api")[0].replace("mal-", "fal-") if response['homeRegion']['baseUri']['content'] != "https://mal-1a.prd.ece.vwg-connect.com/api" else "https://msg.volkswagen.de"
-            self._session_spin_ref_url = response['homeRegion']['baseUri']['content'].split("/api")[0] 
+            self._session_spin_ref_url = response['homeRegion']['baseUri']['content'].split("/api")[0]
+
+ #### Token handling ####
+    @property
+    async def validate_tokens(self):
+        """Function to validate expiry of tokens."""
+        idtoken = self._session_tokens['identity']['id_token']
+        atoken = self._session_tokens['vwg']['access_token']
+        id_exp = jwt.decode(idtoken, verify=False).get('exp', None)
+        at_exp = jwt.decode(atoken, verify=False).get('exp', None)
+        id_dt = datetime.fromtimestamp(int(id_exp))
+        at_dt = datetime.fromtimestamp(int(at_exp))
+        now = datetime.now()
+        # We check if the tokens expire in the next minute
+        later = now + timedelta(minutes=1)
+        if now >= id_dt or now >= at_dt:
+            _LOGGER.debug('Tokens have expired. Try to fetch new tokens.')
+            if await self.refresh_tokens():
+                _LOGGER.debug('Successfully refreshed tokens')
+            else:
+                return False
+        elif later >= id_dt or later >= at_dt:
+            _LOGGER.debug('Tokens about to expire. Try to fetch new tokens.')
+            if await self.refresh_tokens():
+                _LOGGER.debug('Successfully refreshed tokens')
+            else:
+                return False
+        else:
+            expString = id_dt.strftime('%Y-%m-%d %H:%M:%S')
+            _LOGGER.debug(f'Tokens valid until {expString}')
+        return True
+
+    async def verify_tokens(self, token, type):
+        """Function to verify JWT against JWK(s)."""
+        if type == 'identity':
+            req = await self._session.get(url = 'https://identity.vwgroup.io/oidc/v1/keys')
+            keys = await req.json()
+            audience = [
+                CLIENT_ID, 
+                "VWGMBB01DELIV1", 
+                "https://api.vas.eu.dp15.vwg-connect.com", 
+                "https://api.vas.eu.wcardp.io"
+            ]
+        elif type == 'vwg':
+            req = await self._session.get(url = 'https://mbboauth-1d.prd.ece.vwg-connect.com/mbbcoauth/public/jwk/v1')
+            keys = await req.json()
+            audience = 'mal.prd.ece.vwg-connect.com'
+        else:
+            _LOGGER.debug('Not implemented')
+            return False
+        try:
+            pubkeys = {}
+            for jwk in keys['keys']:
+                kid = jwk['kid']
+                if jwk['kty'] == 'RSA':
+                    pubkeys[kid] = jwt.algorithms.RSAAlgorithm.from_jwk(to_json(jwk))
+
+            token_kid = jwt.get_unverified_header(token)['kid']
+            if type == 'vwg':
+                token_kid = 'VWGMBB01DELIV1.' + token_kid
+
+            pubkey = pubkeys[token_kid]
+            payload = jwt.decode(token, key=pubkey, algorithms=['RS256'], audience=audience)
+            return True
+        except Exception as error:
+            _LOGGER.debug('Failed to verify token, error: %s' % error)
+            return False
+
+    async def refresh_tokens(self):
+        """Function to refresh tokens."""
+        try:
+            tHeaders = {
+                "Accept-Encoding": "gzip, deflate, br",
+                "Accept-Language": "sv-SE",
+                "Connection": "keep-alive",
+                "Content-Type": "application/x-www-form-urlencoded",
+                "User-Agent": "okhttp/3.7.0",
+                "X-App-Version": "3.2.6",
+                "X-App-Name": "cz.skodaauto.connect",
+                "X-Client-Id": "28cd30c6-dee7-4529-a0e6-b1e07ff90b79"
+            }
+
+            body = {
+                'grant_type': 'refresh_token',
+                'brand': 'Skoda',
+                'refresh_token': self._session_tokens['identity']['refresh_token']
+            }
+            response = await self._session.post(
+                url = "https://tokenrefreshservice.apps.emea.vwapps.io/refreshTokens",
+                headers = tHeaders,
+                data = body
+            )
+            if response.status == 200:
+                tokens = await response.json()
+                # Verify Token
+                if not await self.verify_tokens(tokens['id_token'], 'identity'):
+                    _LOGGER.warning('Token could not be verified!')
+                for token in tokens:
+                    self._session_tokens['identity'][token] = tokens[token]
+            else:
+                _LOGGER.warning('Something went wrong when refreshing Skoda tokens.')
+                return False
+
+            body = {
+                'grant_type': 'id_token',
+                'scope': 'sc2:fal',
+                'token': self._session_tokens['identity']['id_token']
+            }
+
+            response = await self._session.post(
+                url = "https://mbboauth-1d.prd.ece.vwg-connect.com/mbbcoauth/mobile/oauth2/v1/token",
+                headers = tHeaders,
+                data = body,
+                allow_redirects=True
+            )
+            if response.status == 200:
+                tokens = await response.json()
+                if not await self.verify_tokens(tokens['access_token'], 'vwg'):
+                    _LOGGER.warning('Token could not be verified!')
+                for token in tokens:
+                    self._session_tokens['vwg'][token] = tokens[token]
+            else:
+                resp = await response.text()
+                _LOGGER.warning('Something went wrong when refreshing API tokens. %s' % resp)
+                return False
+            return True
+        except Exception as error:
+            _LOGGER.warning(f'Could not refresh tokens: {error}')
+            return False
 
     def vehicle(self, vin):
-        """Return vehicle for given vin."""
+        """Return vehicle object for given vin."""
         return next(
             (
                 vehicle
                 for vehicle in self.vehicles
-                if vehicle.unique_id == vin.lower()
+                if vehicle.unique_id.lower() == vin.lower()
             ), None
         )
-
-    @property
-    def vehicles(self):
-        """Return vehicle state."""
-        #return (Vehicle(self, url) for url in self._state)
-        return self._vehicles
 
     def vehicle_attrs(self, vehicle_url):
         return self._state.get(vehicle_url)
 
+  # Attributes
     @property
-    async def validate_login(self):
-        try:
-            response = await self.get('fs-car/promoter/portfolio/v1/skoda/CZ/vehicle/$vin/carportdata', vin=self._vin)            
-            if response.get('carportData', {}) :            
-                return True
-            else:
-                return False
-        except (IOError, OSError) as error:
-            _LOGGER.warning('Could not validate login: %s', error)
-            return False
-        except (aiohttp.client_exceptions.ClientResponseError) as error:
-            if (error.status == 401):
-                _LOGGER.info(f'Could not validate login - unauthorized, need to login again')
-                return False
-        except Exception as error:
-            _LOGGER.warning(f'Could not validate login2: {error}')
-            return False
+    def vehicles(self):
+        """Return list of Vehicle objects."""
+        return self._vehicles
 
     @property
     def logged_in(self):
@@ -561,24 +679,9 @@ async def main():
                 for vehicle in connection.vehicles:
                     print(f'Vehicle id: {vehicle}')
                     print('Supported sensors:')
-                    #await vehicle.lock_car("1234")
-                    #await vehicle.stop_combustion_engine_heating()
                     for instrument in vehicle.dashboard().instruments:
                         print(f' - {instrument.name} (domain:{instrument.component}) - {instrument.str_state}')
                     
-                    #print(vehicle.last_connected)
-                    #print(vehicle.service_inspection)
-                    #print(vehicle.position)
-                    #print(await vehicle.requestSecToken("1234"))
-                    #ts = vehicle.position.get('timestamp')
-                    #print(ts.astimezone(tz=None))
-            #await connection._logout()
-                    #await vehicle.start_combustion_engine_heating("1234", 20)
-                    #await vehicle.update()
-                    #await vehicle.stop_combustion_engine_heating()
-            
-
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
-    # loop.run(main())
     loop.run_until_complete(main())
