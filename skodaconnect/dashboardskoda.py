@@ -2,7 +2,7 @@
 # Thanks to molobrakos
 
 import logging
-from utilities import camel2slug
+from .utilities import camel2slug
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -142,8 +142,11 @@ class Sensor(Instrument):
 
 
 class BinarySensor(Instrument):
-    def __init__(self, attr, name, device_class, reverse_state=False):
-        super().__init__(component="binary_sensor", attr=attr, name=name)
+    def __init__(self, attr, name, device_class, icon=False, reverse_state=False):
+        if icon:
+            super().__init__(component="binary_sensor", attr=attr, name=name, icon=icon)
+        else:
+            super().__init__(component="binary_sensor", attr=attr, name=name)
         self.device_class = device_class
         self.reverse_state = reverse_state
 
@@ -791,7 +794,8 @@ def create_instruments():
         BinarySensor(
             attr="parking_light",
             name="Parking light",
-            device_class="light"
+            device_class="light",
+            icon="mdi:car-parking-lights"
         ),
         #BinarySensor(
         #    attr="climatisation_without_external_power",
@@ -808,25 +812,29 @@ def create_instruments():
             attr="door_closed_left_front",
             name="Door closed left front",
             device_class="door",
-            reverse_state=True
+            reverse_state=True,
+            icon="mdi:car-door"
         ),
         BinarySensor(
             attr="door_closed_right_front",
             name="Door closed right front",
             device_class="door",
-            reverse_state=True
+            reverse_state=True,
+            icon="mdi:car-door"
         ),
         BinarySensor(
             attr="door_closed_left_back",
             name="Door closed left back",
             device_class="door",
-            reverse_state=True
+            reverse_state=True,
+            icon="mdi:car-door"
         ),
         BinarySensor(
             attr="door_closed_right_back",
             name="Door closed right back",
             device_class="door",
-            reverse_state=True
+            reverse_state=True,
+            icon="mdi:car-door"
         ),
         BinarySensor(
             attr="trunk_locked",
