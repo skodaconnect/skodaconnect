@@ -5,7 +5,8 @@
 
 # Skoda Connect v1.0.30
 
-Fork of https://github.com/robinostlund/volkswagencarnet where it was modified to support also Skoda Connect
+Fork of https://github.com/robinostlund/volkswagencarnet where it was modified to support also Skoda Connect.
+Changes made to utilize the same API calls as the MySkoda mobile app.
 
 ## Information
 
