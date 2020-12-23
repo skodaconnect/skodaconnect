@@ -122,24 +122,30 @@ class Vehicle:
             res = await self.get(url)
             # VSR refresh, parking heater and lock/unlock
             if res.get('requestStatusResponse', {}).get('status', False):
-                 result = res.get('requestStatusResponse', {}).get('status', False)
-                 if result == 'request_in_progress':
+                result = res.get('requestStatusResponse', {}).get('status', False)
+                if result == 'request_in_progress':
                     self._request_result = 'In progress'
                     _LOGGER.debug(f'Request {requestId}, sectionId {sectionId} still in progress, sleeping for 5 seconds and check status again...')
                     time.sleep(5)
                     return await self.getRequestProgressStatus(requestId, sectionId, retryCount)
-                 elif result == 'request_fail':
+                elif result == 'request_fail':
                     self._request_result = 'Failed'
                     self._request_in_progress = False
                     error = res.get('requestStatusResponse', {}).get('error', None)
                     _LOGGER.warning(f'Request {requestId}, sectionId {sectionId} failed, error: {error}.')
                     return False
-                 elif result == 'request_successful':
+                elif result == 'unfetched':
+                    self._request_result = 'No response'
+                    self._request_in_progress = False
+                    error = res.get('requestStatusResponse', {}).get('error', None)
+                    _LOGGER.warning(f'Request {requestId}, sectionId {sectionId} failed, error: {error}.')
+                    return False
+                elif result == 'request_successful':
                     self._request_result = 'Success'
                     self._request_in_progress = False
                     _LOGGER.debug(f'Request was successful, result: {result}')
                     return True
-                 else:
+                else:
                     self._request_result = result
                     self._request_in_progress = False
                     _LOGGER.debug(f'Request result: {result}')
@@ -157,6 +163,12 @@ class Vehicle:
                     self._request_in_progress = False
                     error = res.get('action', {}).get('errorCode', None)
                     _LOGGER.warning(f'Request {requestId}, sectionId {sectionId} failed, error: {error}.')
+                elif result == 'unfetched':
+                    self._request_result = 'No response'
+                    self._request_in_progress = False
+                    error = res.get('requestStatusResponse', {}).get('error', None)
+                    _LOGGER.warning(f'Request {requestId}, sectionId {sectionId} failed, error: {error}.')
+                    return False
                 elif result == 'succeeded':
                     self._request_result = 'Success'
                     self._request_in_progress = False
