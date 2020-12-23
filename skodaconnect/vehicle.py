@@ -1228,280 +1228,191 @@ class Vehicle:
         else:
             _LOGGER.error('No request update support.')
 
-    async def lock_car(self, spin):
-        if spin:
-            if self.is_door_locked_supported:
-                secToken = await self.requestSecToken(spin, "lock")
-                url = "fs-car/bs/rlu/v1/skoda/CZ/vehicles/$vin/actions"
-                data = "<rluAction xmlns=\"http://audi.de/connect/rlu\"><action>lock</action></rluAction>"
-                if "Content-Type" in self._connection._session_headers:
-                    contType = self._connection._session_headers["Content-Type"]
+  # Lock/Unlock actions
+    async def door_lock(self, spin, action):
+        """Remote lock and unlock actions."""
+        if self.is_door_locked_supported:
+            if not action in ['lock', 'unlock']:
+                _LOGGER.warning('Invalid door lock action provided.')
+                return False
+            if spin:
+                # Prepare data, headers and fetch security token
+                data = '<rluAction xmlns="http://audi.de/connect/rlu"><action>' + action + '</action></rluAction>'
+                secToken = await self.requestSecToken(spin, action)
+                if 'Content-Type' in self._connection._session_headers:
+                    contType = self._connection._session_headers['Content-Type']
                 else:
                     contType = ''
-
                 try:
+                    self._connection._session_headers['X-mbbSecToken'] = secToken
                     self._connection._session_headers["Content-Type"] = "application/vnd.vwg.mbb.RemoteLockUnlock_v1_0_0+xml"
-                    self._connection._session_headers["x-mbbSecToken"] = secToken
-                    resp = await self.call(url, data=data)
+                    resp = await self.call('fs-car/bs/rlu/v1/skoda/CZ/vehicles/$vin/actions', data=data)
                     if not resp:
-                        _LOGGER.warning('Failed to lock car')
+                        _LOGGER.warning(f'Failed to {action} car.')
                     else:
-                        await self.getRequestProgressStatus(resp,"rlu")
+                        _LOGGER.debug(f'Successfully {action}ed car!')
+                        await self.getRequestProgressStatus(resp, 'rlu')
                         await self.update()
-                        return
                 except Exception as error:
-                    _LOGGER.error('Failed to lock car - %s' % error)
-
+                    _LOGGER.error(f'Failed to {action} car - {error}')
                 #Cleanup headers
-                if "x-mbbSecToken" in self._connection._session_headers: del self._connection._session_headers["x-mbbSecToken"]
+                if 'X-mbbSecToken' in self._connection._session_headers: del self._connection._session_headers['X-mbbSecToken']
                 if "Content-Type" in self._connection._session_headers: del self._connection._session_headers["Content-Type"]
                 if contType: self._connection._session_headers["Content-Type"]=contType
             else:
-                _LOGGER.error('No car lock support.')
+                _LOGGER.error('Invalid SPIN provided.')
+                return False
         else:
-            _LOGGER.error('Invalid SPIN provided')
+            _LOGGER.error('No car lock support.')
+            return False
 
-    async def unlock_car(self, spin):
+  # Parking heater petrol/diesel (non EV/PHEV or pre 2020 models?)
+    async def pheater_climatisation(self, spin=False, mode='off'):
+        """Set the mode for the parking heater."""
         if spin:
-            if self.is_door_locked_supported:
-                secToken = await self.requestSecToken(spin, "unlock")
-                url = "fs-car/bs/rlu/v1/skoda/CZ/vehicles/$vin/actions"
-                data = "<rluAction xmlns=\"http://audi.de/connect/rlu\"><action>unlock</action></rluAction>"
-                if "Content-Type" in self._connection._session_headers:
-                    contType = self._connection._session_headers["Content-Type"]
+            if self.is_combustion_climatisation_supported:
+                if not mode in ['heating', 'ventilation', 'off']:
+                    _LOGGER.error(f'Invalid action for parking heater: {mode}')
+                    return False
+                secToken = await self.requestSecToken(spin, 'heating')
+                self._connection._session_headers['x-mbbSecToken'] = secToken
+                if mode == 'off':
+                    data = {'performAction': {'quickstop': {'active': False }}}
                 else:
-                    contType = ''
-
-                try:
-                    self._connection._session_headers["Content-Type"] = "application/vnd.vwg.mbb.RemoteLockUnlock_v1_0_0+xml"
-                    self._connection._session_headers["x-MbbSecToken"] = secToken
-                    resp = await self.call(url, data=data)
-                    if not resp:
-                        _LOGGER.warning('Failed to unlock car')
-                    else:
-                        await self.getRequestProgressStatus(resp,"rlu")
-                        await self.update()
-                        return
-                except Exception as error:
-                    _LOGGER.error('Failed to unlock car - %s' % error)
-
-                #Cleanup headers
-                if "x-mbbSecToken" in self._connection._session_headers: del self._connection._session_headers["x-mbbSecToken"]
-                if "Content-Type" in self._connection._session_headers: del self._connection._session_headers["Content-Type"]
-                if contType: self._connection._session_headers["Content-Type"]=contType
+                    data = {'performAction': {'quickstart': {'climatisationDuration': self.pheater_duration, 'startMode': mode, 'active': True }}}
+                return await self.pheater_actions(data)
             else:
-                _LOGGER.error('No car lock support.')
+                _LOGGER.error('No parking heater support.')
         else:
             _LOGGER.error('Invalid SPIN provided')
 
-    async def start_electric_climatisation(self):
-        """Turn on/off climatisation."""
-        if self.is_electric_climatisation_supported:
-            data = {"action":{"type": "startClimatisation"}}
+    async def pheater_actions(self, data):
+        """Petrol/diesel parking heater actions."""
+        try:
+            if 'Content-Type' in self._connection._session_headers:
+                contType = self._connection._session_headers['Content-Type']
+            else:
+                contType = ''
+            self._connection._session_headers['Content-Type'] = 'application/vnd.vwg.mbb.RemoteStandheizung_v2_0_2+json'
+            resp = await self.call('fs-car/bs/rs/v1/skoda/CZ/vehicles/$vin/action', data=data)
+
+            # Clean up headers
+            if 'x-mbbSecToken' in self._connection._session_headers: del self._connection._session_headers['x-mbbSecToken']
+            if 'Content-Type' in self._connection._session_headers: del self._connection._session_headers['Content-Type']
+            if contType: self._connection._session_headers['Content-Type']=contType
+
+            if not resp:
+                _LOGGER.warning('Failed to execute aux heater action.')
+                return False
+            else:
+                await self.getRequestProgressStatus(resp, 'rs')
+                await self.update()
+                return True
+        except Exception as error:
+            _LOGGER.warning('Failed to execute aux heater action - %s' % error)
+            if 'x-mbbSecToken' in self._connection._session_headers: del self._connection._session_headers['x-mbbSecToken']
+            if 'Content-Type' in self._connection._session_headers: del self._connection._session_headers['Content-Type']
+            if contType: self._connection._session_headers['Content-Type']=contType
+            return False
+
+  # Electric charging
+    async def charger_actions(self, action):
+        """Charging actions."""
+        if not self.is_charging_supported:
+           _LOGGER.error('No charging supported.')
+           return False
+        if action in ['start', 'stop']:
             try:
-                resp = await self.call('fs-car/bs/climatisation/v1/Skoda/CZ/vehicles/$vin/climater/actions', json=data)
+                data = {'action': {'type': action}}
+                resp = await self.call('fs-car/bs/batterycharge/v1/Skoda/CZ/vehicles/$vin/charger/actions', json=data)
                 if not resp:
-                    _LOGGER.warning('Failed to start climatisation')
+                    _LOGGER.warning(f'Failed to {action} charging.')
+                    return False
                 else:
-                    await self.getRequestProgressStatus(resp,'climatisation')
+                    await self.getRequestProgressStatus(resp, 'batterycharge')
                     await self.update()
                     return resp
             except Exception as error:
-                _LOGGER.warning('Failed to start climatisation - %s' % error)
+                _LOGGER.warning(f'Failed to {action} charging - %s' % error)
+                return False
         else:
-            _LOGGER.error('No climatization support.')
+            _LOGGER.error(f'Invalid charger action: {action}. Must be either start or stop')
 
-    async def stop_electric_climatisation(self):
-        """Turn on/off climatisation."""
-        if self.is_electric_climatisation_supported:
-            data = {"action": {"type": "stopClimatisation"}}
-            resp = await self.call('fs-car/bs/climatisation/v1/Skoda/CZ/vehicles/$vin/climater/actions', json=data)
-            if not resp:
-                _LOGGER.warning('Failed to stop climatisation')
-            else:
-                await self.getRequestProgressStatus(resp,"climatisation")
-                await self.update()
-                return resp
-        else:
-            _LOGGER.error('No climatization support.')
-
-    async def start_window_heater(self):
-        """Turn on/off window heater."""
-        if self.is_window_heater_supported:
-            data = {"action": {"type": "startWindowHeating"}}
-            resp = await self.call('fs-car/bs/climatisation/v1/Skoda/CZ/vehicles/$vin/climater/actions', json=data)
-            if not resp:
-                _LOGGER.warning('Failed to start window heater')
-            else:
-                await self.getRequestProgressStatus(resp,"climatisation")
-                await self.update()
-                return resp
-        else:
-            _LOGGER.error('No window heating support.')
-
-    async def stop_window_heater(self):
-        """Turn on/off window heater."""
-        if self.is_window_heater_supported:
-            data = {"action": {"type": "stopWindowHeating"}}
-            resp = await self.call('fs-car/bs/climatisation/v1/Skoda/CZ/vehicles/$vin/climater/actions', json=data)
-            if not resp:
-                _LOGGER.warning('Failed to stop window heater')
-            else:
-                 await self.getRequestProgressStatus(resp,"climatisation")
-                 await self.update()
-                 return resp
-        else:
-            await self.update()
-            _LOGGER.error('No window heating support.')
-
-    async def start_combustion_engine_heating(self, spin, combustionengineheatingduration):
-        if spin:
-            if self.is_combustion_engine_heating_supported:
-                secToken = await self.requestSecToken(spin, "heating")
-                url = "fs-car/bs/rs/v1/skoda/CZ/vehicles/$vin/action"
-                data = "{ \"performAction\": { \"quickstart\": { \"climatisationDuration\": "+str(combustionengineheatingduration)+", \"startMode\": \"heating\", \"active\": true } } }"
-                if "Content-Type" in self._connection._session_headers:
-                    contType = self._connection._session_headers["Content-Type"]
-                else:
-                    contType = ''
-
-                try:
-                    self._connection._session_headers["Content-Type"] = "application/vnd.vwg.mbb.RemoteStandheizung_v2_0_2+json"
-                    self._connection._session_headers["x-mbbSecToken"] = secToken
-                    resp = await self.call(url, data=data)
-                    if not resp:
-                        _LOGGER.warning('Failed to start combustion engine heating')
-                    else:
-                        await self.getRequestProgressStatus(resp,"rs")
-                        await self.update()
-                        return
-                except Exception as error:
-                    _LOGGER.error('Failed to start combustion engine heating - %s' % error)
-
-                #Cleanup headers
-                if "x-mbbSecToken" in self._connection._session_headers: del self._connection._session_headers["x-mbbSecToken"]
-                if "Content-Type" in self._connection._session_headers: del self._connection._session_headers["Content-Type"]
-                if contType: self._connection._session_headers["Content-Type"]=contType
-            else:
-                _LOGGER.error('No combustion engine heating support.')
-        else:
-            _LOGGER.error('Invalid SPIN provided')
-
-    async def stop_combustion_engine_heating(self):
-        if self.is_combustion_engine_heating_supported or self.is_combustion_climatisation_supported:
-            url = "fs-car/bs/rs/v1/skoda/CZ/vehicles/$vin/action"
-            data = "{ \"performAction\": { \"quickstop\": { \"active\": false } } }"
-            if "Content-Type" in self._connection._session_headers:
-                contType = self._connection._session_headers["Content-Type"]
-            else:
-                contType = ''
-
-            try:
-                self._connection._session_headers["Content-Type"] = "application/vnd.vwg.mbb.RemoteStandheizung_v2_0_2+json"
-                resp = await self.call(url, data=data)
-                if not resp:
-                    _LOGGER.warning('Failed to stop combustion engine heating')
-                else:
-                    await self.getRequestProgressStatus(resp,"rs")
-                    await self.update()
-                    return
-            except Exception as error:
-                _LOGGER.error('Failed to stop combustion engine heating - %s' % error)
-
-            #Cleanup headers
-            if "Content-Type" in self._connection._session_headers: del self._connection._session_headers["Content-Type"]
-            if contType: self._connection._session_headers["Content-Type"]=contType
-        else:
-            _LOGGER.error('No combustion engine heating support.')
-
-    async def start_combustion_climatisation(self, spin, combustionengineclimatisationduration):
-        if spin:
-            if self.is_combustion_climatisation_supported:
-                secToken = await self.requestSecToken(spin, "heating")
-                url = "fs-car/bs/rs/v1/skoda/CZ/vehicles/$vin/action"
-                data = "{ \"performAction\": { \"quickstart\": { \"climatisationDuration\": "+str(combustionengineclimatisationduration)+", \"startMode\": \"ventilation\", \"active\": true } } }"
-                if "Content-Type" in self._connection._session_headers:
-                    contType = self._connection._session_headers["Content-Type"]
-                else:
-                    contType = ''
-
-                try:
-                    self._connection._session_headers["Content-Type"] = "application/vnd.vwg.mbb.RemoteStandheizung_v2_0_2+json"
-                    self._connection._session_headers["x-mbbSecToken"] = secToken
-                    resp = await self.call(url, data=data)
-                    if not resp:
-                        _LOGGER.warning('Failed to start combustion engine climatisation')
-                    else:
-                        await self.getRequestProgressStatus(resp,"rs")
-                        await self.update()
-                except Exception as error:
-                    _LOGGER.error('Failed to start combustion engine climatisation - %s' % error)
-
-                #Cleanup headers
-                if "x-mbbSecToken" in self._connection._session_headers: del self._connection._session_headers["x-mbbSecToken"]
-                if "Content-Type" in self._connection._session_headers: del self._connection._session_headers["Content-Type"]
-                if contType: self._connection._session_headers["Content-Type"]=contType
-            else:
-                _LOGGER.error('No combustion engine climatisation support.')
-        else:
-            _LOGGER.error('Invalid SPIN provided')
-
-    async def stop_combustion_climatisation(self):
-        return await self.stop_combustion_engine_heating()
-
-    async def start_charging(self):
-        """Turn on/off charging."""
-        if self.is_charging_supported:
-            data = {"action": {"type": "start"}}
-            resp = await self.call('fs-car/bs/batterycharge/v1/Skoda/CZ/vehicles/$vin/charger/actions', json=data)
-            if not resp:
-                _LOGGER.warning('Failed to start charging')
-            else:
-                await self.getRequestProgressStatus(resp, 'batterycharge')
-                await self.update()
-                return resp
-        else:
-            _LOGGER.error('No charging support.')
-
-    async def stop_charging(self):
-        """Turn on/off window heater."""
-        if self.is_charging_supported:
-            data = {"action": {"type": "stop"}}
-            resp = await self.call('fs-car/bs/batterycharge/v1/Skoda/CZ/vehicles/$vin/charger/actions', json=data)
-            if not resp:
-                _LOGGER.warning('Failed to stop charging')
-            else:
-                await self.getRequestProgressStatus(resp, 'batterycharge')
-                await self.update()
-                return resp
-        else:
-            _LOGGER.error('No charging support.')
-
-    async def set_climatisation_target_temperature(self, target_temperature):
-        """Turn on/off window heater."""
-        if self.is_electric_climatisation_supported:
-        #or self.is_combustion_climatisation_supported:
-            resp = await self.call('-/emanager/set-settings', chargerMaxCurrent=None, climatisationWithoutHVPower=None, minChargeLimit=None, targetTemperature=target_temperature)
-            if not resp:
-                _LOGGER.warning('Failed to set target temperature for climatisation')
-            else:
-                await self.update()
-                return resp
+  # Climatisation for EV/PHEVs
+    async def climatisation_target(self, temperature=22):
+        """Set climatisation target temp."""
+        if self.is_electric_climatisation_supported or self.is_auxiliary_climatisation_supported:
+            if not 16 <= temperature <= 30:
+                _LOGGER.error(f'Set climatisation target temp to {temperature} is not supported.')
+                return False
+            temp = int((temperature+273)*10)
+            data = {"action": {"settings": {"targetTemperature": temp},"type": "setSettings"}}
+            return await self.climater_actions(data)
         else:
             _LOGGER.error('No climatisation support.')
 
-    async def get_status(self, timeout=10):
-        """Check status from call"""
-        retry_counter = 0
-        while retry_counter < timeout:
-            resp = await self.call('-/emanager/get-notifications', data='dummy')
-            data = resp.get('actionNotificationList', {})
-            if data:
-                return data
-            time.sleep(1)
-            retry_counter += 1
-        return False
+    async def climatisation_wo_HVpower(self, mode=False):
+        """Turn on/off electric climatisation from battery."""
+        if self.is_electric_climatisation_supported:
+            if not mode in [True, False]:
+                _LOGGER.error(f'Set climatisation without external power to {mode} is not supported.')
+                return False
+            data = {"action": {"settings": {"climatisationWithoutHVpower": mode},"type": "setSettings"}}
+            return await self.climater_actions(data)
+        else:
+            _LOGGER.error('No climatisation support.')
 
+    async def window_heating(self, action='stop'):
+        """Turn on/off window heater."""
+        if self.is_window_heater_supported:
+            if not action in ['start', 'stop']:
+                _LOGGER.error(f'Climatisation action: {action} not supported.')
+                return False
+            data = {"action": {"type": action+"WindowHeating"}}
+            return await self.climater_actions(data)
+        else:
+            _LOGGER.error('No climatisation support.')
+
+    async def climatisation(self, mode, spin=False):
+        """Turn on/off climatisation with electric/auxiliary heater."""
+        if self.is_electric_climatisation_supported:
+            if mode in ['electric', 'auxiliary']:
+                targetTemp = int((self.climatisation_target_temperature+273)*10)
+                withoutHVPower = self.climatisation_without_external_power
+                data = {'action':{'settings':{'climatisationWithoutHVpower': withoutHVPower, 'targetTemperature': targetTemp, 'heaterSource': mode},'type': 'startClimatisation'}}
+            elif mode == 'off':
+                data = {'action': {'type': 'stopClimatisation'}}
+            else:
+                _LOGGER.error(f'Invalid climatisation type: {mode}')
+                return False
+            # Get S-PIN security token if we are starting aux heater
+            if mode == 'auxiliary' and spin:
+                secToken = await self.requestSecToken(spin, 'rclima')
+                self._connection._session_headers['X-securityToken'] = secToken
+            elif mode == 'auxiliary':
+                _LOGGER.error('S-PIN needs to be set to turn on auxiliary heater.')
+                return False
+            return await self.climater_actions(data)
+        else:
+            _LOGGER.error('No climatisation support.')
+
+    async def climater_actions(self, data):
+        """Execute climatisation actions."""
+        try:
+            resp = await self.call('fs-car/bs/climatisation/v1/Skoda/CZ/vehicles/$vin/climater/actions', json=data)
+            if "X-securityToken" in self._connection._session_headers: del self._connection._session_headers["X-securityToken"]
+            if not resp:
+                _LOGGER.warning('Failed to execute climatisation action')
+                return False
+            else:
+                await self.getRequestProgressStatus(resp,"climatisation")
+                await self.update()
+                return True
+        except Exception as error:
+            _LOGGER.warning('Failed to execute climatisation action - %s' % error)
+            if "X-securityToken" in self._connection._session_headers: del self._connection._session_headers["X-securityToken"]
+            return False
+ #### Helper functions ####
     def __str__(self):
         return self.vin
 
