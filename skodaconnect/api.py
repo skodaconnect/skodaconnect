@@ -25,7 +25,16 @@ from aiohttp import ClientSession, ClientTimeout
 from aiohttp.hdrs import METH_GET, METH_POST
 
 from .const import (
-    HEADERS_SESSION
+    HEADERS_SESSION,
+    HEADERS_AUTH,
+    BASE_SESSION,
+    BASE_AUTH,
+    CLIENT_ID,
+    XCLIENT_ID,
+    XAPPVERSION,
+    XAPPNAME,
+    USER_AGENT,
+    APP_URI
 )
 
 version_info >= (3, 0) or exit('Python 3 required')
@@ -34,32 +43,8 @@ _LOGGER = logging.getLogger(__name__)
 
 TIMEOUT = timedelta(seconds=30)
 
-HEADERS_SESSION = {
-    'Connection': 'keep-alive',
-    'Content-Type': 'application/json',
-    "X-Client-Id": '28cd30c6-dee7-4529-a0e6-b1e07ff90b79',
-    "X-App-Version": '3.2.6',
-    "X-App-Name": 'cz.skodaauto.connect',
-    "Accept-charset": "UTF-8",
-    "Accept": "application/json",
-    'User-Agent': 'okhttp/3.7.0'
-}
-
-HEADERS_AUTH = {
-    'Connection': 'keep-alive',
-    'Accept': 'application/json,text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,\
-        image/apng,*/*;q=0.8,application/signed-exchange;v=b3',
-    'Content-Type': 'application/x-www-form-urlencoded',
-    'User-Agent': 'OneConnect/200605002 CFNetwork/1128 Darwin/19.6.0'
-}
-
-BASE_SESSION = 'https://msg.volkswagen.de'
-BASE_AUTH = 'https://identity.vwgroup.io'
-CLIENT_ID = '7f045eee-7003-4379-9968-9355ed2adb06%40apps_vw-dilab_com'
-
 class Connection:
     """ Connection to Skoda connect """
-
   # Init connection class
     def __init__(self, session, username, password, guest_lang='en'):
         """ Initialize """
@@ -105,7 +90,7 @@ class Connection:
             ts = "%d" % (time.time())
             sha256 = hashlib.sha256()
             sha256.update(ts.encode())
-            return (b64encode(sha256.digest()).decode("utf-8")[:-1])
+            return (b64encode(sha256.digest()).decode('utf-8')[:-1])
 
         try:
             # Remove cookies from session as we are doing a new login
@@ -113,22 +98,22 @@ class Connection:
 
             # Request landing page and get auth URL:
             req = await self._session.get(
-                url="https://identity.vwgroup.io/.well-known/openid-configuration"
+                url='https://identity.vwgroup.io/.well-known/openid-configuration'
             )
             if req.status != 200:
                 return ""
             response_data =  await req.json()
-            authorizationEndpoint = response_data["authorization_endpoint"]
-            authissuer = response_data["issuer"]
+            authorizationEndpoint = response_data['authorization_endpoint']
+            authissuer = response_data['issuer']
 
             # Get authorization
-            # https://identity.vwgroup.io/oidc/v1/authorize?nonce=yVOPHxDmksgkMo1HDUp6IIeGs9HvWSSWbkhPcxKTGNU&response_type=code id_token token&scope=openid mbb&ui_locales=de&redirect_uri=skodaconnect://oidc.login/&client_id=7f045eee-7003-4379-9968-9355ed2adb06%40apps_vw-dilab_com             
+            # https://identity.vwgroup.io/oidc/v1/authorize?nonce=yVOPHxDmksgkMo1HDUp6IIeGs9HvWSSWbkhPcxKTGNU&response_type=code id_token token&scope=openid mbb&ui_locales=de&redirect_uri=skodaconnect://oidc.login/&client_id=7f045eee-7003-4379-9968-9355ed2adb06%40apps_vw-dilab_com
              params = {
-                "nonce": getNonce(),
-                "response_type":  "code id_token token",
-                "scope": "openid profile address cars email birthdate badge mbb phone driversLicense dealers",
-                "redirect_uri": "skodaconnect://oidc.login/",
-                "client_id": CLIENT_ID
+                'nonce': getNonce(),
+                'response_type':  'code id_token token',
+                'scope': 'openid profile address cars email birthdate badge mbb phone driversLicense dealers',
+                'redirect_uri': APP_URI,
+                'client_id': CLIENT_ID
             }
             req = await self._session.get(
                 url=authorizationEndpoint,
@@ -139,8 +124,8 @@ class Connection:
                 return ""
             response_data = await req.text()
             responseSoup = BeautifulSoup(response_data, 'html.parser')
-            mailform = dict([(t["name"],t["value"]) for t in responseSoup.find('form', id='emailPasswordForm').find_all("input", type="hidden")])
-            mailform["email"] = self._session_auth_username
+            mailform = dict([(t['name'],t['value']) for t in responseSoup.find('form', id='emailPasswordForm').find_all('input', type='hidden')])
+            mailform['email'] = self._session_auth_username
             pe_url = authissuer+responseSoup.find('form', id='emailPasswordForm').get('action')
 
             # POST email
@@ -156,8 +141,8 @@ class Connection:
                 return ""
             response_data = await req.text()
             responseSoup = BeautifulSoup(response_data, 'html.parser')
-            pwform = dict([(t["name"],t["value"]) for t in responseSoup.find('form', id='credentialsForm').find_all("input", type="hidden")])
-            pwform["password"] = self._session_auth_password
+            pwform = dict([(t['name'],t['value']) for t in responseSoup.find('form', id='credentialsForm').find_all('input', type='hidden')])
+            pwform['password'] = self._session_auth_password
             pw_url = authissuer+responseSoup.find('form', id='credentialsForm').get('action')
 
             # POST password
@@ -176,7 +161,7 @@ class Connection:
             try:
                 maxDepth = 10
                 ref = req.headers['Location']
-                while not ref.startswith("skodaconnect://oidc.login/"):
+                while not ref.startswith(APP_URI):
                     response = await self._session.get(
                         url=ref,
                         headers=self._session_auth_headers,
@@ -186,11 +171,11 @@ class Connection:
                     # Set a max limit on requests to prevent forever loop
                     maxDepth -= 1
                     if maxDepth == 0:
-                        _LOGGER.warning("Should have gotten a token by now.")
+                        _LOGGER.warning('Should have gotten a token by now.')
                         return False
             except:
                 # If we get excepted it should be because we can't redirect to the skodaconnect:// URL
-                _LOGGER.debug("Got code: %s" % ref)
+                _LOGGER.debug('Got code: %s' % ref)
                 pass
 
             # Extract code and tokens
@@ -230,17 +215,16 @@ class Connection:
             req = await self._session.post(
                     url='https://mbboauth-1d.prd.ece.vwg-connect.com/mbbcoauth/mobile/oauth2/v1/token',
                     headers= {
-                        'User-Agent': 'okhttp/3.7.0',
-                        'X-App-Version': '3.2.6',
-                        'X-App-Name': 'cz.skodaauto.connect',
-                        'X-Client-Id': '28cd30c6-dee7-4529-a0e6-b1e07ff90b79',
-                        'Host': 'mbboauth-1d.prd.ece.vwg-connect.com',
+                        'User-Agent': USER_AGENT,
+                        'X-App-Version': XAPPVERSION,
+                        'X-App-Name': XAPPNAME,
+                        'X-Client-Id': XCLIENT_ID,
                     },
                     data = tokenBody2,
                     allow_redirects=False
                 )
             if req.status > 400:
-                _LOGGER.debug("Tokens wrong")
+                _LOGGER.debug('Tokens wrong')
                 return ""
             else:
                 # Save tokens as "vwg", use theese for get/posts to VW Group API
@@ -248,7 +232,7 @@ class Connection:
                 if not await self.verify_tokens(self._session_tokens['vwg']['access_token'], 'vwg'):
                     _LOGGER.warning('VWG token could not be verified!')
                 else:
-                    _LOGGER.debug("VWG tokens OK.")
+                    _LOGGER.debug('VWG tokens OK.')
 
             # Update headers for requests, defaults to using VWG token
             self._session_headers['Authorization'] = 'Bearer ' + self._session_tokens['vwg']['access_token']
@@ -263,7 +247,7 @@ class Connection:
   # HTTP methods to API
     async def _request(self, method, url, **kwargs):
         """Perform a query to the Skoda Connect service"""
-        _LOGGER.debug("Request for %s", url)
+        _LOGGER.debug('Request for %s', url)
         async with self._session.request(
             method,
             url,
@@ -275,7 +259,7 @@ class Connection:
             response.raise_for_status()
 
             # Update cookie jar
-            if self._jarCookie != "":
+            if self._jarCookie != '':
                 self._jarCookie.update(response.cookies)
             else:
                 self._jarCookie = response.cookies
@@ -288,8 +272,8 @@ class Connection:
                 else:
                     res = {}
                     _LOGGER.debug(f'Not success status code [{response.status}] response: {response}')
-                if "X-RateLimit-Remaining" in response.headers:
-                    res['rate_limit_remaining'] = response.headers.get("X-RateLimit-Remaining", "")
+                if 'X-RateLimit-Remaining' in response.headers:
+                    res['rate_limit_remaining'] = response.headers.get('X-RateLimit-Remaining', '')
             except:
                 res = {}
                 _LOGGER.debug(f'Something went wrong [{response.status}] response: {response}')
@@ -311,11 +295,11 @@ class Connection:
 
   # Construct URL from request, home region and variables
     def _make_url(self, ref, vin=''):
-        replacedUrl = re.sub("\$vin", vin, ref)
-        if ("://" in replacedUrl):
+        replacedUrl = re.sub('\$vin', vin, ref)
+        if ('://' in replacedUrl):
             #already server contained in URL
             return replacedUrl
-        elif "rolesrights" in replacedUrl:
+        elif 'rolesrights' in replacedUrl:
             return urljoin(self._session_spin_ref_url, replacedUrl)
         else:
             return urljoin(self._session_auth_ref_url, replacedUrl)
@@ -338,8 +322,8 @@ class Connection:
                 # Get vehicles
                 _LOGGER.debug('Fetching vehicles')
                 await self.set_token('vwg')
-                if "Content-Type" in self._session_headers:
-                    del self._session_headers["Content-Type"]
+                if 'Content-Type' in self._session_headers:
+                    del self._session_headers['Content-Type']
                 loaded_vehicles = await self.get(
                     url='https://msg.volkswagen.de/fs-car/usermanagement/users/v1/skoda/CZ/vehicles'
                 )
@@ -394,12 +378,12 @@ class Connection:
 
  #### Data collect functions ####
     async def getHomeRegion(self, vin):
-        _LOGGER.debug("Getting homeregion for %s" % vin)
+        _LOGGER.debug('Getting homeregion for %s' % vin)
         try:
             await self.set_token('vwg')
             response = await self.get('https://mal-1a.prd.ece.vwg-connect.com/api/cs/vds/v1/vehicles/$vin/homeRegion', vin)
-            self._session_auth_ref_url = response['homeRegion']['baseUri']['content'].split("/api")[0].replace("mal-", "fal-") if response['homeRegion']['baseUri']['content'] != "https://mal-1a.prd.ece.vwg-connect.com/api" else "https://msg.volkswagen.de"
-            self._session_spin_ref_url = response['homeRegion']['baseUri']['content'].split("/api")[0] 
+            self._session_auth_ref_url = response['homeRegion']['baseUri']['content'].split('/api')[0].replace('mal-', 'fal-') if response['homeRegion']['baseUri']['content'] != 'https://mal-1a.prd.ece.vwg-connect.com/api' else 'https://msg.volkswagen.de'
+            self._session_spin_ref_url = response['homeRegion']['baseUri']['content'].split('/api')[0]
         except aiohttp.client_exceptions.ClientResponseError as err:
             if (err.status == 403 or err.status == 502):
                 _LOGGER.debug(f'Could not fetch homeregion, error 403/502 (not supported on car?), error: {err}')
@@ -411,8 +395,8 @@ class Connection:
         except:
             _LOGGER.debug(f'Retrying homeregion for %s' % vin)
             response = await self.get('https://mal-1a.prd.ece.vwg-connect.com/api/cs/vds/v1/vehicles/$vin/homeRegion', vin)
-            self._session_auth_ref_url = response['homeRegion']['baseUri']['content'].split("/api")[0].replace("mal-", "fal-") if response['homeRegion']['baseUri']['content'] != "https://mal-1a.prd.ece.vwg-connect.com/api" else "https://msg.volkswagen.de"
-            self._session_spin_ref_url = response['homeRegion']['baseUri']['content'].split("/api")[0] 
+            self._session_auth_ref_url = response['homeRegion']['baseUri']['content'].split("/api")[0].replace("mal-", "fal-") if response['homeRegion']['baseUri']['content'] != 'https://mal-1a.prd.ece.vwg-connect.com/api' else 'https://msg.volkswagen.de'
+            self._session_spin_ref_url = response['homeRegion']['baseUri']['content'].split("/api")[0]
 
     async def getRealCarData(self, vin):
         """Get car information from customer profile, VIN, nickname, etc."""
@@ -478,7 +462,7 @@ class Connection:
         try:
             await self.set_token('vwg')
             response = await self.get(
-                'fs-car/bs/vsr/v1/skoda/CZ/vehicles/$vin/status', 
+                'fs-car/bs/vsr/v1/skoda/CZ/vehicles/$vin/status',
                 vin=vin
             )
             if response.get('StoredVehicleDataResponse', {}).get('vehicleData', {}).get('data', {})[0].get('field', {})[0] :
@@ -486,7 +470,7 @@ class Connection:
                     {'StoredVehicleDataResponse': response.get('StoredVehicleDataResponse', {})}
                 )
                 self._state[vin].update(
-                    {'StoredVehicleDataResponseParsed' :  dict([(e["id"],e if "value" in e else "") for f in [s["field"] for s in response["StoredVehicleDataResponse"]["vehicleData"]["data"]] for e in f]) }
+                    {'StoredVehicleDataResponseParsed' :  dict([(e['id'],e if 'value' in e else '') for f in [s['field'] for s in response['StoredVehicleDataResponse']['vehicleData']['data']] for e in f]) }
                 )
                 return True
             else:
@@ -537,7 +521,7 @@ class Connection:
         try:
             await self.set_token('vwg')
             response = await self.get(
-                'fs-car/bs/cf/v1/skoda/CZ/vehicles/$vin/position', 
+                'fs-car/bs/cf/v1/skoda/CZ/vehicles/$vin/position',
                 vin=vin
             )
             if response.get('findCarResponse', {}) :
@@ -582,7 +566,7 @@ class Connection:
         try:
             await self.set_token('vwg')
             response = await self.get(
-                'fs-car/bs/departuretimer/v1/skoda/CZ/vehicles/$vin/timer', 
+                'fs-car/bs/departuretimer/v1/skoda/CZ/vehicles/$vin/timer',
                 vin=vin
             )
             if response.get('timer', {}):
@@ -641,7 +625,7 @@ class Connection:
         try:
             await self.set_token('vwg')
             response = await self.get(
-                'fs-car/bs/batterycharge/v1/skoda/CZ/vehicles/$vin/charger', 
+                'fs-car/bs/batterycharge/v1/skoda/CZ/vehicles/$vin/charger',
                 vin=vin
             )
             if response.get('charger', {}):
@@ -672,7 +656,7 @@ class Connection:
         try:
             await self.set_token('vwg')
             response = await self.get(
-                'fs-car/bs/rs/v1/skoda/CZ/vehicles/$vin/status', 
+                'fs-car/bs/rs/v1/skoda/CZ/vehicles/$vin/status',
                 vin=vin
             )
             if response.get('statusResponse', {}) :
@@ -733,10 +717,10 @@ class Connection:
             req = await self._session.get(url = 'https://identity.vwgroup.io/oidc/v1/keys')
             keys = await req.json()
             audience = [
-                CLIENT_ID, 
-                "VWGMBB01DELIV1", 
-                "https://api.vas.eu.dp15.vwg-connect.com", 
-                "https://api.vas.eu.wcardp.io"
+                CLIENT_ID,
+                'VWGMBB01DELIV1',
+                'https://api.vas.eu.dp15.vwg-connect.com',
+                'https://api.vas.eu.wcardp.io'
             ]
         elif type == 'vwg':
             req = await self._session.get(url = 'https://mbboauth-1d.prd.ece.vwg-connect.com/mbbcoauth/public/jwk/v1')
@@ -767,14 +751,13 @@ class Connection:
         """Function to refresh tokens."""
         try:
             tHeaders = {
-                "Accept-Encoding": "gzip, deflate, br",
-                "Accept-Language": "sv-SE",
-                "Connection": "keep-alive",
-                "Content-Type": "application/x-www-form-urlencoded",
-                "User-Agent": "okhttp/3.7.0",
-                "X-App-Version": "3.2.6",
-                "X-App-Name": "cz.skodaauto.connect",
-                "X-Client-Id": "28cd30c6-dee7-4529-a0e6-b1e07ff90b79"
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Connection': 'keep-alive',
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'User-Agent': USER_AGENT,
+                'X-App-Version': XAPPVERSION,
+                'X-App-Name': XAPPNAME,
+                'X-Client-Id': XCLIENT_ID
             }
 
             body = {
@@ -783,7 +766,7 @@ class Connection:
                 'refresh_token': self._session_tokens['identity']['refresh_token']
             }
             response = await self._session.post(
-                url = "https://tokenrefreshservice.apps.emea.vwapps.io/refreshTokens",
+                url = 'https://tokenrefreshservice.apps.emea.vwapps.io/refreshTokens',
                 headers = tHeaders,
                 data = body
             )
@@ -805,7 +788,7 @@ class Connection:
             }
 
             response = await self._session.post(
-                url = "https://mbboauth-1d.prd.ece.vwg-connect.com/mbbcoauth/mobile/oauth2/v1/token",
+                url = 'https://mbboauth-1d.prd.ece.vwg-connect.com/mbbcoauth/mobile/oauth2/v1/token',
                 headers = tHeaders,
                 data = body,
                 allow_redirects=True
@@ -850,12 +833,12 @@ class Connection:
 
 async def main():
     """Main method."""
-    if "-v" in argv:
+    if '-v' in argv:
         logging.basicConfig(level=logging.INFO)
-    elif "-vv" in argv:
+    elif '-vv' in argv:
         logging.basicConfig(level=logging.DEBUG)
     else:
-        logging.basicConfig(level=logging.ERROR)   
+        logging.basicConfig(level=logging.ERROR)
 
     async with ClientSession(headers={'Connection': 'keep-alive'}) as session:
         connection = Connection(session, **read_config())
@@ -866,7 +849,7 @@ async def main():
                     print('Supported sensors:')
                     for instrument in vehicle.dashboard().instruments:
                         print(f' - {instrument.name} (domain:{instrument.component}) - {instrument.str_state}')
-                    
-if __name__ == "__main__":
+
+if __name__ == '__main__':
     loop = asyncio.get_event_loop()
     loop.run_until_complete(main())
