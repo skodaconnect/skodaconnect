@@ -328,14 +328,14 @@ class Connection:
                 )
                 _LOGGER.debug('URL loaded')
 
-            # Update list of vehicles
-            if loaded_vehicles.get('userVehicles', {}).get('vehicle', []):
-                _LOGGER.debug('Vehicle JSON string exists')
-                for vehicle in loaded_vehicles.get('userVehicles').get('vehicle'):
-                    vehicle_url = vehicle
-                    self._state.update({vehicle_url: dict()})
-                    self._vehicles.append(Vehicle(self, vehicle_url))
-            self._session_first_update = True
+                # Update list of vehicles
+                if loaded_vehicles.get('userVehicles', {}).get('vehicle', []):
+                    _LOGGER.debug('Vehicle JSON string exists')
+                    for vehicle in loaded_vehicles.get('userVehicles').get('vehicle'):
+                        vehicle_url = vehicle
+                        self._state.update({vehicle_url: dict()})
+                        self._vehicles.append(Vehicle(self, vehicle_url))
+                self._session_first_update = True
 
             _LOGGER.debug('Going to call vehicle updates')
             # Get VIN numbers and update data for each
