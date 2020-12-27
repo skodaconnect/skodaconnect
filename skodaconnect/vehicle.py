@@ -568,15 +568,22 @@ class Vehicle:
     @property
     def position(self):
         """Return  position."""
-        posObj = self.attrs.get('findCarResponse')
-        lat = int(posObj.get('Position').get('carCoordinate').get('latitude'))/1000000
-        lng = int(posObj.get('Position').get('carCoordinate').get('longitude'))/1000000
-        parkingTime = posObj.get('parkingTimeUTC')
-        output = {
-            "lat" : lat,
-            "lng" : lng,
-            "timestamp" : parkingTime
-        }
+        if self.vehicleMoving:
+            output = {
+                "lat": None,
+                "lng": None,
+                "timestamp": None
+            }
+        else:
+            posObj = self.attrs.get('findCarResponse')
+            lat = int(posObj.get('Position').get('carCoordinate').get('latitude'))/1000000
+            lng = int(posObj.get('Position').get('carCoordinate').get('longitude'))/1000000
+            parkingTime = posObj.get('parkingTimeUTC')
+            output = {
+                "lat" : lat,
+                "lng" : lng,
+                "timestamp" : parkingTime
+            }
         return output
 
     @property
@@ -675,7 +682,7 @@ class Vehicle:
         """Return the target temperature from climater."""
         value = self.attrs.get('climater').get('settings').get('targetTemperature').get('content')
         if value:
-            reply = float((value-2730)/10)
+            reply = float((value/10)-273.15)
             self._climatisation_target_temperature=reply
             return reply
 
@@ -709,7 +716,7 @@ class Vehicle:
         """Return outside temperature."""
         response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301020001'].get('value',0))
         if response:
-            return float((response-2730)/10)
+            return float((response/10)-273.15)
         else:
             return False
 
@@ -1349,7 +1356,7 @@ class Vehicle:
             if not 16 <= temperature <= 30:
                 _LOGGER.error(f'Set climatisation target temp to {temperature} is not supported.')
                 return False
-            temp = int((temperature+273)*10)
+            temp = int((temperature+273.15)*10)
             data = {"action": {"settings": {"targetTemperature": temp},"type": "setSettings"}}
             return await self.climater_actions(data)
         else:
@@ -1381,7 +1388,7 @@ class Vehicle:
         """Turn on/off climatisation with electric/auxiliary heater."""
         if self.is_electric_climatisation_supported:
             if mode in ['electric', 'auxiliary']:
-                targetTemp = int((self.climatisation_target_temperature+273)*10)
+                targetTemp = int((self.climatisation_target_temperature+273.15)*10)
                 withoutHVPower = self.climatisation_without_external_power
                 data = {'action':{'settings':{'climatisationWithoutHVpower': withoutHVPower, 'targetTemperature': targetTemp, 'heaterSource': mode},'type': 'startClimatisation'}}
             elif mode == 'off':
