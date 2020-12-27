@@ -543,7 +543,7 @@ def create_instruments():
         AuxiliaryClimatisation(),
         PHeaterVentilation(),
         PHeaterHeating(),
-        ElectricClimatisationClimate(),
+        #ElectricClimatisationClimate(),
         #CombustionClimatisationClimate(),
         Charging(),
         Sensor(
