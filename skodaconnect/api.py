@@ -361,6 +361,9 @@ class Connection:
         except Exception as err:
             _LOGGER.debug(f'Cannot get homeregion, error: {err}')
 
+        thisCar = self.vehicle(url)
+        await thisCar.discover()
+
         # Request all car info and wait for all to finish
         await asyncio.gather(
             self.getRealCarData(url),
@@ -389,13 +392,35 @@ class Connection:
             elif err.status == 401:
                 _LOGGER.warning(f'Received "unauthorized" error while fetching data: {err}')
                 self._session_logged_in = False
-            elif err.satus != 200:
+            elif err.status != 200:
                 _LOGGER.warning(f'Unhandled HTTP response: {err}')
         except:
             _LOGGER.debug(f'Retrying homeregion for %s' % vin)
             response = await self.get('https://mal-1a.prd.ece.vwg-connect.com/api/cs/vds/v1/vehicles/$vin/homeRegion', vin)
             self._session_auth_ref_url = response['homeRegion']['baseUri']['content'].split("/api")[0].replace("mal-", "fal-") if response['homeRegion']['baseUri']['content'] != 'https://mal-1a.prd.ece.vwg-connect.com/api' else 'https://msg.volkswagen.de'
             self._session_spin_ref_url = response['homeRegion']['baseUri']['content'].split("/api")[0]
+
+    async def getOperationList(self, vin):
+        """Collect operationlist for VIN, supported/licensed functions."""
+        _LOGGER.debug('Getting operationList for %s' % vin)
+        try:
+            await self.set_token('vwg')
+            response = await self.get('/api/rolesrights/operationlist/v3/vehicles/$vin', vin)
+            if response.get('operationList', False):
+                return response.get('operationList', {})
+            else:
+                return False
+        except aiohttp.client_exceptions.ClientResponseError as err:
+            if (err.status == 403 or err.status == 502):
+                _LOGGER.debug(f'Could not fetch homeregion, error 403/502 (not supported on car?), error: {err}')
+            elif err.status == 401:
+                _LOGGER.warning(f'Received "unauthorized" error while fetching data: {err}')
+                self._session_logged_in = False
+            elif err.status != 200:
+                _LOGGER.warning(f'Unhandled HTTP response: {err}')
+        except:
+            _LOGGER.warning(f'Could not fetch realCarData, error: {err}')
+            return False
 
     async def getRealCarData(self, vin):
         """Get car information from customer profile, VIN, nickname, etc."""
@@ -422,7 +447,7 @@ class Connection:
             elif err.status == 401:
                 _LOGGER.warning(f'Received "unauthorized" error while fetching data: {err}')
                 self._session_logged_in = False
-            elif err.satus != 200:
+            elif err.status != 200:
                 _LOGGER.warning(f'Unhandled HTTP response: {err}')
         except Exception as err:
             _LOGGER.warning(f'Could not fetch realCarData, error: {err}')
@@ -450,7 +475,7 @@ class Connection:
             elif err.status == 401:
                 _LOGGER.warning(f'Received "unauthorized" error while fetching data: {err}')
                 self._session_logged_in = False
-            elif err.satus != 200:
+            elif err.status != 200:
                 _LOGGER.warning(f'Unhandled HTTP response: {err}')
         except Exception as err:
             _LOGGER.warning(f'Could not fetch carportData, error: {err}')
@@ -481,7 +506,7 @@ class Connection:
             elif err.status == 401:
                 _LOGGER.warning(f'Received "unauthorized" error while fetching data: {err}')
                 self._session_logged_in = False
-            elif err.satus != 200:
+            elif err.status != 200:
                 _LOGGER.warning(f'Unhandled HTTP response: {err}')
         except Exception as err:
             _LOGGER.warning(f'Could not fetch StoredVehicleDataResponse, error: {err}')
@@ -509,7 +534,7 @@ class Connection:
             elif err.status == 401:
                 _LOGGER.warning(f'Received "unauthorized" error while fetching data: {err}')
                 self._session_logged_in = False
-            elif err.satus != 200:
+            elif err.status != 200:
                 _LOGGER.warning(f'Unhandled HTTP response: {err}')
         except Exception as err:
             _LOGGER.warning(f'Could not fetch trip statistics, error: {err}')
@@ -551,7 +576,7 @@ class Connection:
                 self._state[vin].update({ 'isMoving': True })
                 self._state[vin].update({ 'rate_limit_remaining': 15 })
                 return True
-            elif err.satus != 200:
+            elif err.status != 200:
                 _LOGGER.warning(f'Unhandled HTTP response: {err}')
             else:
                 _LOGGER.warning(f'Could not fetch position (ClientResponseError), error: {err}')
@@ -582,7 +607,7 @@ class Connection:
             elif err.status == 401:
                 _LOGGER.warning(f'Received "unauthorized" error while fetching data: {err}')
                 self._session_logged_in = False
-            elif err.satus != 200:
+            elif err.status != 200:
                 _LOGGER.warning(f'Unhandled HTTP response: {err}')
         except Exception as err:
             _LOGGER.warning(f'Could not fetch timers, error: {err}')
@@ -610,7 +635,7 @@ class Connection:
             elif err.status == 401:
                 _LOGGER.warning(f'Received "unauthorized" error while fetching data: {err}')
                 self._session_logged_in = False
-            elif err.satus != 200:
+            elif err.status != 200:
                 _LOGGER.warning(f'Unhandled HTTP response: {err}')
             else:
                 _LOGGER.warning(f'Could not fetch climatisation (ClientResponseError), error: {err}')
@@ -641,7 +666,7 @@ class Connection:
             elif err.status == 401:
                 _LOGGER.warning(f'Received "unauthorized" error while fetching data: {err}')
                 self._session_logged_in = False
-            elif err.satus != 200:
+            elif err.status != 200:
                 _LOGGER.warning(f'Unhandled HTTP response: {err}')
             else:
                 _LOGGER.warning(f'Could not fetch charger (ClientResponseError), error: {err}')
@@ -672,7 +697,7 @@ class Connection:
             elif err.status == 401:
                 _LOGGER.warning(f'Received "unauthorized" error while fetching data: {err}')
                 self._session_logged_in = False
-            elif err.satus != 200:
+            elif err.status != 200:
                 _LOGGER.warning(f'Unhandled HTTP response: {err}')
             else:
                 _LOGGER.warning(f'Could not fetch pre-heating (ClientResponseError), error: {err}')
