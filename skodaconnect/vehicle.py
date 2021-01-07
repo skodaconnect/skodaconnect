@@ -22,9 +22,33 @@ class Vehicle:
         self._request_in_progress = False
         self._request_result = 'None'
         self._climate_duration = 30
+        self._services = {}
 
  #### API functions, parent class ####
   # Base methods
+    async def discover(self):
+        _LOGGER.debug('Attempting to discover supported API endpoints for vehicle.')
+        operationList = await self._connection.getOperationList(self._url)
+        if operationList:
+            serviceInfo = operationList['serviceInfo']
+            for service in serviceInfo:
+                try:
+                    if service['serviceStatus']['status'] == 'Enabled':
+                        data = {}
+                        if service.get('invocationUrl', False):
+                            data = {service['serviceId']: {} }
+                            urlInfo = {'url': service['invocationUrl']['content']}
+                            data[service['serviceId']].update(urlInfo)
+                            if service.get('operation', False):
+                                urlInfo = {'operation': service['operation']}
+                                data[service['serviceId']].update(urlInfo)
+                            self._services.update(dict(data))
+                except:
+                    pass
+            _LOGGER.debug('Enabled API endpoints and operations: %s' % self._services)
+        else:
+            _LOGGER.info('Could not determine available API endpoints for %s' % self._url)
+
     async def update(self):
         # await self._connection.update(request_data=False)
         await self._connection.update_vehicle(self)
@@ -622,6 +646,8 @@ class Vehicle:
         value = self.attrs.get('StoredVehicleDataResponseParsed')['0x0301030008'].get('value',0)
         if value:
             return int(value)
+        else:
+            return -1
 
     @property
     def is_electric_range_supported(self):
@@ -636,9 +662,11 @@ class Vehicle:
 
     @property
     def combustion_range(self):
-        value = self.attrs.get('StoredVehicleDataResponseParsed')['0x0301030006'].get('value',0)
+        value = self.attrs.get('StoredVehicleDataResponseParsed')['0x0301030006'].get('value', 0)
         if value:
             return int(value)
+        else:
+            return -1
 
     @property
     def is_combustion_range_supported(self):
@@ -653,6 +681,8 @@ class Vehicle:
         value = self.attrs.get('StoredVehicleDataResponseParsed')['0x0301030005'].get('value',0)
         if value:
             return int(value)
+        else:
+            return -1
 
     @property
     def is_combined_range_supported(self):
@@ -682,7 +712,7 @@ class Vehicle:
         """Return the target temperature from climater."""
         value = self.attrs.get('climater').get('settings').get('targetTemperature').get('content')
         if value:
-            reply = float((value/10)-273.15)
+            reply = float((value/10)-273)
             self._climatisation_target_temperature=reply
             return reply
 
@@ -716,7 +746,7 @@ class Vehicle:
         """Return outside temperature."""
         response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301020001'].get('value',0))
         if response:
-            return float((response/10)-273.15)
+            return round(float((response/10)-273.15), 1)
         else:
             return False
 
@@ -1356,7 +1386,7 @@ class Vehicle:
             if not 16 <= temperature <= 30:
                 _LOGGER.error(f'Set climatisation target temp to {temperature} is not supported.')
                 return False
-            temp = int((temperature+273.15)*10)
+            temp = int((temperature+273)*10)
             data = {"action": {"settings": {"targetTemperature": temp},"type": "setSettings"}}
             return await self.climater_actions(data)
         else:
@@ -1388,7 +1418,7 @@ class Vehicle:
         """Turn on/off climatisation with electric/auxiliary heater."""
         if self.is_electric_climatisation_supported:
             if mode in ['electric', 'auxiliary']:
-                targetTemp = int((self.climatisation_target_temperature+273.15)*10)
+                targetTemp = int((self.climatisation_target_temperature+273)*10)
                 withoutHVPower = self.climatisation_without_external_power
                 data = {'action':{'settings':{'climatisationWithoutHVpower': withoutHVPower, 'targetTemperature': targetTemp, 'heaterSource': mode},'type': 'startClimatisation'}}
             elif mode == 'off':
