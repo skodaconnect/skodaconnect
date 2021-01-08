@@ -933,7 +933,7 @@ class Vehicle:
             if self.attrs.get('climater', {}).get('status', {}).get('windowHeatingStatusData', {}).get('windowHeatingStateRear', {}).get('content', '') in ['on', 'off']:
                 return True
 
-  # Parking heater
+  # Parking heater, "legacy" auxiliary climatisation
     @property
     def pheater_duration(self):
         return self._climate_duration
