@@ -603,11 +603,6 @@ class Connection:
  #### Data set functions ####
 
  #### Token handling ####
-    async def set_token(self, type):
-        """Switch between tokens."""
-        self._session_headers['Authorization'] = 'Bearer ' + self._session_tokens[type]['access_token']
-        return
-
     @property
     async def validate_tokens(self):
         """Function to validate expiry of tokens."""
@@ -734,6 +729,21 @@ class Connection:
             _LOGGER.warning(f'Could not refresh tokens: {error}')
             return False
 
+    async def set_token(self, type):
+        """Switch between tokens."""
+        self._session_headers['Authorization'] = 'Bearer ' + self._session_tokens[type]['access_token']
+        return
+
+ #### Class helpers ####
+    @property
+    def vehicles(self):
+        """Return list of Vehicle objects."""
+        return self._vehicles
+
+    @property
+    def logged_in(self):
+        return self._session_logged_in
+
     def vehicle(self, vin):
         """Return vehicle object for given vin."""
         return next(
@@ -743,16 +753,6 @@ class Connection:
                 if vehicle.unique_id.lower() == vin.lower()
             ), None
         )
-
-  # Attributes
-    @property
-    def vehicles(self):
-        """Return list of Vehicle objects."""
-        return self._vehicles
-
-    @property
-    def logged_in(self):
-        return self._session_logged_in
 
 async def main():
     """Main method."""
