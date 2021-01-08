@@ -376,19 +376,10 @@ class Connection:
             self._session_auth_ref_url = response['homeRegion']['baseUri']['content'].split('/api')[0].replace('mal-', 'fal-') if response['homeRegion']['baseUri']['content'] != 'https://mal-1a.prd.ece.vwg-connect.com/api' else 'https://msg.volkswagen.de'
             self._session_spin_ref_url = response['homeRegion']['baseUri']['content'].split('/api')[0]
             return response['homeRegion']['baseUri']['content']
-        except aiohttp.client_exceptions.ClientResponseError as err:
-            if (err.status == 403 or err.status == 502):
-                _LOGGER.debug(f'Could not fetch homeregion, error 403/502 (not supported on car?), error: {err}')
-            elif err.status == 401:
-                _LOGGER.warning(f'Received "unauthorized" error while fetching data: {err}')
-            elif err.status != 200:
-                _LOGGER.warning(f'Unhandled HTTP response: {err}')
+        except Exception as err:
+            _LOGGER.debug(f'Could not get homeregion, error {err}')
             self._session_logged_in = False
-            return False
-        except:
-            _LOGGER.debug('Could not get homeregion')
-            self._session_logged_in = False
-            return False
+        return False
 
     async def getOperationList(self, vin):
         """Collect operationlist for VIN, supported/licensed functions."""
@@ -396,21 +387,17 @@ class Connection:
             await self.set_token('vwg')
             response = await self.get('/api/rolesrights/operationlist/v3/vehicles/$vin', vin)
             if response.get('operationList', False):
-                return response.get('operationList', {})
+                data = response.get('operationList', {})
+            elif response.get('status', {}):
+                _LOGGER.warning(f'Could not fetch operation list, HTTP status code: {response.get("status")}')
+                data = response
             else:
-                return False
-        except aiohttp.client_exceptions.ClientResponseError as err:
-            if (err.status == 403 or err.status == 502):
-                _LOGGER.debug(f'Could not fetch homeregion, error 403/502 (not supported on car?), error: {err}')
-            elif err.status == 401:
-                _LOGGER.warning(f'Received "unauthorized" error while fetching data: {err}')
-                self._session_logged_in = False
-            elif err.status != 200:
-                _LOGGER.warning(f'Unhandled HTTP response: {err}')
-            return False
-        except:
-            _LOGGER.warning(f'Could not fetch realCarData, error: {err}')
-            return False
+                _LOGGER.debug(f'Could not fetch operation list: {response}')
+                data = {'error': 'unknown'}
+        except Exception as err:
+            _LOGGER.warning(f'Could not fetch operation list, error: {err}')
+            data = {'error': 'unknown'}
+        return data
 
     async def getRealCarData(self, vin):
         """Get car information from customer profile, VIN, nickname, etc."""
@@ -422,28 +409,19 @@ class Connection:
                 'https://customer-profile.apps.emea.vwapps.io/v1/customers/{subject}/realCarData'.format(subject=sub)
             )
             if response.get('realCars', {}):
-                data = {}
-                data['carData'] = next(item for item in response.get('realCars', []) if item['vehicleIdentificationNumber'] == vin)
-                #self._state[vin].update(
-                #    {'carData': carData}
-                #)
-                #return True
-                return data
+                data = {
+                    'carData': next(item for item in response.get('realCars', []) if item['vehicleIdentificationNumber'] == vin)
+                }
+            elif response.get('status', {}):
+                _LOGGER.warning(f'Could not fetch realCarData, HTTP status code: {response.get("status")}')
+                data = response
             else:
                 _LOGGER.debug(f'Could not fetch realCarData: {response}')
-            return False
-        except aiohttp.client_exceptions.ClientResponseError as err:
-            if (err.status == 403 or err.status == 502):
-                _LOGGER.debug(f'Could not fetch realcar data, error 403/502 (not supported on car?), error: {err}')
-            elif err.status == 401:
-                _LOGGER.warning(f'Received "unauthorized" error while fetching data: {err}')
-                self._session_logged_in = False
-            elif err.status != 200:
-                _LOGGER.warning(f'Unhandled HTTP response: {err}')
-            return False
+                data = {'error': 'unknown'}
         except Exception as err:
             _LOGGER.warning(f'Could not fetch realCarData, error: {err}')
-            return False
+            data = {'error': 'unknown'}
+        return data
 
     async def getCarportData(self, vin):
         """Get carport data for vehicle, model, model year etc."""
@@ -454,29 +432,19 @@ class Connection:
                 vin = vin
             )
             if response.get('carportData', {}):
-                #self._state[vin].update(
-                #    {'carportData': response.get('carportData', {})}
-                #)
-                #return True
                 data = {
                     'carportData': response.get('carportData', {})
                 }
-                return data
+            elif response.get('status', {}):
+                _LOGGER.warning(f'Could not fetch carportdata, HTTP status code: {response.get("status")}')
+                data = response
             else:
                 _LOGGER.debug(f'Could not fetch carportData: {response}')
-            return False
-        except aiohttp.client_exceptions.ClientResponseError as err:
-            if (err.status == 403 or err.status == 502):
-                _LOGGER.debug(f'Could not fetch carport data, error 403/502 (not supported on car?), error: {err}')
-            elif err.status == 401:
-                _LOGGER.warning(f'Received "unauthorized" error while fetching data: {err}')
-                self._session_logged_in = False
-            elif err.status != 200:
-                _LOGGER.warning(f'Unhandled HTTP response: {err}')
-            return False
+                data = {'error': 'unknown'}
         except Exception as err:
             _LOGGER.warning(f'Could not fetch carportData, error: {err}')
-            return False
+            data = {'error': 'unknown'}
+        return data
 
     async def getVehicleStatusData(self, vin):
         """Get stored vehicle data response."""
@@ -487,33 +455,20 @@ class Connection:
                 vin = vin
             )
             if response.get('StoredVehicleDataResponse', {}).get('vehicleData', {}).get('data', {})[0].get('field', {})[0] :
-                #self._state[vin].update(
-                #    {'StoredVehicleDataResponse': response.get('StoredVehicleDataResponse', {})}
-                #)
-                #self._state[vin].update(
-                #    {'StoredVehicleDataResponseParsed' :  dict([(e['id'],e if 'value' in e else '') for f in [s['field'] for s in response['StoredVehicleDataResponse']['vehicleData']['data']] for e in f]) }
-                #)
-                #return True
                 data = {
                     'StoredVehicleDataResponse': response.get('StoredVehicleDataResponse', {}),
                     'StoredVehicleDataResponseParsed': dict([(e['id'],e if 'value' in e else '') for f in [s['field'] for s in response['StoredVehicleDataResponse']['vehicleData']['data']] for e in f])
                 }
-                return data
+            elif response.get('status', {}):
+                _LOGGER.warning(f'Could not fetch vehicle status report, HTTP status code: {response.get("status")}')
+                data = response
             else:
-                _LOGGER.debug(f'Could not fetch StoredVehicleDataResponse: {response}')
-            return False
-        except aiohttp.client_exceptions.ClientResponseError as err:
-            if (err.status == 403 or err.status == 502):
-                _LOGGER.debug(f'Could not fetch vehicle status report, error 403/502 (not supported on car?), error: {err}')
-            elif err.status == 401:
-                _LOGGER.warning(f'Received "unauthorized" error while fetching data: {err}')
-                self._session_logged_in = False
-            elif err.status != 200:
-                _LOGGER.warning(f'Unhandled HTTP response: {err}')
-            return False
+                _LOGGER.debug(f'Could not fetch vehicle status report: {response}')
+                data = {'error': 'unknown'}
         except Exception as err:
             _LOGGER.warning(f'Could not fetch StoredVehicleDataResponse, error: {err}')
-            return False
+            data = {'error': 'unknown'}
+        return data
 
     async def getTripStatistics(self, vin):
         """Get short term trip statistics."""
@@ -524,29 +479,17 @@ class Connection:
                 vin = vin
             )
             if response.get('tripData', {}):
-                #self._state[vin].update(
-                #    {'tripstatistics': response.get('tripData', {})}
-                #)
-                #return True
-                data = {
-                    'tripstatistics': response.get('tripData', {})
-                }
-                return data
+                data = {'tripstatistics': response.get('tripData', {})}
+            elif response.get('status', {}):
+                _LOGGER.warning(f'Could not fetch trip statistics, HTTP status code: {response.get("status")}')
+                data = response
             else:
                 _LOGGER.debug(f'Could not fetch trip statistics: {response}')
-            return False
-        except aiohttp.client_exceptions.ClientResponseError as err:
-            if (err.status == 403 or err.status == 502):
-                _LOGGER.debug(f'Could not fetch trip statistics, error 403/502 (not supported on car?), error: {err}')
-            elif err.status == 401:
-                _LOGGER.warning(f'Received "unauthorized" error while fetching data: {err}')
-                self._session_logged_in = False
-            elif err.status != 200:
-                _LOGGER.warning(f'Unhandled HTTP response: {err}')
-            return False
+                data = {'error': 'unknown'}
         except Exception as err:
             _LOGGER.warning(f'Could not fetch trip statistics, error: {err}')
-            return False
+            data = {'error': 'unknown'}
+        return data
 
     async def getPosition(self, vin):
         """Get position data."""
@@ -557,53 +500,27 @@ class Connection:
                 vin = vin
             )
             if response.get('findCarResponse', {}):
-                #self._state[vin].update(
-                #    {'findCarResponse': response.get('findCarResponse', {})}
-                #)
-                #self._state[vin].update({ 'isMoving': False })
-                #return True
                 data = {
                     'findCarResponse': response.get('findCarResponse', {}),
                     'isMoving': False
                 }
-                return data
-            elif response.get('status_code', 0) == 204:
-                _LOGGER.debug(f'Seems car is moving, HTTP 204 received from position')
-                #self._state[vin].update({ 'isMoving': True })
-                #self._state[vin].update({ 'rate_limit_remaining': 15 })
-                #return True
-                data = {
-                    'isMoving': True,
-                    'rate_limit_remaining': 15
-                }
-                return data
+            elif response.get('status', {}):
+                if response.get('status', 0) == 204:
+                    _LOGGER.debug(f'Seems car is moving, HTTP 204 received from position')
+                    data = {
+                        'isMoving': True,
+                        'rate_limit_remaining': 15
+                    }
+                else:
+                    _LOGGER.warning(f'Could not fetch position, HTTP status code: {response.get("status")}')
+                    data = response
             else:
                 _LOGGER.debug(f'Could not fetch position: {response}')
-            return False
-        except aiohttp.client_exceptions.ClientResponseError as err:
-            if (err.status == 403 or err.status == 502):
-                _LOGGER.debug(f'Could not fetch position, error 403/502 (not supported on car?), error: {err}')
-            elif err.status == 401:
-                _LOGGER.warning(f'Received "unauthorized" error while fetching data: {err}')
-                self._session_logged_in = False
-            elif (err.status == 204):
-                _LOGGER.debug(f'Seems car is moving, HTTP 204 received from position')
-                #self._state[vin].update({ 'isMoving': True })
-                #self._state[vin].update({ 'rate_limit_remaining': 15 })
-                #return True
-                data = {
-                    'isMoving': True,
-                    'rate_limit_remaining': 15
-                }
-                return data
-            elif err.status != 200:
-                _LOGGER.warning(f'Unhandled HTTP response: {err}')
-            else:
-                _LOGGER.warning(f'Could not fetch position (ClientResponseError), error: {err}')
-            return False
+                data = {'error': 'unknown'}
         except Exception as err:
             _LOGGER.warning(f'Could not fetch position, error: {err}')
-            return False
+            data = {'error': 'unknown'}
+        return data
 
     async def getTimers(self, vin):
         """Get departure timers."""
@@ -614,29 +531,17 @@ class Connection:
                 vin = vin
             )
             if response.get('timer', {}):
-                #self._state[vin].update(
-                #    {'timers': response.get('timer', {})}
-                #)
-                #return True
-                data = {
-                    'timers': response.get('timer', {})
-                }
-                return data
+                data = {'timers': response.get('timer', {})}
+            elif response.get('status', {}):
+                _LOGGER.warning(f'Could not fetch timers, HTTP status code: {response.get("status")}')
+                data = response
             else:
-                _LOGGER.debug(f'Could not fetch timers: {response}')
-            return False
-        except aiohttp.client_exceptions.ClientResponseError as err:
-            if (err.status == 403 or err.status == 502):
-                _LOGGER.debug(f'Could not fetch timers, error 403/502 (not supported on car?), error: {err}')
-            elif err.status == 401:
-                _LOGGER.warning(f'Received "unauthorized" error while fetching data: {err}')
-                self._session_logged_in = False
-            elif err.status != 200:
-                _LOGGER.warning(f'Unhandled HTTP response: {err}')
-            return False
+                _LOGGER.debug('Unknown error while trying to fetch timers')
+                data = {'error': 'unknown'}
         except Exception as err:
             _LOGGER.warning(f'Could not fetch timers, error: {err}')
-            return False
+            data = {'error': 'unknown'}
+        return data
 
     async def getClimater(self, vin):
         """Get climatisation data."""
@@ -647,31 +552,17 @@ class Connection:
                 vin = vin
             )
             if response.get('climater', {}):
-                #self._state[vin].update(
-                #    {'climater': response.get('climater', {})}
-                #)
-                #return True
-                data = {
-                    'climater': response.get('climater', {})
-                }
-                return data
+                data = {'climater': response.get('climater', {})}
+            elif response.get('status', {}):
+                _LOGGER.warning(f'Could not fetch climatisation, HTTP status code: {response.get("status")}')
+                data = response
             else:
-                _LOGGER.debug(f'Could not fetch climatisation: {response}')
-            return False
-        except aiohttp.client_exceptions.ClientResponseError as err:
-            if (err.status == 403 or err.status == 502):
-                _LOGGER.debug(f'Could not fetch climatisation, error 403/502 (not supported on car?), error: {err}')
-            elif err.status == 401:
-                _LOGGER.warning(f'Received "unauthorized" error while fetching data: {err}')
-                self._session_logged_in = False
-            elif err.status != 200:
-                _LOGGER.warning(f'Unhandled HTTP response: {err}')
-            else:
-                _LOGGER.warning(f'Could not fetch climatisation (ClientResponseError), error: {err}')
-            return False
+                _LOGGER.warning('Unknown error while trying to fetch climatisation')
+                data = {'error': 'unknown'}
         except Exception as err:
             _LOGGER.warning(f'Could not fetch climatisation, error: {err}')
-            return False
+            data = {'error': 'unknown'}
+        return data
 
     async def getCharger(self, vin):
         """Get charger data."""
@@ -700,12 +591,10 @@ class Connection:
             await self.set_token('vwg')
             response = await self.get(
                 'fs-car/bs/rs/v1/skoda/CZ/vehicles/$vin/status',
-                vin=vin
+                vin = vin
             )
             if response.get('statusResponse', {}):
-                data = {
-                    'heating': response.get('statusResponse', {})
-                }
+                data = {'heating': response.get('statusResponse', {})}
             elif response.get('status', {}):
                 _LOGGER.warning(f'Could not fetch pre-heating, HTTP status code: {response.get("status")}')
                 data = response
@@ -715,7 +604,6 @@ class Connection:
         except Exception as err:
             _LOGGER.warning(f'Could not fetch pre-heating, error: {err}')
             data = {'error': 'unknown'}
-            #return False
         return data
 
  #### Data set functions ####
