@@ -309,16 +309,23 @@ class Connection:
         else:
             return urljoin(self._session_auth_ref_url, replacedUrl)
 
-  # Update functions
+  # Update all Vehicles
     async def update(self):
         """Update status."""
+        if self.logged_in == False:
+            _LOGGER.debug
+            if not await self._login():
+                _LOGGER.warning('Login to Skoda Connect failed!')
+                return False
         try:
             if not await self.validate_tokens:
                 _LOGGER.info('Session has expired. Initiating new login to Skoda Connect.')
-                await self._login()
+                if not await self._login():
+                    _LOGGER.warning('Login to Skoda Connect failed!')
+                    raise Exception('Login failed')
 
             if not self._session_first_update:
-                # Get vehicles
+                # Get list of vehicles from account
                 _LOGGER.debug('Fetching vehicles')
                 await self.set_token('vwg')
                 if 'Content-Type' in self._session_headers:
@@ -328,39 +335,28 @@ class Connection:
                 )
                 _LOGGER.debug('URL loaded')
 
-                # Update list of vehicles
+                # Add all VIN-numbers from account to list of vehicles
                 if loaded_vehicles.get('userVehicles', {}).get('vehicle', []):
                     _LOGGER.debug('Vehicle JSON string exists')
                     for vehicle in loaded_vehicles.get('userVehicles').get('vehicle'):
-                        vehicle_url = vehicle
-                        self._state.update({vehicle_url: dict()})
-                        self._vehicles.append(Vehicle(self, vehicle_url))
-                        thisCar = self.vehicle(vehicle_url)
-                        await thisCar.discover()
+                        self._vehicles.append(Vehicle(self, vehicle))
+                        # Get the Vehicle class object for VIN number and discover initial data
+                        await self.vehicle(vehicle).discover()
+                # First update is complete
                 self._session_first_update = True
 
             _LOGGER.debug('Going to call vehicle updates')
-            # Get VIN numbers and update data for each
+            # Get all Vehicle objects and update in parallell
+            updatelist = []
             for vehicle in self.vehicles:
-                # Wait for data update
-                await vehicle.update()
-            return True
-        except (IOError, OSError, LookupError) as error:
-            _LOGGER.warning(f'Could not update information from skoda connect: {error}')
+                updatelist.append(vehicle.update())
+            # Wait for all data updates to complete
+            await asyncio.gather(*updatelist)
 
-    #async def update_vehicle(self, vehicle):
-    #    """Update data from VWG servers for given vehicle."""
-    #    url = vehicle._url
-    #    self._vin=url
-    #    if not self._session_logged_in:
-    #        await self._login()#
-    #    _LOGGER.debug(f'Updating vehicle status {vehicle.vin}')
-    #    try:
-    #        await self.getHomeRegion(url)
-    #    except Exception as err:
-    #        _LOGGER.debug(f'Cannot get homeregion, error: {err}')
-    #    thisCar = self.vehicle(url)
-    #    await thisCar.discover()
+            return True
+        except (IOError, OSError, LookupError, Exception) as error:
+            _LOGGER.warning(f'Could not update information from skoda connect: {error}')
+        return False
 
  #### Data collect functions ####
     async def getHomeRegion(self, vin):

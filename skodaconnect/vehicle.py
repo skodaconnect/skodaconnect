@@ -40,12 +40,12 @@ class Vehicle:
         if homeregion:
             self._homeregion = homeregion
 
-        _LOGGER.debug('Get car info')
         await asyncio.gather(
             self._connection.getRealCarData(self._url),
             self._connection.getCarportData(self._url),
             return_exceptions=True
         )
+        _LOGGER.info(f'Vehicle {self._url} added from Skoda Connect. Homeregion is "{self._homeregion}"')
 
         _LOGGER.debug('Attempting discovery of supported API endpoints for vehicle.')
         operationList = await self._connection.getOperationList(self._url)
@@ -336,7 +336,7 @@ class Vehicle:
         pinArray.extend(byteChallenge)
         return hashlib.sha512(pinArray).hexdigest()
 
- #### Vehicle Attributes ####
+ #### Vehicle class helpers ####
   # Vehicle info
     @property
     def attrs(self):
