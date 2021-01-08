@@ -71,6 +71,7 @@ class Vehicle:
                 functions = self._services.get('rclima_v1', {}).get('operation', {})
                 for operation in functions:
                     if operation['id'] == 'P_START_CLIMA_AU':
+                        _LOGGER.debug('New style auxiliary heater available, disabling old style pre-heater.')
                         self._services['preheater'] = False
         else:
             _LOGGER.info('Could not determine available API endpoints for %s' % self._url)
@@ -895,8 +896,13 @@ class Vehicle:
 
     @property
     def is_auxiliary_climatisation_supported(self):
-        """Return true if vehicle has climater."""
-        return self.is_climatisation_supported
+        """Return true if vehicle has auxiliary climatisation."""
+        if self._services.get('rclima_v1', False):
+            functions = self._services.get('rclima_v1', {}).get('operation', {})
+            for operation in functions:
+                if operation['id'] == 'P_START_CLIMA_AU':
+                    return True
+        return False
 
     @property
     def is_climatisation_supported(self):
