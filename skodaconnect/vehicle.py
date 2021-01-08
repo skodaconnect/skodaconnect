@@ -4,6 +4,7 @@
 import re
 import time
 import logging
+import asyncio
 import hashlib
 
 from datetime import datetime, timezone
@@ -18,16 +19,35 @@ class Vehicle:
     def __init__(self, conn, url):
         self._connection = conn
         self._url = url
+        self._homeregion = 'https://msg.volkswagen.de'
         self._requests_remaining = -1
         self._request_in_progress = False
         self._request_result = 'None'
         self._climate_duration = 30
-        self._services = {}
+        self._services = {
+            'preheater': True,
+            'realcar': True,
+            'carport': True,
+        }
+        self._states = {}
 
  #### API functions, parent class ####
   # Base methods
     async def discover(self):
-        _LOGGER.debug('Attempting to discover supported API endpoints for vehicle.')
+        """Discover vehicle and initial data."""
+        homeregion = await self._connection.getHomeRegion(self._url)
+        _LOGGER.debug('Get homeregion for VIN: %s' % self._url)
+        if homeregion:
+            self._homeregion = homeregion
+
+        _LOGGER.debug('Get car info')
+        await asyncio.gather(
+            self._connection.getRealCarData(self._url),
+            self._connection.getCarportData(self._url),
+            return_exceptions=True
+        )
+
+        _LOGGER.debug('Attempting discovery of supported API endpoints for vehicle.')
         operationList = await self._connection.getOperationList(self._url)
         if operationList:
             serviceInfo = operationList['serviceInfo']
@@ -46,13 +66,93 @@ class Vehicle:
                 except:
                     pass
             _LOGGER.debug('Enabled API endpoints and operations: %s' % self._services)
+            # Disable fetching of pre-heater if aux heater is available
+            if self._services.get('rclima_v1', False):
+                functions = self._services.get('rclima_v1', {}).get('operation', {})
+                for operation in functions:
+                    if operation['id'] == 'P_START_CLIMA_AU':
+                        self._services['preheater'] = False
         else:
             _LOGGER.info('Could not determine available API endpoints for %s' % self._url)
 
     async def update(self):
-        # await self._connection.update(request_data=False)
-        await self._connection.update_vehicle(self)
+        """Try to fetch data for all known API endpoints."""
+        await asyncio.gather(
+            self.get_preheater(),
+            self.get_rclima_v1(),
+            self.get_trip_statistic_v1(),
+            self.get_carfinder_v1(),
+            self.get_statusreport_v1(),
+            self.get_rbatterycharge_v1(),
+            self.get_timerprogramming_v1(),
+            return_exceptions=True
+        )
 
+  # Data collection methods
+    async def get_preheater(self):
+        """Fetch pre-heater data if function is enabled."""
+        if self._services.get('preheater', False):
+            data = await self._connection.getPreHeater(self._url),
+            if data:
+                self._states.update(data)
+            else:
+                _LOGGER.debug('Could not fetch pre-heater data')
+
+    async def get_rclima_v1(self):
+        """Fetch climater data if function is enabled."""
+        if self._services.get('rclima_v1', False):
+            data = await self._connection.getClimater(self._url)
+            if data:
+                self._states.update(data)
+            else:
+                _LOGGER.debug('Could not fetch climater data')
+
+    async def get_trip_statistic_v1(self):
+        """Fetch trip data if function is enabled."""
+        if self._services.get('trip_statistic_v1', False):
+            data = await self._connection.getTripStatistics(self._url)
+            if data:
+                self._states.update(data)
+            else:
+                _LOGGER.debug('Could not fetch trip statistics')
+
+    async def get_carfinder_v1(self):
+        """Fetch position data if function is enabled."""
+        if self._services.get('carfinder_v1', False):
+            data = await self._connection.getPosition(self._url)
+            if data:
+                self._states.update(data)
+            else:
+                _LOGGER.debug('Could not fetch any positional data')
+
+    async def get_statusreport_v1(self):
+        """Fetch status data if function is enabled."""
+        if self._services.get('statusreport_v1', False):
+            data = await self._connection.getVehicleStatusData(self._url)
+            if data:
+                self._states.update(data)
+            else:
+                _LOGGER.debug('Could not fetch status report')
+
+    async def get_rbatterycharge_v1(self):
+        """Fetch charger data if function is enabled."""
+        if self._services.get('rbatterycharge_v1', False):
+            data = await self._connection.getCharger(self._url)
+            if data:
+                self._states.update(data)
+            else:
+                _LOGGER.debug('Could not fetch charger data')
+
+    async def get_timerprogramming_v1(self):
+        """Fetch timer data if function is enabled."""
+        if self._services.get('timerprogramming_v1', False):
+            data = await self._connection.getTimers(self._url)
+            if data:
+                self._states.update(data)
+            else:
+                _LOGGER.debug('Could not fetch timers')
+
+  # GET/POST through connection
     async def get(self, query):
         """Perform a query to the online service."""
         req = await self._connection.get(query, self._url)
@@ -239,7 +339,7 @@ class Vehicle:
   # Vehicle info
     @property
     def attrs(self):
-        return self._connection.vehicle_attrs(self._url)
+        return self._states
 
     def has_attr(self, attr):
         return is_valid_path(self.attrs, attr)
@@ -600,6 +700,7 @@ class Vehicle:
             }
         else:
             posObj = self.attrs.get('findCarResponse')
+            #posObj = self._states.get('findCarResponse')
             lat = int(posObj.get('Position').get('carCoordinate').get('latitude'))/1000000
             lng = int(posObj.get('Position').get('carCoordinate').get('longitude'))/1000000
             parkingTime = posObj.get('parkingTimeUTC')
@@ -614,12 +715,14 @@ class Vehicle:
     def is_position_supported(self):
         """Return true if vehichle has position."""
         if self.attrs.get('findCarResponse', {}).get('Position', {}).get('carCoordinate', {}).get('latitude', False):
+        #if self._states.get('findCarResponse', {}).get('Position', {}).get('carCoordinate', {}).get('latitude', False):
             return True
 
     @property
     def vehicleMoving(self):
         """Return true if vehicle is moving."""
         return self.attrs.get('isMoving', False)
+        #return self._states.get('isMoving', False)
 
     @property
     def is_vehicleMoving_supported(self):
@@ -631,6 +734,7 @@ class Vehicle:
     def parkingTime(self):
         """Return timestamp of last parking time."""
         parkTime_utc = self.attrs.get('findCarResponse').get('parkingTimeUTC', 'Unknown')
+        #parkTime_utc = self._states.get('findCarResponse').get('parkingTimeUTC', 'Unknown')
         parkTime = parkTime_utc.replace(tzinfo=timezone.utc).astimezone(tz=None)
         return parkTime.strftime('%Y-%m-%d %H:%M:%S')
 
@@ -638,6 +742,7 @@ class Vehicle:
     def is_parkingTime_supported(self):
         """Return true if vehicle parking timestamp is supported."""
         if 'parkingTimeUTC' in self.attrs.get('findCarResponse', {}):
+        #if 'parkingTimeUTC' in self._states.get('findCarResponse', {}):
             return True
 
   # Vehicle fuel level and range
