@@ -309,12 +309,6 @@ class Connection:
         else:
             return urljoin(self._session_auth_ref_url, replacedUrl)
 
-  # Change active access token
-    async def set_token(self, type):
-        """Switch between tokens."""
-        self._session_headers['Authorization'] = 'Bearer ' + self._session_tokens[type]['access_token']
-        return
-
   # Update functions
     async def update(self):
         """Update status."""
@@ -609,6 +603,11 @@ class Connection:
  #### Data set functions ####
 
  #### Token handling ####
+    async def set_token(self, type):
+        """Switch between tokens."""
+        self._session_headers['Authorization'] = 'Bearer ' + self._session_tokens[type]['access_token']
+        return
+
     @property
     async def validate_tokens(self):
         """Function to validate expiry of tokens."""
@@ -744,9 +743,6 @@ class Connection:
                 if vehicle.unique_id.lower() == vin.lower()
             ), None
         )
-
-    #def vehicle_attrs(self, vehicle_url):
-    #    return self._state.get(vehicle_url)
 
   # Attributes
     @property
