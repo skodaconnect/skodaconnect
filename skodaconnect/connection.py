@@ -200,9 +200,9 @@ class Connection:
             # Save tokens as "identity", this is tokens representing the user
             self._session_tokens['identity'] = await req.json()
             if not await self.verify_tokens(self._session_tokens['identity']['id_token'], 'identity'):
-                _LOGGER.warning('Identity token could not be verified!')
+                _LOGGER.warning('User identity token could not be verified!')
             else:
-                _LOGGER.debug('Identity token verified OK.')
+                _LOGGER.debug('User identity token verified OK.')
 
             # Get VW Group API tokens
             # https://mbboauth-1d.prd.ece.vwg-connect.com/mbbcoauth/mobile/oauth2/v1/token
@@ -229,9 +229,9 @@ class Connection:
                 # Save tokens as "vwg", use theese for get/posts to VW Group API
                 self._session_tokens['vwg'] = await req.json()
                 if not await self.verify_tokens(self._session_tokens['vwg']['access_token'], 'vwg'):
-                    _LOGGER.warning('VWG token could not be verified!')
+                    _LOGGER.warning('VW-Group API token could not be verified!')
                 else:
-                    _LOGGER.debug('VWG tokens OK.')
+                    _LOGGER.debug('VW-Group API token verified OK.')
 
             # Update headers for requests, defaults to using VWG token
             self._session_headers['Authorization'] = 'Bearer ' + self._session_tokens['vwg']['access_token']
@@ -309,7 +309,7 @@ class Connection:
         else:
             return urljoin(self._session_auth_ref_url, replacedUrl)
 
-  # Update all Vehicles
+  # Update data for all Vehicles
     async def update(self):
         """Update status."""
         if self.logged_in == False:
@@ -326,18 +326,16 @@ class Connection:
 
             if not self._session_first_update:
                 # Get list of vehicles from account
-                _LOGGER.debug('Fetching vehicles')
+                _LOGGER.debug('Fetching vehicles associated with account')
                 await self.set_token('vwg')
                 if 'Content-Type' in self._session_headers:
                     del self._session_headers['Content-Type']
                 loaded_vehicles = await self.get(
                     url='https://msg.volkswagen.de/fs-car/usermanagement/users/v1/skoda/CZ/vehicles'
                 )
-                _LOGGER.debug('URL loaded')
-
                 # Add all VIN-numbers from account to list of vehicles
                 if loaded_vehicles.get('userVehicles', {}).get('vehicle', []):
-                    _LOGGER.debug('Vehicle JSON string exists')
+                    _LOGGER.debug('Found vehicle(s) associated with account.')
                     for vehicle in loaded_vehicles.get('userVehicles').get('vehicle'):
                         self._vehicles.append(Vehicle(self, vehicle))
                         # Get the Vehicle class object for VIN number and discover initial data
@@ -378,8 +376,8 @@ class Connection:
             response = await self.get('/api/rolesrights/operationlist/v3/vehicles/$vin', vin)
             if response.get('operationList', False):
                 data = response.get('operationList', {})
-            elif response.get('status', {}):
-                _LOGGER.warning(f'Could not fetch operation list, HTTP status code: {response.get("status")}')
+            elif response.get('status_code', {}):
+                _LOGGER.warning(f'Could not fetch operation list, HTTP status code: {response.get("status_code")}')
                 data = response
             else:
                 _LOGGER.debug(f'Could not fetch operation list: {response}')
@@ -402,8 +400,8 @@ class Connection:
                 data = {
                     'carData': next(item for item in response.get('realCars', []) if item['vehicleIdentificationNumber'] == vin)
                 }
-            elif response.get('status', {}):
-                _LOGGER.warning(f'Could not fetch realCarData, HTTP status code: {response.get("status")}')
+            elif response.get('status_code', {}):
+                _LOGGER.warning(f'Could not fetch realCarData, HTTP status code: {response.get("status_code")}')
                 data = response
             else:
                 _LOGGER.debug(f'Could not fetch realCarData: {response}')
@@ -425,8 +423,8 @@ class Connection:
                 data = {
                     'carportData': response.get('carportData', {})
                 }
-            elif response.get('status', {}):
-                _LOGGER.warning(f'Could not fetch carportdata, HTTP status code: {response.get("status")}')
+            elif response.get('status_code', {}):
+                _LOGGER.warning(f'Could not fetch carportdata, HTTP status code: {response.get("status_code")}')
                 data = response
             else:
                 _LOGGER.debug(f'Could not fetch carportData: {response}')
@@ -449,8 +447,8 @@ class Connection:
                     'StoredVehicleDataResponse': response.get('StoredVehicleDataResponse', {}),
                     'StoredVehicleDataResponseParsed': dict([(e['id'],e if 'value' in e else '') for f in [s['field'] for s in response['StoredVehicleDataResponse']['vehicleData']['data']] for e in f])
                 }
-            elif response.get('status', {}):
-                _LOGGER.warning(f'Could not fetch vehicle status report, HTTP status code: {response.get("status")}')
+            elif response.get('status_code', {}):
+                _LOGGER.warning(f'Could not fetch vehicle status report, HTTP status code: {response.get("status_code")}')
                 data = response
             else:
                 _LOGGER.debug(f'Could not fetch vehicle status report: {response}')
@@ -470,8 +468,8 @@ class Connection:
             )
             if response.get('tripData', {}):
                 data = {'tripstatistics': response.get('tripData', {})}
-            elif response.get('status', {}):
-                _LOGGER.warning(f'Could not fetch trip statistics, HTTP status code: {response.get("status")}')
+            elif response.get('status_code', {}):
+                _LOGGER.warning(f'Could not fetch trip statistics, HTTP status code: {response.get("status_code")}')
                 data = response
             else:
                 _LOGGER.debug(f'Could not fetch trip statistics: {response}')
@@ -494,15 +492,15 @@ class Connection:
                     'findCarResponse': response.get('findCarResponse', {}),
                     'isMoving': False
                 }
-            elif response.get('status', {}):
-                if response.get('status', 0) == 204:
+            elif response.get('status_code', {}):
+                if response.get('status_code', 0) == 204:
                     _LOGGER.debug(f'Seems car is moving, HTTP 204 received from position')
                     data = {
                         'isMoving': True,
                         'rate_limit_remaining': 15
                     }
                 else:
-                    _LOGGER.warning(f'Could not fetch position, HTTP status code: {response.get("status")}')
+                    _LOGGER.warning(f'Could not fetch position, HTTP status code: {response.get("status_code")}')
                     data = response
             else:
                 _LOGGER.debug(f'Could not fetch position: {response}')
@@ -522,8 +520,8 @@ class Connection:
             )
             if response.get('timer', {}):
                 data = {'timers': response.get('timer', {})}
-            elif response.get('status', {}):
-                _LOGGER.warning(f'Could not fetch timers, HTTP status code: {response.get("status")}')
+            elif response.get('status_code', {}):
+                _LOGGER.warning(f'Could not fetch timers, HTTP status code: {response.get("status_code")}')
                 data = response
             else:
                 _LOGGER.debug('Unknown error while trying to fetch timers')
@@ -543,8 +541,8 @@ class Connection:
             )
             if response.get('climater', {}):
                 data = {'climater': response.get('climater', {})}
-            elif response.get('status', {}):
-                _LOGGER.warning(f'Could not fetch climatisation, HTTP status code: {response.get("status")}')
+            elif response.get('status_code', {}):
+                _LOGGER.warning(f'Could not fetch climatisation, HTTP status code: {response.get("status_code")}')
                 data = response
             else:
                 _LOGGER.warning('Unknown error while trying to fetch climatisation')
@@ -564,8 +562,8 @@ class Connection:
             )
             if response.get('charger', {}):
                 data = {'charger': response.get('charger', {})}
-            elif response.get('status', {}):
-                _LOGGER.warning(f'Could not fetch pre-heating, HTTP status code: {response.get("status")}')
+            elif response.get('status_code', {}):
+                _LOGGER.warning(f'Could not fetch pre-heating, HTTP status code: {response.get("status_code")}')
                 data = response
             else:
                 _LOGGER.warning('Unknown error while trying to fetch pre-heating')
@@ -585,8 +583,8 @@ class Connection:
             )
             if response.get('statusResponse', {}):
                 data = {'heating': response.get('statusResponse', {})}
-            elif response.get('status', {}):
-                _LOGGER.warning(f'Could not fetch pre-heating, HTTP status code: {response.get("status")}')
+            elif response.get('status_code', {}):
+                _LOGGER.warning(f'Could not fetch pre-heating, HTTP status code: {response.get("status_code")}')
                 data = response
             else:
                 _LOGGER.warning('Unknown error while trying to fetch pre-heating')
@@ -597,6 +595,147 @@ class Connection:
         return data
 
  #### Data set functions ####
+    async def dataCall(self, query, vin='', **data):
+        """Function to execute actions through Skoda Connect servers."""
+        if self.logged_in == False:
+            _LOGGER.debug
+            if not await self._login():
+                _LOGGER.warning('Login to Skoda Connect failed!')
+                return False
+        try:
+            if not await self.validate_tokens:
+                _LOGGER.info('Session has expired. Initiating new login to Skoda Connect.')
+                if not await self._login():
+                    _LOGGER.warning('Login to Skoda Connect failed!')
+                    raise Exception('Login failed')
+            await self.set_token('vwg')
+            return await self.post(query, vin=vin, **data)
+        except Exception as error:
+            self._request_result = 'Failed to execute'
+            self._request_in_progress = False
+            _LOGGER.warning(f'Failure to execute: {error}')
+        return False
+
+    async def requestStatus(self, requestId, sectionId, retryCount=36):
+        """Wait until action request is completed."""
+        retryCount -= 1
+        if (retryCount == 0):
+            _LOGGER.warning(f'Timeout while waiting for result of {requestId}.')
+            return {'status': 'Timeout'}
+        if self.logged_in == False:
+            _LOGGER.debug
+            if not await self._login():
+                _LOGGER.warning('Login to Skoda Connect failed!')
+                return False
+        try:
+            if not await self.validate_tokens:
+                _LOGGER.info('Session has expired. Initiating new login to Skoda Connect.')
+                if not await self._login():
+                    _LOGGER.warning('Login to Skoda Connect failed!')
+                    raise Exception('Login failed')
+            await self.set_token('vwg')
+
+            #if sectionId == 'climatisation':
+            #    url = "fs-car/bs/$sectionId/v1/Skoda/CZ/vehicles/$vin/climater/actions/$requestId"
+            #elif sectionId == 'batterycharge':
+            #    url = "fs-car/bs/$sectionId/v1/Skoda/CZ/vehicles/$vin/charger/actions/$requestId"
+            #elif sectionId == 'departuretimer':
+            #    url = "fs-car/bs/$sectionId/v1/Skoda/CZ/vehicles/$vin/timer/actions/$requestId"
+            #elif sectionId == 'vsr':
+            #    url = "fs-car/bs/$sectionId/v1/Skoda/CZ/vehicles/$vin/requests/$requestId/jobstatus"
+            #else:
+            #    url = "fs-car/bs/$sectionId/v1/Skoda/CZ/vehicles/$vin/requests/$requestId/status"
+            #url = re.sub("\$sectionId", sectionId, url)
+            #url = re.sub("\$requestId", requestId, url)
+
+            res = await self.get(url)
+            # VSR refresh, parking heater and lock/unlock
+            if res.get('requestStatusResponse', {}).get('status', False):
+                result = res.get('requestStatusResponse', {}).get('status', False)
+                if result == 'request_in_progress':
+                    self._request_result = 'In progress'
+                    _LOGGER.debug(f'Request {requestId}, sectionId {sectionId} still in progress, sleeping for 5 seconds and check status again...')
+                    time.sleep(5)
+                    return await self.getRequestProgressStatus(requestId, sectionId, retryCount)
+                elif result == 'request_fail':
+                    self._request_result = 'Failed'
+                    self._request_in_progress = False
+                    error = res.get('requestStatusResponse', {}).get('error', None)
+                    _LOGGER.warning(f'Request {requestId}, sectionId {sectionId} failed, error: {error}.')
+                    return False
+                elif result == 'unfetched':
+                    self._request_result = 'No response'
+                    self._request_in_progress = False
+                    error = res.get('requestStatusResponse', {}).get('error', None)
+                    _LOGGER.warning(f'Request {requestId}, sectionId {sectionId} failed, error: {error}.')
+                    return False
+                elif result == 'request_successful':
+                    self._request_result = 'Success'
+                    self._request_in_progress = False
+                    _LOGGER.debug(f'Request was successful, result: {result}')
+                    return True
+                else:
+                    self._request_result = result
+                    self._request_in_progress = False
+                    _LOGGER.debug(f'Request result: {result}')
+                    return True
+            # For electric charging, climatisation and departure timers
+            elif res.get('action', {}).get('actionState', False):
+                result=res.get('action', {}).get('actionState', False)
+                if result == 'queued' or result == 'fetched':
+                    self._request_result = 'In progress'
+                    _LOGGER.debug(f'Request {requestId}, sectionId {sectionId} still in progress, sleeping for 5 seconds and check status again...')
+                    time.sleep(5)
+                    return await self.getRequestProgressStatus(requestId, sectionId, retryCount)
+                elif result == 'failed':
+                    self._request_result = 'Failed'
+                    self._request_in_progress = False
+                    error = res.get('action', {}).get('errorCode', None)
+                    _LOGGER.warning(f'Request {requestId}, sectionId {sectionId} failed, error: {error}.')
+                elif result == 'unfetched':
+                    self._request_result = 'No response'
+                    self._request_in_progress = False
+                    error = res.get('requestStatusResponse', {}).get('error', None)
+                    _LOGGER.warning(f'Request {requestId}, sectionId {sectionId} failed, error: {error}.')
+                    return False
+                elif result == 'succeeded':
+                    self._request_result = 'Success'
+                    self._request_in_progress = False
+                    _LOGGER.debug(f'Request was successful, result: {result}')
+                else:
+                    self._request_result = result
+                    self._request_in_progress = False
+                    _LOGGER.debug(f'Request result: {result}')
+                    return True
+            else:
+                self._request_result = 'Unknown'
+                self._request_in_progress = False
+                _LOGGER.warning(f'Incorrect response for status response for request={requestId}, section={sectionId}, response is:{str(res)}')
+                return
+        except Exception as error:
+            self._request_result = 'Task exception'
+            self._request_in_progress = False
+            _LOGGER.warning(f'Failure during get request progress status: {error}')
+            return
+
+    async def set_charger(self, vin, action):
+        """Start/Stop charger."""
+        if action in ['start', 'stop']:
+            try:
+                data = {'action': {'type': action}}
+                response = await self.dataCall('fs-car/bs/batterycharge/v1/Skoda/CZ/vehicles/$vin/charger/actions', vin, json=data)
+                if not response:
+                    _LOGGER.warning(f'Failed to {action} charging.')
+                    return False
+                else:
+                    messageId = response.get('action', {}).get('actionId', "---"):
+                    _LOGGER.debug(f'Request to {action} charging queued with action id: {messageId}')
+                    return response
+            except Exception as error:
+                _LOGGER.warning(f'Failed to {action} charging - %s' % error)
+        else:
+            _LOGGER.error(f'Invalid charger action: {action}. Must be either start or stop')
+        return False
 
  #### Token handling ####
     @property
@@ -623,9 +762,9 @@ class Connection:
                 _LOGGER.debug('Successfully refreshed tokens')
             else:
                 return False
-        else:
-            expString = id_dt.strftime('%Y-%m-%d %H:%M:%S')
-            _LOGGER.debug(f'Tokens valid until {expString}')
+        #else:
+        #    expString = id_dt.strftime('%Y-%m-%d %H:%M:%S')
+        #    _LOGGER.debug(f'Tokens valid until {expString}')
         return True
 
     async def verify_tokens(self, token, type):
