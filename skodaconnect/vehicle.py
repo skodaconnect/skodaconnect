@@ -41,11 +41,12 @@ class Vehicle:
             self._homeregion = homeregion
 
         await asyncio.gather(
-            self._connection.getRealCarData(self._url),
-            self._connection.getCarportData(self._url),
+            self.get_carportdata(),
+            self.get_realcardata(),
             return_exceptions=True
         )
         _LOGGER.info(f'Vehicle {self._url} added from Skoda Connect. Homeregion is "{self._homeregion}"')
+        _LOGGER.debug('States are now: %s' % self._states)
 
         _LOGGER.debug('Attempting discovery of supported API endpoints for vehicle.')
         operationList = await self._connection.getOperationList(self._url)
@@ -90,12 +91,24 @@ class Vehicle:
         )
 
   # Data collection methods
+    async def get_realcardata(self):
+        """Fetch realcar data."""
+        data = await self._connection.getRealCarData(self._url)
+        if data:
+            self._states.update(data)
+
+    async def get_carportdata(self):
+        """Fetch carport data."""
+        data = await self._connection.getCarportData(self._url)
+        if data:
+            self._states.update(data)
+
     async def get_preheater(self):
         """Fetch pre-heater data if function is enabled."""
         if self._services.get('preheater', False):
-            data = await self._connection.getPreHeater(self._url),
+            data = await self._connection.getPreHeater(self._url)
             if data:
-                self._states.update(data)
+                await self._states.update(data)
             else:
                 _LOGGER.debug('Could not fetch pre-heater data')
 
@@ -104,7 +117,7 @@ class Vehicle:
         if self._services.get('rclima_v1', False):
             data = await self._connection.getClimater(self._url)
             if data:
-                self._states.update(data)
+                await self._states.update(data)
             else:
                 _LOGGER.debug('Could not fetch climater data')
 
@@ -113,7 +126,7 @@ class Vehicle:
         if self._services.get('trip_statistic_v1', False):
             data = await self._connection.getTripStatistics(self._url)
             if data:
-                self._states.update(data)
+                await self._states.update(data)
             else:
                 _LOGGER.debug('Could not fetch trip statistics')
 
@@ -122,7 +135,7 @@ class Vehicle:
         if self._services.get('carfinder_v1', False):
             data = await self._connection.getPosition(self._url)
             if data:
-                self._states.update(data)
+                await self._states.update(data)
             else:
                 _LOGGER.debug('Could not fetch any positional data')
 
@@ -131,7 +144,7 @@ class Vehicle:
         if self._services.get('statusreport_v1', False):
             data = await self._connection.getVehicleStatusData(self._url)
             if data:
-                self._states.update(data)
+                await self._states.update(data)
             else:
                 _LOGGER.debug('Could not fetch status report')
 
@@ -140,7 +153,7 @@ class Vehicle:
         if self._services.get('rbatterycharge_v1', False):
             data = await self._connection.getCharger(self._url)
             if data:
-                self._states.update(data)
+                await self._states.update(data)
             else:
                 _LOGGER.debug('Could not fetch charger data')
 
@@ -149,7 +162,7 @@ class Vehicle:
         if self._services.get('timerprogramming_v1', False):
             data = await self._connection.getTimers(self._url)
             if data:
-                self._states.update(data)
+                await self._states.update(data)
             else:
                 _LOGGER.debug('Could not fetch timers')
 
@@ -388,6 +401,7 @@ class Vehicle:
 
     @property
     def is_model_supported(self):
+        """Return true if model is supported."""
         if self.attrs.get('carportData', {}).get('modelName', False):
             return True
 
@@ -398,6 +412,7 @@ class Vehicle:
 
     @property
     def is_model_year_supported(self):
+        """Return true if model year is supported."""
         if self.attrs.get('carportData', {}).get('modelYear', False):
             return True
 
@@ -1475,15 +1490,9 @@ class Vehicle:
            return False
         if action in ['start', 'stop']:
             try:
-                data = {'action': {'type': action}}
-                resp = await self.call('fs-car/bs/batterycharge/v1/Skoda/CZ/vehicles/$vin/charger/actions', json=data)
-                if not resp:
-                    _LOGGER.warning(f'Failed to {action} charging.')
-                    return False
-                else:
-                    await self.getRequestProgressStatus(resp, 'batterycharge')
-                    await self.update()
-                    return resp
+                await self._connection.set_charger(self._url, action)
+                await self.update()
+                return True
             except Exception as error:
                 _LOGGER.warning(f'Failed to {action} charging - %s' % error)
                 return False

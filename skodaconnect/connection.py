@@ -728,7 +728,7 @@ class Connection:
                     _LOGGER.warning(f'Failed to {action} charging.')
                     return False
                 else:
-                    messageId = response.get('action', {}).get('actionId', "---"):
+                    messageId = response.get('action', {}).get('actionId', '---')
                     _LOGGER.debug(f'Request to {action} charging queued with action id: {messageId}')
                     return response
             except Exception as error:
