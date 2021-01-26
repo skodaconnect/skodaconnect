@@ -319,9 +319,11 @@ class DoorLock(Instrument):
 
     async def lock(self):
         return await self.vehicle.set_lock('lock', self.spin)
+        await self.vehicle.update()
 
     async def unlock(self):
         return await self.vehicle.set_lock('unlock', self.spin)
+        await self.vehicle.update()
 
     @property
     def attributes(self):
