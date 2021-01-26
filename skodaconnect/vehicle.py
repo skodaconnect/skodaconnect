@@ -24,9 +24,9 @@ class Vehicle:
             'departuretimer': {'status': None, 'timestamp': datetime.now()},
             'batterycharge': {'status': None, 'timestamp': datetime.now()},
             'climatisation': {'status': None, 'timestamp': datetime.now()},
-            'vsr': {'status': None, 'timestamp': datetime.now()},
-            'rlu': {'status': None, 'timestamp': datetime.now()},
-            'rs': {'status': None, 'timestamp': datetime.now()},
+            'refresh': {'status': None, 'timestamp': datetime.now()},
+            'lock': {'status': None, 'timestamp': datetime.now()},
+            'preheater': {'status': None, 'timestamp': datetime.now()},
             'remaining': -1,
             'latest': None,
             'state': None
@@ -178,7 +178,6 @@ class Vehicle:
     async def wait_for_request(self, section, request, retryCount=36):
         """Update status of outstanding requests."""
         retryCount -= 1
-        self._requests['latest'] = section
         if (retryCount == 0):
             _LOGGER.info(f'Timeout while waiting for result of {requestId}.')
             return 'Timeout'
@@ -216,6 +215,7 @@ class Vehicle:
             _LOGGER.error(f'Invalid charger action: {action}. Must be either start or stop')
             raise Exception(f'Invalid charger action: {action}. Must be either start or stop')
         try:
+            self._requests['latest'] = 'Charger'
             response = await self._connection.setCharger(self.vin, data)
             if not response:
                 self._requests['batterycharge'] = {'status': 'Failed'}
@@ -308,6 +308,7 @@ class Vehicle:
                 _LOGGER.debug('A climatisation action is already in progress')
                 return False
         try:
+            self._requests['latest'] = 'Climatisation'
             response = await self._connection.setClimater(self.vin, data, spin)
             if not response:
                 self._requests['climatisation'] = {'status': 'Failed'}
@@ -334,11 +335,11 @@ class Vehicle:
         if not self.is_combustion_climatisation_supported:
             _LOGGER.error('No parking heater support.')
             raise Exception('No parking heater support.')
-        if self._requests['rs'].get('id', False):
-            timestamp = self._requests.get('rs', {}).get('timestamp', datetime.now())
+        if self._requests['preheater'].get('id', False):
+            timestamp = self._requests.get('preheater', {}).get('timestamp', datetime.now())
             expired = datetime.now() - timedelta(minutes=3)
             if expired > timestamp:
-                self._requests.get('rs', {}).pop('id')
+                self._requests.get('preheater', {}).pop('id')
             else:
                 _LOGGER.debug('A parking heater action is already in progress')
                 return False
@@ -350,24 +351,25 @@ class Vehicle:
         else:
             data = {'performAction': {'quickstart': {'climatisationDuration': self.pheater_duration, 'startMode': mode, 'active': True }}}
         try:
+            self._requests['latest'] = 'Preheater'
             response = await self._connection.setPreHeater(self.vin, data, spin)
             if not response:
-                self._requests['rs'] = {'status': 'Failed'}
+                self._requests['preheater'] = {'status': 'Failed'}
                 _LOGGER.error(f'Failed to set parking heater to {mode}')
                 raise Exception(f'Failed to set parking heater to {mode}')
             else:
                 self._requests['remaining'] = response.get('rate_limit_remaining', -1)
-                self._requests['rs'] = {
+                self._requests['preheater'] = {
                     'timestamp': datetime.now(),
                     'status': response.get('state', 'Unknown'),
                     'id': response.get('id', 0),
                 }
                 status = await self.wait_for_request('rs', response.get('id', 0))
-                self._requests['rs'] = {'status': status}
+                self._requests['preheater'] = {'status': status}
                 return True
         except Exception as error:
             _LOGGER.warning(f'Failed to set parking heater mode to {mode} - {error}')
-            self._requests['rs'] = {'status': 'Exception'}
+            self._requests['preheater'] = {'status': 'Exception'}
             raise Exception(f'Failed to set parking heater mode to {mode} - {error}')
 
    # Lock (RLU)
@@ -376,11 +378,11 @@ class Vehicle:
         if not self._services.get('rlu_v1', False):
             _LOGGER.info('Remote lock/unlock is not supported.')
             raise Exception('Remote lock/unlock is not supported.')
-        if self._requests['rlu'].get('id', False):
-            timestamp = self._requests.get('rlu', {}).get('timestamp', datetime.now() - timedelta(minutes=5))
+        if self._requests['lock'].get('id', False):
+            timestamp = self._requests.get('lock', {}).get('timestamp', datetime.now() - timedelta(minutes=5))
             expired = datetime.now() - timedelta(minutes=3)
             if expired > timestamp:
-                self._requests.get('rlu', {}).pop('id')
+                self._requests.get('lock', {}).pop('id')
             else:
                 _LOGGER.debug('A lock action is already in progress')
                 return False
@@ -390,24 +392,25 @@ class Vehicle:
             _LOGGER.error(f'Invalid lock action: {action}')
             raise Exception(f'Invalid lock action: {action}')
         try:
+            self._requests['latest'] = 'Lock'
             response = await self._connection.setLock(self.vin, data, spin)
             if not response:
-                self._requests['rlu'] = {'status': 'Failed'}
+                self._requests['lock'] = {'status': 'Failed'}
                 _LOGGER.error(f'Failed to {action} vehicle')
                 raise Exception(f'Failed to {action} vehicle')
             else:
                 self._requests['remaining'] = response.get('rate_limit_remaining', -1)
-                self._requests['rlu'] = {
+                self._requests['lock'] = {
                     'timestamp': datetime.now(),
                     'status': response.get('state', 'Unknown'),
                     'id': response.get('id', 0),
                 }
                 status = await self.wait_for_request('rlu', response.get('id', 0))
-                self._requests['rlu'] = {'status': status}
+                self._requests['lock'] = {'status': status}
                 return True
         except Exception as error:
             _LOGGER.warning(f'Failed to {action} vehicle - {error}')
-            self._requests['rlu'] = {'status': 'Exception'}
+            self._requests['lock'] = {'status': 'Exception'}
             raise Exception(f'Failed to {action} vehicle - {error}')
 
    # Refresh vehicle data (VSR)
@@ -416,35 +419,36 @@ class Vehicle:
         if not self._services.get('statusreport_v1', False):
            _LOGGER.info('Data refresh is not supported.')
            raise Exception('Data refresh i not supported.')
-        if self._requests['vsr'].get('id', False):
-            timestamp = self._requests.get('vsr', {}).get('timestamp', datetime.now() - timedelta(minutes=5))
+        if self._requests['refresh'].get('id', False):
+            timestamp = self._requests.get('refresh', {}).get('timestamp', datetime.now() - timedelta(minutes=5))
             expired = datetime.now() - timedelta(minutes=3)
             if expired > timestamp:
-                self._requests.get('vsr', {}).pop('id')
+                self._requests.get('refresh', {}).pop('id')
             else:
                 _LOGGER.debug('A data refresh request is already in progress')
                 return False
         try:
+            self._requests['latest'] = 'Refresh'
             response = await self._connection.setRefresh(self.vin)
             if not response:
                 _LOGGER.error('Failed to request vehicle update')
-                self._requests['vsr'] = {'status': 'Failed'}
+                self._requests['refresh'] = {'status': 'Failed'}
                 raise Exception('Failed to execute data refresh')
             else:
                 self._requests['remaining'] = response.get('rate_limit_remaining', -1)
-                self._requests['vsr'] = {
+                self._requests['refresh'] = {
                     'timestamp': datetime.now(),
                     'status': response.get('status', 'Unknown'),
                     'id': response.get('id', 0)
                 }
                 status = await self.wait_for_request('vsr', response.get('id', 0))
-                self._requests['vsr'] = {
+                self._requests['refresh'] = {
                     'status': status
                 }
                 return True
         except Exception as error:
             _LOGGER.warning(f'Failed to execute data refresh - {error}')
-            self._requests['vsr'] = {'status': 'Exception'}
+            self._requests['refresh'] = {'status': 'Exception'}
             raise Exception(f'Failed to execute data refresh - {error}')
 
  #### Vehicle class helpers ####
@@ -1442,7 +1446,7 @@ class Vehicle:
     @property
     def refresh_action_status(self):
         """Return latest status of data refresh request."""
-        return self._requests['vsr'].get('status', 'None')
+        return self._requests['refresh'].get('status', 'None')
 
     @property
     def charger_action_status(self):
@@ -1457,18 +1461,19 @@ class Vehicle:
     @property
     def pheater_action_status(self):
         """Return latest status of parking heater request."""
-        return self._requests['rs'].get('status', 'None')
+        return self._requests['preheater'].get('status', 'None')
 
     @property
     def lock_action_status(self):
         """Return latest status of lock action request."""
-        return self._requests['rlu'].get('status', 'None')
+        _LOGGER.debug('in lock action status')
+        return self._requests['lock'].get('status', 'None')
 
   # Requests data
     @property
     def refresh_data(self):
         """Get state of data refresh"""
-        if self._requests.get('vsr', {}).get('id', False):
+        if self._requests.get('refresh', {}).get('id', False):
             return True
 
     @property
@@ -1496,10 +1501,10 @@ class Vehicle:
     def request_results(self):
         """Get last request result."""
         data = {}
-        data['latest'] = self._requests['latest']
-        data['state'] = self._requests['state']
+        data['latest'] = self._requests.get('latest', None)
+        data['state'] = self._requests.get('state', None)
         for section in self._requests:
-            if section in ['departuretimer', 'batterycharge', 'climatisation', 'vsr', 'rlu', 'rs']:
+            if section in ['departuretimer', 'batterycharge', 'climatisation', 'refresh', 'lock', 'preheater']:
                 data[section] = self._requests[section].get('status', 'Unknown')
         return data
 

@@ -77,24 +77,8 @@ class Sensor(Instrument):
         self.unit = unit
         self.convert = False
 
-    def configurate(self, scandinavian_miles=False, imperial_units=False, **config):
-        if self.unit and imperial_units:
-            if "km" == self.unit:
-                self.unit = "mi"
-                self.convert = True
-            elif "km/h" == self.unit:
-                self.unit = "mi/h"
-                self.convert = True
-            elif "l/100 km" == self.unit:
-                self.unit = "gal/100 mi"
-                self.convert = True
-            elif "kWh/100 km" == self.unit:
-                self.unit = "kWh/100 mi"
-                self.convert = True
-            elif "°C" == self.unit:
-                self.unit = "°F"
-                self.convert = True
-        elif self.unit and scandinavian_miles:
+    def configurate(self, miles=False, **config):
+        if self.unit and miles:
             if "km" == self.unit:
                 self.unit = "mi"
                 self.convert = True
@@ -322,10 +306,6 @@ class DoorLock(Instrument):
         return True
 
     @property
-    def attributes(self):
-        return self.vehicle.lock_action_status
-
-    @property
     def str_state(self):
         return "Locked" if self.state else "Unlocked"
 
@@ -342,6 +322,12 @@ class DoorLock(Instrument):
 
     async def unlock(self):
         return await self.vehicle.set_lock('unlock', self.spin)
+
+    @property
+    def attributes(self):
+        return dict(last_result = self.vehicle.lock_action_status)
+
+
 
 
 class TrunkLock(Instrument):
@@ -801,11 +787,6 @@ def create_instruments():
             device_class="light",
             icon="mdi:car-parking-lights"
         ),
-        #BinarySensor(
-        #    attr="climatisation_without_external_power",
-        #    name="Climatisation without external power",
-        #    device_class="power"
-        #),
         BinarySensor(
             attr="door_locked",
             name="Doors locked",
