@@ -54,6 +54,8 @@ class Instrument:
     def state(self):
         if hasattr(self.vehicle, self.attr):
             return getattr(self.vehicle, self.attr)
+        else:
+            _LOGGER.debug(f'Could not find attribute "{self.attr}"')
         return self.vehicle.get_attr(self.attr)
 
     @property
@@ -67,6 +69,7 @@ class Instrument:
             return getattr(self.vehicle, supported)
         else:
             return False
+
 
 class Sensor(Instrument):
     def __init__(self, attr, name, icon, unit):
@@ -138,6 +141,7 @@ class Sensor(Instrument):
             return temp
         else:
             return val
+
 
 class BinarySensor(Instrument):
     def __init__(self, attr, name, device_class, icon='',reverse_state=False):
@@ -288,25 +292,21 @@ class Position(Instrument):
 
     @property
     def state(self):
-        state = super().state or {}
+        state = super().state #or {}
         return (
             state.get("lat", "?"),
             state.get("lng", "?"),
             state.get("timestamp", None),
-            state.get("speed", None),
-            state.get("heading", None),
         )
 
     @property
     def str_state(self):
-        state = super().state or {}
+        state = super().state #or {}
         ts = state.get("timestamp", None)
         return (
             state.get("lat", "?"),
             state.get("lng", "?"),
             str(ts.astimezone(tz=None)) if ts else None,
-            state.get("speed", None),
-            state.get("heading", None),
         )
 
 
@@ -322,6 +322,10 @@ class DoorLock(Instrument):
         return True
 
     @property
+    def attributes(self):
+        return self.vehicle.lock_action_status
+
+    @property
     def str_state(self):
         return "Locked" if self.state else "Unlocked"
 
@@ -334,10 +338,10 @@ class DoorLock(Instrument):
         return self.state
 
     async def lock(self):
-        return await self.vehicle.door_lock(self.spin, 'lock') #lock_car(self.spin)
+        return await self.vehicle.set_lock('lock', self.spin)
 
     async def unlock(self):
-        return await self.vehicle.door_lock(self.spin, 'unlock') #unlock_car(self.spin)
+        return await self.vehicle.set_lock('unlock', self.spin)
 
 
 class TrunkLock(Instrument):
@@ -370,14 +374,15 @@ class TrunkLock(Instrument):
 
 class RequestUpdate(Switch):
     def __init__(self):
-        super().__init__(attr="request_in_progress", name="Request In Progress", icon="mdi:car-connected")
+        super().__init__(attr="refresh_data", name="Force data refresh", icon="mdi:car-connected")
 
     @property
     def state(self):
-        return self.vehicle.request_in_progress
+        return self.vehicle.refresh_data
 
     async def turn_on(self):
-        await self.vehicle.trigger_request_update()
+        await self.vehicle.set_refresh()
+        await self.vehicle.update()
 
     async def turn_off(self):
         pass
@@ -385,6 +390,10 @@ class RequestUpdate(Switch):
     @property
     def assumed_state(self):
         return False
+
+    @property
+    def attributes(self):
+        return dict(last_result = self.vehicle.refresh_action_status)
 
 
 class ElectricClimatisation(Switch):
@@ -396,14 +405,20 @@ class ElectricClimatisation(Switch):
         return self.vehicle.electric_climatisation
 
     async def turn_on(self):
-        await self.vehicle.climatisation('electric')
+        await self.vehicle.set_climatisation('electric')
+        await self.vehicle.update()
 
     async def turn_off(self):
-        await self.vehicle.climatisation('off')
+        await self.vehicle.set_climatisation('off')
+        await self.vehicle.update()
 
     @property
     def assumed_state(self):
         return False
+
+    @property
+    def attributes(self):
+        return dict(last_result = self.vehicle.climater_action_status)
 
 
 class AuxiliaryClimatisation(Switch):
@@ -418,14 +433,20 @@ class AuxiliaryClimatisation(Switch):
         return self.vehicle.auxiliary_climatisation
 
     async def turn_on(self):
-        await self.vehicle.climatisation('auxiliary', spin = self.spin)
+        await self.vehicle.set_climatisation('auxiliary', self.spin)
+        await self.vehicle.update()
 
     async def turn_off(self):
-        await self.vehicle.climatisation('off')
+        await self.vehicle.set_climatisation('off')
+        await self.vehicle.update()
 
     @property
     def assumed_state(self):
         return False
+
+    @property
+    def attributes(self):
+        return dict(last_result = self.vehicle.climater_action_status)
 
 
 class Charging(Switch):
@@ -437,14 +458,20 @@ class Charging(Switch):
         return self.vehicle.charging
 
     async def turn_on(self):
-        await self.vehicle.charger_actions('start')
+        await self.vehicle.set_charger('start')
+        await self.vehicle.update()
 
     async def turn_off(self):
-        await self.vehicle.charger_actions('stop')
+        await self.vehicle.set_charger('stop')
+        await self.vehicle.update()
 
     @property
     def assumed_state(self):
         return False
+
+    @property
+    def attributes(self):
+        return dict(last_result = self.vehicle.charger_action_status)
 
 
 class WindowHeater(Switch):
@@ -456,14 +483,20 @@ class WindowHeater(Switch):
         return self.vehicle.window_heater
 
     async def turn_on(self):
-        await self.vehicle.window_heating('start')
+        await self.vehicle.set_window_heating('start')
+        await self.vehicle.update()
 
     async def turn_off(self):
-        await self.vehicle.window_heating('stop')
+        await self.vehicle.set_window_heating('stop')
+        await self.vehicle.update()
 
     @property
     def assumed_state(self):
         return False
+
+    @property
+    def attributes(self):
+        return dict(last_result = self.vehicle.climater_action_status)
 
 
 class BatteryClimatisation(Switch):
@@ -475,14 +508,20 @@ class BatteryClimatisation(Switch):
         return self.vehicle.climatisation_without_external_power
 
     async def turn_on(self):
-        await self.vehicle.climatisation_wo_HVpower(True)
+        await self.vehicle.set_battery_climatisation(True)
+        await self.vehicle.update()
 
     async def turn_off(self):
-        await self.vehicle.climatisation_wo_HVpower(False)
+        await self.vehicle.set_battery_climatisation(False)
+        await self.vehicle.update()
 
     @property
     def assumed_state(self):
         return False
+
+    @property
+    def attributes(self):
+        return dict(last_result = self.vehicle.climater_action_status)
 
 
 class PHeaterHeating(Switch):
@@ -498,14 +537,20 @@ class PHeaterHeating(Switch):
         return self.vehicle.pheater_heating
 
     async def turn_on(self):
-        await self.vehicle.pheater_climatisation(spin=self.spin, duration=self.duration, mode='heating')
+        await self.vehicle.set_pheater(mode='heating', spin=self.spin)
+        await self.vehicle.update()
 
     async def turn_off(self):
-        await self.vehicle.pheater_climatisation(spin=self.spin, mode='off')
+        await self.vehicle.set_pheater(mode='off', spin=self.spin)
+        await self.vehicle.update()
 
     @property
     def assumed_state(self):
         return False
+
+    @property
+    def attributes(self):
+        return dict(last_result = self.vehicle.pheater_action_status)
 
 
 class PHeaterVentilation(Switch):
@@ -522,13 +567,38 @@ class PHeaterVentilation(Switch):
 
     async def turn_on(self):
         await self.vehicle.pheater_climatisation(spin=self.spin, duration=self.duration, mode='ventilation')
+        await self.vehicle.update()
 
     async def turn_off(self):
         await self.vehicle.pheater_climatisation(spin=self.spin, mode='off')
+        await self.vehicle.update()
 
     @property
     def assumed_state(self):
         return False
+
+    @property
+    def attributes(self):
+        return dict(last_result = self.vehicle.pheater_action_status)
+
+
+class RequestResults(Sensor):
+    def __init__(self):
+        super().__init__(attr="request_results", name="Request results", icon="mdi:chat-alert", unit="")
+
+    @property
+    def state(self):
+        if self.vehicle.request_results.get('state', False):
+            return self.vehicle.request_results.get('state')
+        return 'Unknown'
+
+    @property
+    def assumed_state(self):
+        return False
+
+    @property
+    def attributes(self):
+        return dict(self.vehicle.request_results)
 
 
 def create_instruments():
@@ -546,12 +616,7 @@ def create_instruments():
         #ElectricClimatisationClimate(),
         #CombustionClimatisationClimate(),
         Charging(),
-        Sensor(
-            attr="request_result",
-            name="Request result",
-            icon="mdi:chat-alert",
-            unit="",
-        ),
+        RequestResults(),
         Sensor(
             attr="distance",
             name="Odometer",
@@ -607,7 +672,7 @@ def create_instruments():
             unit="",
         ),
         Sensor(
-            attr="parkingTime",
+            attr="parking_time",
             name="Parking time",
             icon="mdi:clock",
             unit="",
@@ -842,15 +907,15 @@ def create_instruments():
             reverse_state=True
         ),
         BinarySensor(
-            attr="vehicleMoving",
+            attr="vehicle_moving",
             name="Vehicle Moving",
             device_class="moving"
-        )
-        # BinarySensor(
-        #     attr="request_in_progress",
-        #     name="Request in progress",
-        #     device_class="connectivity"
-        # ),
+        ),
+        BinarySensor(
+            attr="request_in_progress",
+            name="Request in progress",
+            device_class="connectivity"
+        ),
     ]
 
 
