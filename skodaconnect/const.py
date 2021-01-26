@@ -6,7 +6,7 @@ CLIENT_ID = '7f045eee-7003-4379-9968-9355ed2adb06%40apps_vw-dilab_com'
 XCLIENT_ID = '28cd30c6-dee7-4529-a0e6-b1e07ff90b79'
 XAPPVERSION = '3.2.6'
 XAPPNAME = 'cz.skodaauto.connect'
-USER_AGENT = 'okhttp/3.7.0'
+USER_AGENT = 'okhttp/3.14.7'
 APP_URI = 'skodaconnect://oidc.login/'
 
 HEADERS_SESSION = {
@@ -22,8 +22,11 @@ HEADERS_SESSION = {
 
 HEADERS_AUTH = {
     'Connection': 'keep-alive',
-    'Accept': 'application/json,text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,\
-        image/apng,*/*;q=0.8,application/signed-exchange;v=b3',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+    'Accept-Encoding': 'gzip, deflate',
+#    'application/json,text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,\
+#        image/apng,*/*;q=0.8,application/signed-exchange;v=b3',
     'Content-Type': 'application/x-www-form-urlencoded',
-    'User-Agent': USER_AGENT
+    'User-Agent': USER_AGENT,
+    'X-App-Name': XAPPNAME
 }

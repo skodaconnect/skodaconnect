@@ -45,14 +45,14 @@ TIMEOUT = timedelta(seconds=30)
 class Connection:
     """ Connection to Skoda connect """
   # Init connection class
-    def __init__(self, session, username, password, guest_lang='en'):
+    def __init__(self, session, username, password, fulldebug = False):
         """ Initialize """
         self._session = session
+        self._session_fulldebug = fulldebug
         self._session_headers = HEADERS_SESSION.copy()
         self._session_base = BASE_SESSION
         self._session_auth_headers = HEADERS_AUTH.copy()
         self._session_auth_base = BASE_AUTH
-        self._session_guest_language_id = guest_lang
 
         self._session_auth_ref_url = BASE_SESSION
         self._session_spin_ref_url = BASE_SESSION
@@ -107,20 +107,18 @@ class Connection:
 
             # Get authorization
             # https://identity.vwgroup.io/oidc/v1/authorize?nonce=yVOPHxDmksgkMo1HDUp6IIeGs9HvWSSWbkhPcxKTGNU&response_type=code id_token token&scope=openid mbb&ui_locales=de&redirect_uri=skodaconnect://oidc.login/&client_id=7f045eee-7003-4379-9968-9355ed2adb06%40apps_vw-dilab_com
-            params = {
-                'nonce': getNonce(),
-                'response_type':  'code id_token token',
-                'scope': 'openid profile address cars email birthdate badge mbb phone driversLicense dealers',
-                'redirect_uri': APP_URI,
-                'client_id': CLIENT_ID
-            }
             req = await self._session.get(
-                url=authorizationEndpoint,
+                url=authorizationEndpoint+\
+                    '?redirect_uri='+APP_URI+\
+                    '&nonce='+getNonce()+\
+                    '&response_type=code id_token token'+\
+                    '&client_id='+CLIENT_ID+\
+                    '&scope=openid mbb profile address cars email birthdate badge phone driversLicense dealers',
                 headers=self._session_auth_headers,
-                params=params
             )
             if req.status != 200:
                 return ""
+            _LOGGER.debug('Got authorization endpoint, logging on.')
             response_data = await req.text()
             responseSoup = BeautifulSoup(response_data, 'html.parser')
             mailform = dict([(t['name'],t['value']) for t in responseSoup.find('form', id='emailPasswordForm').find_all('input', type='hidden')])
@@ -156,7 +154,7 @@ class Connection:
                 data = pwform,
                 allow_redirects=False
             )
-             # Follow all redirects until we get redirected back to "our app"
+            # Follow all redirects until we get redirected back to "our app"
             try:
                 maxDepth = 10
                 ref = req.headers['Location']
@@ -246,7 +244,7 @@ class Connection:
   # HTTP methods to API
     async def _request(self, method, url, **kwargs):
         """Perform a query to the Skoda Connect service"""
-        _LOGGER.debug('Request for %s', url)
+        _LOGGER.debug(f'HTTP {method} "{url}"')
         async with self._session.request(
             method,
             url,
@@ -278,17 +276,26 @@ class Connection:
                 _LOGGER.debug(f'Something went wrong [{response.status}] response: {response}')
                 return res
 
-            _LOGGER.debug(f'Received [{response.status}] response: {res}')
+            if self._session_fulldebug:
+                _LOGGER.debug(f'Request for "{url}" returned with status code [{response.status}], response: {res}')
+            else:
+                _LOGGER.debug(f'Request for "{url}" returned with status code [{response.status}]')
             return res
 
     async def get(self, url, vin=''):
         """Perform a get query to the online service."""
         try:
             return await self._request(METH_GET, self._make_url(url, vin))
-        except aiohttp.client_exceptions.ClientResponseError as err:
-            if err.status == 401:
-                _LOGGER.warning(f'Received "unauthorized" error while fetching data: {err}')
+        except aiohttp.client_exceptions.ClientResponseError as error:
+            if error.status == 401:
+                _LOGGER.warning(f'Received "unauthorized" error while fetching data: {error}')
                 self._session_logged_in = False
+            elif error.status == 400:
+                _LOGGER.error(f'Got HTTP 400 "Bad Request" from VW-Group server, this request might be malformed or not implemented correctly for this vehicle')
+            if error.status == 500:
+                _LOGGER.info('Got HTTP 500 from VW-Group server, service might be temporarily unavailable')
+            if error.status == 502:
+                _LOGGER.info('Got HTTP 502 from VW-Group server, this request might not be supported for this vehicle')
             return {'status': err.status}
 
     async def post(self, url, vin='', **data):
@@ -328,8 +335,9 @@ class Connection:
                 # Get list of vehicles from account
                 _LOGGER.debug('Fetching vehicles associated with account')
                 await self.set_token('vwg')
-                if 'Content-Type' in self._session_headers:
-                    del self._session_headers['Content-Type']
+                #if 'Content-Type' in self._session_headers:
+                #    del self._session_headers['Content-Type']
+                self._session_headers.pop('Content-Type', None)
                 loaded_vehicles = await self.get(
                     url='https://msg.volkswagen.de/fs-car/usermanagement/users/v1/skoda/CZ/vehicles'
                 )
@@ -358,6 +366,7 @@ class Connection:
 
  #### Data collect functions ####
     async def getHomeRegion(self, vin):
+        """Get API requests base url for VIN."""
         try:
             await self.set_token('vwg')
             response = await self.get('https://mal-1a.prd.ece.vwg-connect.com/api/cs/vds/v1/vehicles/$vin/homeRegion', vin)
@@ -380,7 +389,7 @@ class Connection:
                 _LOGGER.warning(f'Could not fetch operation list, HTTP status code: {response.get("status_code")}')
                 data = response
             else:
-                _LOGGER.debug(f'Could not fetch operation list: {response}')
+                _LOGGER.info('Could not fetch operation list: {response}')
                 data = {'error': 'unknown'}
         except Exception as err:
             _LOGGER.warning(f'Could not fetch operation list, error: {err}')
@@ -404,7 +413,7 @@ class Connection:
                 _LOGGER.warning(f'Could not fetch realCarData, HTTP status code: {response.get("status_code")}')
                 data = response
             else:
-                _LOGGER.debug(f'Could not fetch realCarData: {response}')
+                _LOGGER.info('Unhandled error while trying to fetch realcar data')
                 data = {'error': 'unknown'}
         except Exception as err:
             _LOGGER.warning(f'Could not fetch realCarData, error: {err}')
@@ -427,7 +436,7 @@ class Connection:
                 _LOGGER.warning(f'Could not fetch carportdata, HTTP status code: {response.get("status_code")}')
                 data = response
             else:
-                _LOGGER.debug(f'Could not fetch carportData: {response}')
+                _LOGGER.info('Unhandled error while trying to fetch carport data')
                 data = {'error': 'unknown'}
         except Exception as err:
             _LOGGER.warning(f'Could not fetch carportData, error: {err}')
@@ -451,7 +460,7 @@ class Connection:
                 _LOGGER.warning(f'Could not fetch vehicle status report, HTTP status code: {response.get("status_code")}')
                 data = response
             else:
-                _LOGGER.debug(f'Could not fetch vehicle status report: {response}')
+                _LOGGER.info('Unhandled error while trying to fetch status data')
                 data = {'error': 'unknown'}
         except Exception as err:
             _LOGGER.warning(f'Could not fetch StoredVehicleDataResponse, error: {err}')
@@ -472,7 +481,7 @@ class Connection:
                 _LOGGER.warning(f'Could not fetch trip statistics, HTTP status code: {response.get("status_code")}')
                 data = response
             else:
-                _LOGGER.debug(f'Could not fetch trip statistics: {response}')
+                _LOGGER.info(f'Unhandled error while trying to fetch trip statistics')
                 data = {'error': 'unknown'}
         except Exception as err:
             _LOGGER.warning(f'Could not fetch trip statistics, error: {err}')
@@ -503,7 +512,7 @@ class Connection:
                     _LOGGER.warning(f'Could not fetch position, HTTP status code: {response.get("status_code")}')
                     data = response
             else:
-                _LOGGER.debug(f'Could not fetch position: {response}')
+                _LOGGER.info('Unhandled error while trying to fetch positional data')
                 data = {'error': 'unknown'}
         except Exception as err:
             _LOGGER.warning(f'Could not fetch position, error: {err}')
@@ -524,7 +533,7 @@ class Connection:
                 _LOGGER.warning(f'Could not fetch timers, HTTP status code: {response.get("status_code")}')
                 data = response
             else:
-                _LOGGER.debug('Unknown error while trying to fetch timers')
+                _LOGGER.info('Unknown error while trying to fetch data for departure timers')
                 data = {'error': 'unknown'}
         except Exception as err:
             _LOGGER.warning(f'Could not fetch timers, error: {err}')
@@ -545,7 +554,7 @@ class Connection:
                 _LOGGER.warning(f'Could not fetch climatisation, HTTP status code: {response.get("status_code")}')
                 data = response
             else:
-                _LOGGER.warning('Unknown error while trying to fetch climatisation')
+                _LOGGER.info('Unhandled error while trying to fetch climatisation data')
                 data = {'error': 'unknown'}
         except Exception as err:
             _LOGGER.warning(f'Could not fetch climatisation, error: {err}')
@@ -566,7 +575,7 @@ class Connection:
                 _LOGGER.warning(f'Could not fetch pre-heating, HTTP status code: {response.get("status_code")}')
                 data = response
             else:
-                _LOGGER.warning('Unknown error while trying to fetch pre-heating')
+                _LOGGER.info('Unhandled error while trying to fetch charger data')
                 data = {'error': 'unknown'}
         except Exception as err:
             _LOGGER.warning(f'Could not fetch charger, error: {err}')
@@ -574,7 +583,7 @@ class Connection:
         return data
 
     async def getPreHeater(self, vin):
-        """Get aux heater data."""
+        """Get parking heater data."""
         try:
             await self.set_token('vwg')
             response = await self.get(
@@ -587,154 +596,258 @@ class Connection:
                 _LOGGER.warning(f'Could not fetch pre-heating, HTTP status code: {response.get("status_code")}')
                 data = response
             else:
-                _LOGGER.warning('Unknown error while trying to fetch pre-heating')
+                _LOGGER.info('Unhandled error while trying to fetch pre-heating data')
                 data = {'error': 'unknown'}
         except Exception as err:
             _LOGGER.warning(f'Could not fetch pre-heating, error: {err}')
             data = {'error': 'unknown'}
         return data
 
+    async def get_request_status(self, vin, sectionId, requestId):
+        """Return status of a request ID for a given section ID."""
+        if self.logged_in == False:
+            if not await self._login():
+                _LOGGER.warning('Login to Skoda Connect failed!')
+                raise Exception('Login failed')
+        try:
+            if not await self.validate_tokens:
+                _LOGGER.info('Session has expired. Initiating new login to Skoda Connect.')
+                if not await self._login():
+                    _LOGGER.warning('Login to Skoda Connect failed!')
+                    raise Exception('Login failed')
+            await self.set_token('vwg')
+            if sectionId == 'climatisation':
+                url = 'fs-car/bs/$sectionId/v1/Skoda/CZ/vehicles/$vin/climater/actions/$requestId'
+            elif sectionId == 'batterycharge':
+                url = 'fs-car/bs/$sectionId/v1/Skoda/CZ/vehicles/$vin/charger/actions/$requestId'
+            elif sectionId == 'departuretimer':
+                url = 'fs-car/bs/$sectionId/v1/Skoda/CZ/vehicles/$vin/timer/actions/$requestId'
+            elif sectionId == 'vsr':
+                url = 'fs-car/bs/$sectionId/v1/Skoda/CZ/vehicles/$vin/requests/$requestId/jobstatus'
+            else:
+                url = 'fs-car/bs/$sectionId/v1/Skoda/CZ/vehicles/$vin/requests/$requestId/status'
+            url = re.sub('\$sectionId', sectionId, url)
+            url = re.sub('\$requestId', requestId, url)
+
+            response = await self.get(url, vin)
+            # Pre-heater, ???
+            if response.get('requestStatusResponse', {}).get('status', False):
+                result = response.get('requestStatusResponse', {}).get('status', False)
+            # For electric charging, climatisation and departure timers
+            elif response.get('action', {}).get('actionState', False):
+                result = response.get('action', {}).get('actionState', False)
+            else:
+                result = 'Unknown'
+            # Translate status messages to meaningful info
+            if result == 'request_in_progress' or result == 'queued' or result == 'fetched':
+                status = 'In progress'
+            elif result == 'request_fail' or result == 'failed':
+                status = 'Failed'
+            elif result == 'unfetched':
+                status = 'No response'
+            elif result == 'request_successful' or result == 'succeeded':
+                status = 'Success'
+            else:
+                status = result
+            return status
+        except Exception as error:
+            _LOGGER.warning(f'Failure during get request status: {error}')
+            raise Exception(f'Failure during get request status: {error}')
+
+    async def get_sec_token(self, vin, spin, action):
+        """Get a security token, required for certain set functions."""
+        urls = {
+            'lock':    '/api/rolesrights/authorization/v2/vehicles/$vin/services/rlu_v1/operations/LOCK/security-pin-auth-requested',
+            'unlock':  '/api/rolesrights/authorization/v2/vehicles/$vin/services/rlu_v1/operations/UNLOCK/security-pin-auth-requested',
+            'heating': '/api/rolesrights/authorization/v2/vehicles/$vin/services/rheating_v1/operations/P_QSACT/security-pin-auth-requested',
+            'timer':   '/api/rolesrights/authorization/v2/vehicles/$vin/services/timerprogramming_v1/operations/P_SETTINGS_AU/security-pin-auth-requested',
+            'rclima':  '/api/rolesrights/authorization/v2/vehicles/$vin/services/rclima_v1/operations/P_START_CLIMA_AU/security-pin-auth-requested'
+        }
+        if not spin:
+            raise Exception('SPIN is required')
+        try:
+            if not urls.get(action, False):
+                raise Exception(f'Security token for "{action}" is not implemented')
+            response = await self.get(self._make_url(urls.get(action), vin = vin))
+            secToken = response['securityPinAuthInfo']['securityToken']
+            challenge = response['securityPinAuthInfo']['securityPinTransmission']['challenge']
+            spinHash = self.hash_spin(challenge, spin)
+            #body = "{ \"securityPinAuthentication\": { \"securityPin\": { \"challenge\": \""+challenge+"\", \"securityPinHash\": \""+securpin+"\" }, \"securityToken\": \""+secToken+"\" }}"
+            body = {
+                'securityPinAuthentication': {
+                    'securityPin': {
+                        'challenge': challenge,
+                        'securityPinHash': spinHash
+                    },
+                    'securityToken': secToken
+                }
+            }
+
+            self._session_headers['Content-Type'] = 'application/json'
+            response = await self.post(self._make_url('/api/rolesrights/authorization/v2/security-pin-auth-completed', vin = vin), json = body)
+            #del self._session_headers['Content-Type']
+            self._session_headers.pop('Content-Type', None)
+            if response.get('securityToken', False):
+                return response['securityToken']
+            else:
+                _LOGGER.warning('Did not receive a valid security token')
+                raise Exception('Did not receive a valid security token')
+        except Exception as error:
+            _LOGGER.error(f'Could not generate security token (maybe wrong SPIN?), error: {error}')
+
  #### Data set functions ####
     async def dataCall(self, query, vin='', **data):
         """Function to execute actions through Skoda Connect servers."""
         if self.logged_in == False:
-            _LOGGER.debug
             if not await self._login():
                 _LOGGER.warning('Login to Skoda Connect failed!')
-                return False
+                raise Exception('Login failed')
         try:
             if not await self.validate_tokens:
                 _LOGGER.info('Session has expired. Initiating new login to Skoda Connect.')
                 if not await self._login():
                     _LOGGER.warning('Login to Skoda Connect failed!')
                     raise Exception('Login failed')
-            await self.set_token('vwg')
-            return await self.post(query, vin=vin, **data)
+            response = await self.post(query, vin=vin, **data)
+            _LOGGER.debug(f'Data call returned: {response}')
+            return response
         except Exception as error:
-            self._request_result = 'Failed to execute'
-            self._request_in_progress = False
             _LOGGER.warning(f'Failure to execute: {error}')
+            raise Exception(f'Failure to execute: {error}')
+
+    async def setRefresh(self, vin):
+        """"Force vehicle data update."""
+        try:
+            await self.set_token('vwg')
+            response = await self.dataCall('fs-car/bs/vsr/v1/skoda/CZ/vehicles/$vin/requests', vin, data=None)
+            if not response:
+                _LOGGER.warning(f'Failed to execute data refresh')
+                raise Exception(f'Failed to execute data refresh')
+            else:
+                request_id = response.get('CurrentVehicleDataResponse', {}).get('requestId', 0)
+                request_state = response.get('CurrentVehicleDataResponse', {}).get('requestState', 'queued')
+                remaining = response.get('rate_limit_remaining', -1)
+                _LOGGER.debug(f'Request to refresh data returned with state "{request_state}", request id: {request_id}, remaining requests: {remaining}')
+                return dict({'id': str(request_id), 'state': request_state, 'rate_limit_remaining': remaining})
+        except Exception as error:
+            _LOGGER.warning(f'Data refresh failed - {error}')
+            raise Exception(f'Data refresh failed - {error}')
+
+    async def setCharger(self, vin, data):
+        """Start/Stop charger."""
+        try:
+            await self.set_token('vwg')
+            response = await self.dataCall('fs-car/bs/batterycharge/v1/Skoda/CZ/vehicles/$vin/charger/actions', vin, json = data)
+            if not response:
+                _LOGGER.warning('Failed to execute charger action.')
+                return False
+            else:
+                request_id = response.get('action', {}).get('actionId', 0)
+                request_state = response.get('action', {}).get('actionState', 'unknown')
+                remaining = response.get('rate_limit_remaining', -1)
+                _LOGGER.debug(f'Request for charger action returned with state "{request_state}", request id: {request_id}, remaining requests: {remaining}')
+                return dict({'id': str(request_id), 'state': request_state, 'rate_limit_remaining': remaining})
+        except Exception as error:
+            _LOGGER.warning(f'Failed to execute charger action - {error}')
         return False
 
-    async def requestStatus(self, requestId, sectionId, retryCount=36):
-        """Wait until action request is completed."""
-        retryCount -= 1
-        if (retryCount == 0):
-            _LOGGER.warning(f'Timeout while waiting for result of {requestId}.')
-            return {'status': 'Timeout'}
-        if self.logged_in == False:
-            _LOGGER.debug
-            if not await self._login():
-                _LOGGER.warning('Login to Skoda Connect failed!')
-                return False
+    async def setClimater(self, vin, data, spin):
+        """Execute climatisation actions."""
         try:
-            if not await self.validate_tokens:
-                _LOGGER.info('Session has expired. Initiating new login to Skoda Connect.')
-                if not await self._login():
-                    _LOGGER.warning('Login to Skoda Connect failed!')
-                    raise Exception('Login failed')
             await self.set_token('vwg')
-
-            #if sectionId == 'climatisation':
-            #    url = "fs-car/bs/$sectionId/v1/Skoda/CZ/vehicles/$vin/climater/actions/$requestId"
-            #elif sectionId == 'batterycharge':
-            #    url = "fs-car/bs/$sectionId/v1/Skoda/CZ/vehicles/$vin/charger/actions/$requestId"
-            #elif sectionId == 'departuretimer':
-            #    url = "fs-car/bs/$sectionId/v1/Skoda/CZ/vehicles/$vin/timer/actions/$requestId"
-            #elif sectionId == 'vsr':
-            #    url = "fs-car/bs/$sectionId/v1/Skoda/CZ/vehicles/$vin/requests/$requestId/jobstatus"
-            #else:
-            #    url = "fs-car/bs/$sectionId/v1/Skoda/CZ/vehicles/$vin/requests/$requestId/status"
-            #url = re.sub("\$sectionId", sectionId, url)
-            #url = re.sub("\$requestId", requestId, url)
-
-            res = await self.get(url)
-            # VSR refresh, parking heater and lock/unlock
-            if res.get('requestStatusResponse', {}).get('status', False):
-                result = res.get('requestStatusResponse', {}).get('status', False)
-                if result == 'request_in_progress':
-                    self._request_result = 'In progress'
-                    _LOGGER.debug(f'Request {requestId}, sectionId {sectionId} still in progress, sleeping for 5 seconds and check status again...')
-                    time.sleep(5)
-                    return await self.getRequestProgressStatus(requestId, sectionId, retryCount)
-                elif result == 'request_fail':
-                    self._request_result = 'Failed'
-                    self._request_in_progress = False
-                    error = res.get('requestStatusResponse', {}).get('error', None)
-                    _LOGGER.warning(f'Request {requestId}, sectionId {sectionId} failed, error: {error}.')
-                    return False
-                elif result == 'unfetched':
-                    self._request_result = 'No response'
-                    self._request_in_progress = False
-                    error = res.get('requestStatusResponse', {}).get('error', None)
-                    _LOGGER.warning(f'Request {requestId}, sectionId {sectionId} failed, error: {error}.')
-                    return False
-                elif result == 'request_successful':
-                    self._request_result = 'Success'
-                    self._request_in_progress = False
-                    _LOGGER.debug(f'Request was successful, result: {result}')
-                    return True
-                else:
-                    self._request_result = result
-                    self._request_in_progress = False
-                    _LOGGER.debug(f'Request result: {result}')
-                    return True
-            # For electric charging, climatisation and departure timers
-            elif res.get('action', {}).get('actionState', False):
-                result=res.get('action', {}).get('actionState', False)
-                if result == 'queued' or result == 'fetched':
-                    self._request_result = 'In progress'
-                    _LOGGER.debug(f'Request {requestId}, sectionId {sectionId} still in progress, sleeping for 5 seconds and check status again...')
-                    time.sleep(5)
-                    return await self.getRequestProgressStatus(requestId, sectionId, retryCount)
-                elif result == 'failed':
-                    self._request_result = 'Failed'
-                    self._request_in_progress = False
-                    error = res.get('action', {}).get('errorCode', None)
-                    _LOGGER.warning(f'Request {requestId}, sectionId {sectionId} failed, error: {error}.')
-                elif result == 'unfetched':
-                    self._request_result = 'No response'
-                    self._request_in_progress = False
-                    error = res.get('requestStatusResponse', {}).get('error', None)
-                    _LOGGER.warning(f'Request {requestId}, sectionId {sectionId} failed, error: {error}.')
-                    return False
-                elif result == 'succeeded':
-                    self._request_result = 'Success'
-                    self._request_in_progress = False
-                    _LOGGER.debug(f'Request was successful, result: {result}')
-                else:
-                    self._request_result = result
-                    self._request_in_progress = False
-                    _LOGGER.debug(f'Request result: {result}')
-                    return True
+            # Only get security token if auxiliary heater is to be started
+            if data.get('action', {}).get('settings', {}).get('heaterSource', None) == 'auxiliary':
+                self._session_headers['X-securityToken'] = await self.get_sec_token(vin = vin, spin = spin, action = 'rclima')
+            response = await self.dataCall('fs-car/bs/climatisation/v1/Skoda/CZ/vehicles/$vin/climater/actions', vin, json = data)
+            #if 'X-securityToken' in self._session_headers: del self._session_headers['X-securityToken']
+            self._session_headers.pop('X-securityToken', None)
+            if not response:
+                _LOGGER.warning('Failed to execute climater action')
+                return False
             else:
-                self._request_result = 'Unknown'
-                self._request_in_progress = False
-                _LOGGER.warning(f'Incorrect response for status response for request={requestId}, section={sectionId}, response is:{str(res)}')
-                return
+                request_id = response.get('action', {}).get('actionId', 0)
+                request_state = response.get('action', {}).get('actionState', 'unknown')
+                remaining = response.get('rate_limit_remaining', -1)
+                _LOGGER.debug(f'Request for climater action returned with state "{request_state}", request id: {request_id}, remaining requests: {remaining}')
+                return dict({'id': str(request_id), 'state': request_state, 'rate_limit_remaining': remaining})
         except Exception as error:
-            self._request_result = 'Task exception'
-            self._request_in_progress = False
-            _LOGGER.warning(f'Failure during get request progress status: {error}')
-            return
+            _LOGGER.error(f'Failed to execute climater action - {error}')
+            #if 'X-securityToken' in self._session_headers: del self._session_headers['X-securityToken']
+            self._session_headers.pop('X-securityToken', None)
+        #if 'X-securityToken' in self._session_headers: del self._session_headers['X-securityToken']
+        self._session_headers.pop('X-securityToken', None)
+        return False
 
-    async def set_charger(self, vin, action):
-        """Start/Stop charger."""
-        if action in ['start', 'stop']:
-            try:
-                data = {'action': {'type': action}}
-                response = await self.dataCall('fs-car/bs/batterycharge/v1/Skoda/CZ/vehicles/$vin/charger/actions', vin, json=data)
-                if not response:
-                    _LOGGER.warning(f'Failed to {action} charging.')
-                    return False
-                else:
-                    messageId = response.get('action', {}).get('actionId', '---')
-                    _LOGGER.debug(f'Request to {action} charging queued with action id: {messageId}')
-                    return response
-            except Exception as error:
-                _LOGGER.warning(f'Failed to {action} charging - %s' % error)
-        else:
-            _LOGGER.error(f'Invalid charger action: {action}. Must be either start or stop')
+    async def setPreHeater(self, vin, data, spin):
+        """Petrol/diesel parking heater actions."""
+        try:
+            await self.set_token('vwg')
+            if 'Content-Type' in self._session_headers:
+                contType = self._session_headers['Content-Type']
+            else:
+                contType = ''
+            self._session_headers['Content-Type'] = 'application/vnd.vwg.mbb.RemoteStandheizung_v2_0_2+json'
+            self._session_headers['x-mbbSecToken'] = await self.get_sec_token(vin = vin, spin = spin, action = 'heating')
+            response = await self.dataCall('fs-car/bs/rs/v1/skoda/CZ/vehicles/$vin/action', vin, data = data)
+            # Clean up headers
+            #if 'x-mbbSecToken' in self._session_headers: del self._session_headers['x-mbbSecToken']
+            #if 'Content-Type' in self._session_headers: del self._session_headers['Content-Type']
+            self._session_headers.pop('x-mbbSecToken', None)
+            self._session_headers.pop('Content-Type', None)
+            if contType: self._session_headers['Content-Type'] = contType
+
+            if not response:
+                _LOGGER.warning('Failed to execute parking heater action.')
+                return False
+            else:
+                request_id = response.get('performActionResponse', {}).get('requestId', 0)
+                request_state = response.get('performActionResponse', {}).get('requestState', 'unknown')
+                remaining = response.get('rate_limit_remaining', -1)
+                _LOGGER.debug(f'Request for parking heater returned with state "{request_state}", request id: {request_id}, remaining requests: {remaining}')
+                return dict({'id': str(request_id), 'state': request_state, 'rate_limit_remaining': remaining})
+        except Exception as error:
+            _LOGGER.warning(f'Failed to execute parking heater action - {error}')
+        #if 'x-mbbSecToken' in self._session_headers: del self._session_headers['x-mbbSecToken']
+        #if 'Content-Type' in self._session_headers: del self._session_headers['Content-Type']
+        self._session_headers.pop('x-mbbSecToken', None)
+        self._session_headers.pop('Content-Type', None)
+        if contType: self._session_headers['Content-Type'] = contType
+        return False
+
+    async def setLock(self, vin, data, spin):
+        """Remote lock and unlock actions."""
+        try:
+            await self.set_token('vwg')
+            # Prepare data, headers and fetch security token
+            if 'Content-Type' in self._session_headers:
+                contType = self._session_headers['Content-Type']
+            else:
+                contType = ''
+            self._session_headers['X-mbbSecToken'] = await self.get_sec_token(vin = vin, spin = spin, action = 'lock')
+            self._session_headers['Content-Type'] = 'application/vnd.vwg.mbb.RemoteLockUnlock_v1_0_0+xml'
+            response = await self.dataCall('fs-car/bs/rlu/v1/skoda/CZ/vehicles/$vin/actions', vin, data = data)
+            # Clean up headers
+            #if 'X-mbbSecToken' in self._session_headers: del self._session_headers['X-mbbSecToken']
+            #if 'Content-Type' in self._session_headers: del self._session_headers['Content-Type']
+            self._session_headers.pop('X-mbbSecToken', None)
+            self._session_headers.pop('Content-Type', None)
+            if contType: self._session_headers['Content-Type'] = contType
+            if not response:
+                _LOGGER.warning('Failed to execute lock action.')
+                return False
+            else:
+                request_id = response.get('rluActionResponse', {}).get('requestId', 0)
+                request_state = response.get('rluActionResponse', {}).get('requestId', 'unknown')
+                remaining = response.get('rate_limit_remaining', -1)
+                _LOGGER.debug(f'Request for lock action returned with state "{request_state}", request id: {request_id}, remaining requests: {remaining}')
+                return dict({'id': str(request_id), 'state': request_state, 'rate_limit_remaining': remaining})
+        except Exception as error:
+            _LOGGER.error(f'Failed to execute lock action - {error}')
+        #if 'X-mbbSecToken' in self._session_headers: del self._session_headers['X-mbbSecToken']
+        #if 'Content-Type' in self._session_headers: del self._session_headers['Content-Type']
+        self._session_headers.pop('X-mbbSecToken', None)
+        self._session_headers.pop('Content-Type', None)
+        if contType: self._session_headers['Content-Type'] = contType
         return False
 
  #### Token handling ####
@@ -888,6 +1001,13 @@ class Connection:
                 if vehicle.unique_id.lower() == vin.lower()
             ), None
         )
+
+    def hash_spin(self, challenge, spin):
+        """Convert SPIN and challenge to hash."""
+        spinArray = bytearray.fromhex(spin);
+        byteChallenge = bytearray.fromhex(challenge);
+        spinArray.extend(byteChallenge)
+        return hashlib.sha512(spinArray).hexdigest()
 
 async def main():
     """Main method."""

@@ -7,7 +7,7 @@ import logging
 import asyncio
 import hashlib
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from json import dumps as to_json
 from collections import OrderedDict
 from skodaconnect.utilities import find_path, is_valid_path
@@ -20,9 +20,18 @@ class Vehicle:
         self._connection = conn
         self._url = url
         self._homeregion = 'https://msg.volkswagen.de'
-        self._requests_remaining = -1
-        self._request_in_progress = False
-        self._request_result = 'None'
+        self._requests = {
+            'departuretimer': {'status': None, 'timestamp': datetime.now()},
+            'batterycharge': {'status': None, 'timestamp': datetime.now()},
+            'climatisation': {'status': None, 'timestamp': datetime.now()},
+            'vsr': {'status': None, 'timestamp': datetime.now()},
+            'rlu': {'status': None, 'timestamp': datetime.now()},
+            'rs': {'status': None, 'timestamp': datetime.now()},
+            'remaining': -1,
+            'latest': None,
+            'state': None
+        }
+
         self._climate_duration = 30
         self._services = {
             'preheater': True,
@@ -31,12 +40,12 @@ class Vehicle:
         }
         self._states = {}
 
- #### API functions, parent class ####
-  # Base methods
+ #### API get and set functions ####
+  # Init and update vehicle data
     async def discover(self):
         """Discover vehicle and initial data."""
-        homeregion = await self._connection.getHomeRegion(self._url)
-        _LOGGER.debug('Get homeregion for VIN: %s' % self._url)
+        homeregion = await self._connection.getHomeRegion(self.vin)
+        _LOGGER.debug(f'Get homeregion for VIN {self.vin}')
         if homeregion:
             self._homeregion = homeregion
 
@@ -45,11 +54,10 @@ class Vehicle:
             self.get_realcardata(),
             return_exceptions=True
         )
-        _LOGGER.info(f'Vehicle {self._url} added from Skoda Connect. Homeregion is "{self._homeregion}"')
-        _LOGGER.debug('States are now: %s' % self._states)
+        _LOGGER.info(f'Vehicle {self.vin} added from Skoda Connect. Homeregion is "{self._homeregion}"')
 
         _LOGGER.debug('Attempting discovery of supported API endpoints for vehicle.')
-        operationList = await self._connection.getOperationList(self._url)
+        operationList = await self._connection.getOperationList(self.vin)
         if operationList:
             serviceInfo = operationList['serviceInfo']
             for service in serviceInfo:
@@ -66,7 +74,7 @@ class Vehicle:
                             self._services.update(dict(data))
                 except:
                     pass
-            _LOGGER.debug('Enabled API endpoints and operations: %s' % self._services)
+            _LOGGER.debug(f'Enabled API endpoints: {self._services.keys()}')
             # Disable fetching of pre-heater if aux heater is available
             if self._services.get('rclima_v1', False):
                 functions = self._services.get('rclima_v1', {}).get('operation', {})
@@ -75,279 +83,369 @@ class Vehicle:
                         _LOGGER.debug('New style auxiliary heater available, disabling old style pre-heater.')
                         self._services['preheater'] = False
         else:
-            _LOGGER.info('Could not determine available API endpoints for %s' % self._url)
+            _LOGGER.warning(f'Could not determine available API endpoints for {self.vin}, enableing all services')
+
 
     async def update(self):
         """Try to fetch data for all known API endpoints."""
         await asyncio.gather(
             self.get_preheater(),
-            self.get_rclima_v1(),
-            self.get_trip_statistic_v1(),
-            self.get_carfinder_v1(),
-            self.get_statusreport_v1(),
-            self.get_rbatterycharge_v1(),
-            self.get_timerprogramming_v1(),
+            self.get_climater(),
+            self.get_trip_statistic(),
+            self.get_position(),
+            self.get_statusreport(),
+            self.get_charger(),
+            self.get_timerprogramming(),
             return_exceptions=True
         )
 
-  # Data collection methods
+  # Data collection functions
     async def get_realcardata(self):
         """Fetch realcar data."""
-        data = await self._connection.getRealCarData(self._url)
+        data = await self._connection.getRealCarData(self.vin)
         if data:
             self._states.update(data)
 
     async def get_carportdata(self):
         """Fetch carport data."""
-        data = await self._connection.getCarportData(self._url)
+        data = await self._connection.getCarportData(self.vin)
         if data:
             self._states.update(data)
 
     async def get_preheater(self):
         """Fetch pre-heater data if function is enabled."""
         if self._services.get('preheater', False):
-            data = await self._connection.getPreHeater(self._url)
+            data = await self._connection.getPreHeater(self.vin)
             if data:
                 await self._states.update(data)
             else:
                 _LOGGER.debug('Could not fetch pre-heater data')
 
-    async def get_rclima_v1(self):
+    async def get_climater(self):
         """Fetch climater data if function is enabled."""
         if self._services.get('rclima_v1', False):
-            data = await self._connection.getClimater(self._url)
+            data = await self._connection.getClimater(self.vin)
             if data:
                 await self._states.update(data)
             else:
                 _LOGGER.debug('Could not fetch climater data')
 
-    async def get_trip_statistic_v1(self):
+    async def get_trip_statistic(self):
         """Fetch trip data if function is enabled."""
         if self._services.get('trip_statistic_v1', False):
-            data = await self._connection.getTripStatistics(self._url)
+            data = await self._connection.getTripStatistics(self.vin)
             if data:
                 await self._states.update(data)
             else:
                 _LOGGER.debug('Could not fetch trip statistics')
 
-    async def get_carfinder_v1(self):
+    async def get_position(self):
         """Fetch position data if function is enabled."""
         if self._services.get('carfinder_v1', False):
-            data = await self._connection.getPosition(self._url)
+            data = await self._connection.getPosition(self.vin)
             if data:
                 await self._states.update(data)
             else:
                 _LOGGER.debug('Could not fetch any positional data')
 
-    async def get_statusreport_v1(self):
+    async def get_statusreport(self):
         """Fetch status data if function is enabled."""
         if self._services.get('statusreport_v1', False):
-            data = await self._connection.getVehicleStatusData(self._url)
+            data = await self._connection.getVehicleStatusData(self.vin)
             if data:
                 await self._states.update(data)
             else:
                 _LOGGER.debug('Could not fetch status report')
 
-    async def get_rbatterycharge_v1(self):
+    async def get_charger(self):
         """Fetch charger data if function is enabled."""
         if self._services.get('rbatterycharge_v1', False):
-            data = await self._connection.getCharger(self._url)
+            data = await self._connection.getCharger(self.vin)
             if data:
                 await self._states.update(data)
             else:
                 _LOGGER.debug('Could not fetch charger data')
 
-    async def get_timerprogramming_v1(self):
+    async def get_timerprogramming(self):
         """Fetch timer data if function is enabled."""
         if self._services.get('timerprogramming_v1', False):
-            data = await self._connection.getTimers(self._url)
+            data = await self._connection.getTimers(self.vin)
             if data:
                 await self._states.update(data)
             else:
                 _LOGGER.debug('Could not fetch timers')
 
-  # GET/POST through connection
-    async def get(self, query):
-        """Perform a query to the online service."""
-        req = await self._connection.get(query, self._url)
-        return req
-
-    async def post(self, query, **data):
-        """Perform a query to the online service."""
-        req = await self._connection.post(query, self._url, **data)
-        # Get the number of requests left to throttled:
-        if req.get("rate_limit_remaining", False):
-            self._requests_remaining = int(req.get("rate_limit_remaining", -1))
-        return req
-
-  # Request handling
-    async def call(self, query, **data):
-        """Make remote method call."""
-        try:
-            if not await self._connection.validate_tokens:
-                _LOGGER.info('Session has expired. Initiating new login to Skoda Connect.')
-                await self._connection._login()
-
-            self._request_result = 'In queue'
-            self._request_in_progress = True
-            await self._connection.set_token('vwg')
-            res = await self.post(query, **data)
-            # Parking heater actions
-            if res.get('performActionResponse', {}).get('requestId', False):
-                _LOGGER.info('Message delivered, requestId=%s', res.get('performActionResponse', {}).get('requestId', 0))
-                return str(res.get('performActionResponse', {}).get('requestId', False))
-            # Electric climatisation, charger and departuretimer
-            elif res.get('action', {}).get('actionId', False):
-                _LOGGER.info('Message delivered, actionId=%s', res.get('action', {}).get('actionId', 0))
-                return str(res.get('action', {}).get('actionId', False))
-            # Status refresh actions
-            elif res.get('CurrentVehicleDataResponse', {}).get('requestId', False):
-                _LOGGER.info('Message delivered, requestId=%s', res.get('CurrentVehicleDataResponse', {}).get('requestId', 0))
-                return str(res.get('CurrentVehicleDataResponse', {}).get('requestId', False))
-            # Car lock/unlock action
-            elif res.get('rluActionResponse', {}).get('requestId', False):
-                _LOGGER.info('Message delivered, requestId=%s', res.get('rluActionResponse', {}).get('requestId', 0))
-                return str(res.get('rluActionResponse', {}).get('requestId', False))
-            # Climatisation action
-            elif res.get('climatisationActionResponse', {}).get('requestId', False):
-                _LOGGER.info('Message delivered, requestId=%s', res.get('climatisationActionResponse', {}).get('requestId', 0))
-                return str(res.get('climatisationActionResponse', {}).get('requestId', False))
-            else:
-                _LOGGER.warning(f'Failed to execute {query}, response is:{str(res)}')
-                self._request_in_progress = False
-                return
-
-        except Exception as error:
-            self._request_result = 'Failed to execute'
-            self._request_in_progress = False
-            _LOGGER.warning(f'Failure to execute: {error}')
-
-    async def getRequestProgressStatus(self, requestId, sectionId, retryCount=36):
-        #retry count means that after 36x5seconds=3 minutes it will give up and not wait for status
+    async def wait_for_request(self, section, request, retryCount=36):
+        """Update status of outstanding requests."""
         retryCount -= 1
+        self._requests['latest'] = section
         if (retryCount == 0):
-            _LOGGER.warning(f'Timeout of waiting for result of {requestId} in section {sectionId}. It doesnt mean it wasnt success...')
-            self._request_result = 'Timeout'
-            self._request_in_progress = False
-            return
-
+            _LOGGER.info(f'Timeout while waiting for result of {requestId}.')
+            return 'Timeout'
         try:
-            if not await self._connection.validate_tokens:
-                _LOGGER.info('Session has expired. Initiating new login to Skoda Connect.')
-                await self._connection._login()
-
-            if sectionId == 'climatisation':
-                url = "fs-car/bs/$sectionId/v1/Skoda/CZ/vehicles/$vin/climater/actions/$requestId"
-            elif sectionId == 'batterycharge':
-                url = "fs-car/bs/$sectionId/v1/Skoda/CZ/vehicles/$vin/charger/actions/$requestId"
-            elif sectionId == 'departuretimer':
-                url = "fs-car/bs/$sectionId/v1/Skoda/CZ/vehicles/$vin/timer/actions/$requestId"
-            elif sectionId == 'vsr':
-                url = "fs-car/bs/$sectionId/v1/Skoda/CZ/vehicles/$vin/requests/$requestId/jobstatus"
+            status = await self._connection.get_request_status(self.vin, section, request)
+            _LOGGER.debug(f'Request ID {request}: {status}')
+            if status == 'In progress':
+                time.sleep(5)
+                return await self.wait_for_request(section, request)
             else:
-                url = "fs-car/bs/$sectionId/v1/Skoda/CZ/vehicles/$vin/requests/$requestId/status"
-            url = re.sub("\$sectionId", sectionId, url)
-            url = re.sub("\$requestId", requestId, url)
-
-            res = await self.get(url)
-            # VSR refresh, parking heater and lock/unlock
-            if res.get('requestStatusResponse', {}).get('status', False):
-                result = res.get('requestStatusResponse', {}).get('status', False)
-                if result == 'request_in_progress':
-                    self._request_result = 'In progress'
-                    _LOGGER.debug(f'Request {requestId}, sectionId {sectionId} still in progress, sleeping for 5 seconds and check status again...')
-                    time.sleep(5)
-                    return await self.getRequestProgressStatus(requestId, sectionId, retryCount)
-                elif result == 'request_fail':
-                    self._request_result = 'Failed'
-                    self._request_in_progress = False
-                    error = res.get('requestStatusResponse', {}).get('error', None)
-                    _LOGGER.warning(f'Request {requestId}, sectionId {sectionId} failed, error: {error}.')
-                    return False
-                elif result == 'unfetched':
-                    self._request_result = 'No response'
-                    self._request_in_progress = False
-                    error = res.get('requestStatusResponse', {}).get('error', None)
-                    _LOGGER.warning(f'Request {requestId}, sectionId {sectionId} failed, error: {error}.')
-                    return False
-                elif result == 'request_successful':
-                    self._request_result = 'Success'
-                    self._request_in_progress = False
-                    _LOGGER.debug(f'Request was successful, result: {result}')
-                    return True
-                else:
-                    self._request_result = result
-                    self._request_in_progress = False
-                    _LOGGER.debug(f'Request result: {result}')
-                    return True
-            # For electric charging, climatisation and departure timers
-            elif res.get('action', {}).get('actionState', False):
-                result=res.get('action', {}).get('actionState', False)
-                if result == 'queued' or result == 'fetched':
-                    self._request_result = 'In progress'
-                    _LOGGER.debug(f'Request {requestId}, sectionId {sectionId} still in progress, sleeping for 5 seconds and check status again...')
-                    time.sleep(5)
-                    return await self.getRequestProgressStatus(requestId, sectionId, retryCount)
-                elif result == 'failed':
-                    self._request_result = 'Failed'
-                    self._request_in_progress = False
-                    error = res.get('action', {}).get('errorCode', None)
-                    _LOGGER.warning(f'Request {requestId}, sectionId {sectionId} failed, error: {error}.')
-                elif result == 'unfetched':
-                    self._request_result = 'No response'
-                    self._request_in_progress = False
-                    error = res.get('requestStatusResponse', {}).get('error', None)
-                    _LOGGER.warning(f'Request {requestId}, sectionId {sectionId} failed, error: {error}.')
-                    return False
-                elif result == 'succeeded':
-                    self._request_result = 'Success'
-                    self._request_in_progress = False
-                    _LOGGER.debug(f'Request was successful, result: {result}')
-                else:
-                    self._request_result = result
-                    self._request_in_progress = False
-                    _LOGGER.debug(f'Request result: {result}')
-                    return True
-            else:
-                self._request_result = 'Unknown'
-                self._request_in_progress = False
-                _LOGGER.warning(f'Incorrect response for status response for request={requestId}, section={sectionId}, response is:{str(res)}')
-                return
-
+                self._requests['state'] = status
+                return status
         except Exception as error:
-            self._request_result = 'Task exception'
-            self._request_in_progress = False
-            _LOGGER.warning(f'Failure during get request progress status: {error}')
-            return
+            _LOGGER.warning(f'Exception encountered while waiting for request status: {error}')
+            raise Exception(f'Exception encountered while waiting for request status: {error}')
 
-  # SPIN Token handling
-    async def requestSecToken(self,spin,action="heating"):
-        urls = {
-            'lock':    '/api/rolesrights/authorization/v2/vehicles/$vin/services/rlu_v1/operations/LOCK/security-pin-auth-requested',
-            'unlock':  '/api/rolesrights/authorization/v2/vehicles/$vin/services/rlu_v1/operations/UNLOCK/security-pin-auth-requested',
-            'heating': '/api/rolesrights/authorization/v2/vehicles/$vin/services/rheating_v1/operations/P_QSACT/security-pin-auth-requested',
-            'timer':   '/api/rolesrights/authorization/v2/vehicles/$vin/services/timerprogramming_v1/operations/P_SETTINGS_AU/security-pin-auth-requested',
-            'rclima':  '/api/rolesrights/authorization/v2/vehicles/$vin/services/rclima_v1/operations/P_START_CLIMA_AU/security-pin-auth-requested'
-        }
+  # Data set functions
+   # Charging (BATTERYCHARGE)
+    async def set_charger(self, action):
+        """Charging actions."""
+        if not self._services.get('rbatterycharge_v1', False):
+            _LOGGER.info('Remote start/stop of charger is not supported.')
+            raise Exception('Remote start/stop of charger is not supported.')
+        if self._requests['batterycharge'].get('id', False):
+            timestamp = self._requests.get('batterycharge', {}).get('timestamp', datetime.now())
+            expired = datetime.now() - timedelta(minutes=3)
+            if expired > timestamp:
+                self._requests.get('batterycharge', {}).pop('id')
+            else:
+                _LOGGER.debug('Charging action already in progress')
+                return False
+        if action in ['start', 'stop']:
+            data = {'action': {'type': action}}
+        else:
+            _LOGGER.error(f'Invalid charger action: {action}. Must be either start or stop')
+            raise Exception(f'Invalid charger action: {action}. Must be either start or stop')
         try:
-            response = await self.get(self._connection._make_url(urls.get(action), vin=self.vin))
-            secToken = response["securityPinAuthInfo"]["securityToken"]
-            challenge = response["securityPinAuthInfo"]["securityPinTransmission"]["challenge"]
-            securpin = await self.generateSecurPin(challenge, spin)
-            body = "{ \"securityPinAuthentication\": { \"securityPin\": { \"challenge\": \""+challenge+"\", \"securityPinHash\": \""+securpin+"\" }, \"securityToken\": \""+secToken+"\" }}"
+            response = await self._connection.setCharger(self.vin, data)
+            if not response:
+                self._requests['batterycharge'] = {'status': 'Failed'}
+                _LOGGER.error(f'Failed to {action} charging')
+                raise Exception(f'Failed to {action} charging')
+            else:
+                self._requests['remaining'] = response.get('rate_limit_remaining', -1)
+                self._requests['batterycharge'] = {
+                    'timestamp': datetime.now(),
+                    'status': response.get('state', 'Unknown'),
+                    'id': response.get('id', 0)
+                }
+                status = await self.wait_for_request('batterycharge', response.get('id', 0))
+                self._requests['batterycharge'] = {'status': status}
+                return True
+        except Exception as error:
+            _LOGGER.warning(f'Failed to {action} charging - {error}')
+            self._requests['batterycharge'] = {'status': 'Exception'}
+            raise Exception(f'Failed to {action} charging - {error}')
 
-            self._connection._session_headers["Content-Type"]="application/json"
-            response = await self.post(self._connection._make_url('/api/rolesrights/authorization/v2/security-pin-auth-completed', vin=self.vin), data=body)
-            del self._connection._session_headers["Content-Type"]
-            return response["securityToken"]
-        except Exception as err:
-            _LOGGER.error(f'Could not generate security token (maybe wrong SPIN?), error: {err}')
+   # Climatisation electric/auxiliary/windows (CLIMATISATION)
+    async def set_climatisation_temp(self, temperature=20):
+        """Set climatisation target temp."""
+        if self.is_electric_climatisation_supported or self.is_auxiliary_climatisation_supported:
+            if 16 <= int(temperature) <= 30:
+                temp = int((temperature+273)*10)
+                data = {'action': {'settings': {'targetTemperature': temp},'type': 'setSettings'}}
+            else:
+                _LOGGER.error(f'Set climatisation target temp to {temperature} is not supported.')
+                raise Exception(f'Set climatisation target temp to {temperature} is not supported.')
+            return await self.set_climater(data)
+        else:
+            _LOGGER.error('No climatisation support.')
+            raise Exception('No climatisation support.')
 
-    async def generateSecurPin(self, challenge, pin):
-        pinArray = bytearray.fromhex(pin);
-        byteChallenge = bytearray.fromhex(challenge);
-        pinArray.extend(byteChallenge)
-        return hashlib.sha512(pinArray).hexdigest()
+    async def set_window_heating(self, action='stop'):
+        """Turn on/off window heater."""
+        if self.is_window_heater_supported:
+            if action in ['start', 'stop']:
+                data = {'action': {'type': action+'WindowHeating'}}
+            else:
+                _LOGGER.error(f'Window heater action "{action}" is not supported.')
+                raise Exception(f'Window heater action "{action}" is not supported.')
+            return await self.set_climater(data)
+        else:
+            _LOGGER.error('No climatisation support.')
+            raise Exception('No climatisation support.')
+
+    async def set_battery_climatisation(self, mode = False):
+        """Turn on/off electric climatisation from battery."""
+        if self.is_electric_climatisation_supported:
+            if mode in [True, False]:
+                data = {'action': {'settings': {'climatisationWithoutHVpower': mode}, 'type': 'setSettings'}}
+            else:
+                _LOGGER.error(f'Set climatisation without external power to "{mode}" is not supported.')
+                raise Exception(f'Set climatisation without external power to "{mode}" is not supported.')
+            return await self.set_climater(data)
+        else:
+            _LOGGER.error('No climatisation support.')
+            raise Exception('No climatisation support.')
+
+    async def set_climatisation(self, mode = 'off', spin = False):
+        """Turn on/off climatisation with electric/auxiliary heater."""
+        if self.is_electric_climatisation_supported:
+            if mode in ['electric', 'auxiliary']:
+                targetTemp = int((self.climatisation_target_temperature+273)*10)
+                withoutHVPower = self.climatisation_without_external_power
+                data = {'action':{'settings':{'climatisationWithoutHVpower': withoutHVPower, 'targetTemperature': targetTemp, 'heaterSource': mode},'type': 'startClimatisation'}}
+            elif mode == 'off':
+                data = {'action': {'type': 'stopClimatisation'}}
+            else:
+                _LOGGER.error(f'Invalid climatisation type: {mode}')
+                raise Exception(f'Invalid climatisation type: {mode}')
+            return await self.set_climater(data, spin)
+        else:
+            _LOGGER.error('No climatisation support.')
+            raise Exception('No climatisation support.')
+
+    async def set_climater(self, data, spin = False):
+        """Climater actions."""
+        if not self._services.get('rclima_v1', False):
+            _LOGGER.info('Remote control of climatisation functions is not supported.')
+            raise Exception('Remote control of climatisation functions is not supported.')
+        if self._requests['climatisation'].get('id', False):
+            timestamp = self._requests.get('climatisation', {}).get('timestamp', datetime.now())
+            expired = datetime.now() - timedelta(minutes=3)
+            if expired > timestamp:
+                self._requests.get('climatisation', {}).pop('id')
+            else:
+                _LOGGER.debug('A climatisation action is already in progress')
+                return False
+        try:
+            response = await self._connection.setClimater(self.vin, data, spin)
+            if not response:
+                self._requests['climatisation'] = {'status': 'Failed'}
+                _LOGGER.error('Failed to execute climatisation request')
+                raise Exception('Failed to execute climatisation request')
+            else:
+                self._requests['remaining'] = response.get('rate_limit_remaining', -1)
+                self._requests['climatisation'] = {
+                    'timestamp': datetime.now(),
+                    'status': response.get('state', 'Unknown'),
+                    'id': response.get('id', 0),
+                }
+                status = await self.wait_for_request('climatisation', response.get('id', 0))
+                self._requests['climatisation'] = {'status': status}
+                return True
+        except Exception as error:
+            _LOGGER.warning(f'Failed to execute climatisation request - {error}')
+            self._requests['climatisation'] = {'status': 'Exception'}
+            raise Exception(f'Failed to execute climatisation request - {error}')
+
+   # Parking heater heating/ventilation (RS)
+    async def set_pheater(self, mode, spin):
+        """Set the mode for the parking heater."""
+        if not self.is_combustion_climatisation_supported:
+            _LOGGER.error('No parking heater support.')
+            raise Exception('No parking heater support.')
+        if self._requests['rs'].get('id', False):
+            timestamp = self._requests.get('rs', {}).get('timestamp', datetime.now())
+            expired = datetime.now() - timedelta(minutes=3)
+            if expired > timestamp:
+                self._requests.get('rs', {}).pop('id')
+            else:
+                _LOGGER.debug('A parking heater action is already in progress')
+                return False
+        if not mode in ['heating', 'ventilation', 'off']:
+            _LOGGER.error(f'Invalid action for parking heater: {mode}')
+            raise Exception(f'Invalid action for parking heater: {mode}')
+        if mode == 'off':
+            data = {'performAction': {'quickstop': {'active': False }}}
+        else:
+            data = {'performAction': {'quickstart': {'climatisationDuration': self.pheater_duration, 'startMode': mode, 'active': True }}}
+        try:
+            response = await self._connection.setPreHeater(self.vin, data, spin)
+            if not response:
+                self._requests['rs'] = {'status': 'Failed'}
+                _LOGGER.error(f'Failed to set parking heater to {mode}')
+                raise Exception(f'Failed to set parking heater to {mode}')
+            else:
+                self._requests['remaining'] = response.get('rate_limit_remaining', -1)
+                self._requests['rs'] = {
+                    'timestamp': datetime.now(),
+                    'status': response.get('state', 'Unknown'),
+                    'id': response.get('id', 0),
+                }
+                status = await self.wait_for_request('rs', response.get('id', 0))
+                self._requests['rs'] = {'status': status}
+                return True
+        except Exception as error:
+            _LOGGER.warning(f'Failed to set parking heater mode to {mode} - {error}')
+            self._requests['rs'] = {'status': 'Exception'}
+            raise Exception(f'Failed to set parking heater mode to {mode} - {error}')
+
+   # Lock (RLU)
+    async def set_lock(self, action, spin):
+        """Remote lock and unlock actions."""
+        if not self._services.get('rlu_v1', False):
+            _LOGGER.info('Remote lock/unlock is not supported.')
+            raise Exception('Remote lock/unlock is not supported.')
+        if self._requests['rlu'].get('id', False):
+            timestamp = self._requests.get('rlu', {}).get('timestamp', datetime.now() - timedelta(minutes=5))
+            expired = datetime.now() - timedelta(minutes=3)
+            if expired > timestamp:
+                self._requests.get('rlu', {}).pop('id')
+            else:
+                _LOGGER.debug('A lock action is already in progress')
+                return False
+        if action in ['lock', 'unlock']:
+            data = '<rluAction xmlns="http://audi.de/connect/rlu"><action>' + action + '</action></rluAction>'
+        else:
+            _LOGGER.error(f'Invalid lock action: {action}')
+            raise Exception(f'Invalid lock action: {action}')
+        try:
+            response = await self._connection.setLock(self.vin, data, spin)
+            if not response:
+                self._requests['rlu'] = {'status': 'Failed'}
+                _LOGGER.error(f'Failed to {action} vehicle')
+                raise Exception(f'Failed to {action} vehicle')
+            else:
+                self._requests['remaining'] = response.get('rate_limit_remaining', -1)
+                self._requests['rlu'] = {
+                    'timestamp': datetime.now(),
+                    'status': response.get('state', 'Unknown'),
+                    'id': response.get('id', 0),
+                }
+                status = await self.wait_for_request('rlu', response.get('id', 0))
+                self._requests['rlu'] = {'status': status}
+                return True
+        except Exception as error:
+            _LOGGER.warning(f'Failed to {action} vehicle - {error}')
+            self._requests['rlu'] = {'status': 'Exception'}
+            raise Exception(f'Failed to {action} vehicle - {error}')
+
+   # Refresh vehicle data (VSR)
+    async def set_refresh(self):
+        """Wake up vehicle and update status data."""
+        if not self._services.get('statusreport_v1', False):
+           _LOGGER.info('Data refresh is not supported.')
+           raise Exception('Data refresh i not supported.')
+        if self._requests['vsr'].get('id', False):
+            timestamp = self._requests.get('vsr', {}).get('timestamp', datetime.now() - timedelta(minutes=5))
+            expired = datetime.now() - timedelta(minutes=3)
+            if expired > timestamp:
+                self._requests.get('vsr', {}).pop('id')
+            else:
+                _LOGGER.debug('A data refresh request is already in progress')
+                return False
+        try:
+            response = await self._connection.setRefresh(self.vin)
+            if not response:
+                _LOGGER.error('Failed to request vehicle update')
+                self._requests['vsr'] = {'status': 'Failed'}
+                raise Exception('Failed to execute data refresh')
+            else:
+                self._requests['remaining'] = response.get('rate_limit_remaining', -1)
+                self._requests['vsr'] = {
+                    'timestamp': datetime.now(),
+                    'status': response.get('status', 'Unknown'),
+                    'id': response.get('id', 0)
+                }
+                status = await self.wait_for_request('vsr', response.get('id', 0))
+                self._requests['vsr'] = {
+                    'status': status
+                }
+                return True
+        except Exception as error:
+            _LOGGER.warning(f'Failed to execute data refresh - {error}')
+            self._requests['vsr'] = {'status': 'Exception'}
+            raise Exception(f'Failed to execute data refresh - {error}')
 
  #### Vehicle class helpers ####
   # Vehicle info
@@ -708,22 +806,21 @@ class Vehicle:
     @property
     def position(self):
         """Return  position."""
-        if self.vehicleMoving:
+        if self.vehicle_moving:
             output = {
-                "lat": None,
-                "lng": None,
-                "timestamp": None
+                'lat': None,
+                'lng': None,
+                'timestamp': None
             }
         else:
             posObj = self.attrs.get('findCarResponse')
-            #posObj = self._states.get('findCarResponse')
             lat = int(posObj.get('Position').get('carCoordinate').get('latitude'))/1000000
             lng = int(posObj.get('Position').get('carCoordinate').get('longitude'))/1000000
             parkingTime = posObj.get('parkingTimeUTC')
             output = {
-                "lat" : lat,
-                "lng" : lng,
-                "timestamp" : parkingTime
+                'lat' : lat,
+                'lng' : lng,
+                'timestamp' : parkingTime
             }
         return output
 
@@ -731,34 +828,32 @@ class Vehicle:
     def is_position_supported(self):
         """Return true if vehichle has position."""
         if self.attrs.get('findCarResponse', {}).get('Position', {}).get('carCoordinate', {}).get('latitude', False):
-        #if self._states.get('findCarResponse', {}).get('Position', {}).get('carCoordinate', {}).get('latitude', False):
+            return True
+        elif self.attrs.get('isMoving', False):
             return True
 
     @property
-    def vehicleMoving(self):
+    def vehicle_moving(self):
         """Return true if vehicle is moving."""
         return self.attrs.get('isMoving', False)
-        #return self._states.get('isMoving', False)
 
     @property
-    def is_vehicleMoving_supported(self):
+    def is_vehicle_moving_supported(self):
         """Return true if vehicle supports position."""
         if self.is_position_supported:
             return True
 
     @property
-    def parkingTime(self):
+    def parking_time(self):
         """Return timestamp of last parking time."""
         parkTime_utc = self.attrs.get('findCarResponse').get('parkingTimeUTC', 'Unknown')
-        #parkTime_utc = self._states.get('findCarResponse').get('parkingTimeUTC', 'Unknown')
         parkTime = parkTime_utc.replace(tzinfo=timezone.utc).astimezone(tz=None)
         return parkTime.strftime('%Y-%m-%d %H:%M:%S')
 
     @property
-    def is_parkingTime_supported(self):
+    def is_parking_time_supported(self):
         """Return true if vehicle parking timestamp is supported."""
         if 'parkingTimeUTC' in self.attrs.get('findCarResponse', {}):
-        #if 'parkingTimeUTC' in self._states.get('findCarResponse', {}):
             return True
 
   # Vehicle fuel level and range
@@ -906,6 +1001,8 @@ class Vehicle:
         status = self.attrs.get('climater', {}).get('status', {}).get('climatisationStatusData', {}).get('climatisationState', {}).get('content', '')
         if status in ['heating', 'heatingAuxiliary', 'on'] and climatisation_type == 'auxiliary':
             return True
+        elif status in ['heatingAuxiliary'] and climatisation_type == 'electric':
+            return True
         else:
             return False
 
@@ -972,8 +1069,7 @@ class Vehicle:
     @property
     def is_pheater_ventilation_supported(self):
         """Return true if vehichle has combustion climatisation."""
-        if self.attrs.get('heating', {}).get('climatisationStateReport', {}).get('climatisationState', False):
-            return True
+        return self.is_pheater_heating_supported
 
     @property
     def pheater_heating(self):
@@ -1342,10 +1438,54 @@ class Vehicle:
         if response and type(response.get('totalElectricConsumption')) in (float, int):
             return True
 
+  # Status of set data requests
+    @property
+    def refresh_action_status(self):
+        """Return latest status of data refresh request."""
+        return self._requests['vsr'].get('status', 'None')
+
+    @property
+    def charger_action_status(self):
+        """Return latest status of charger request."""
+        return self._requests['batterycharge'].get('status', 'None')
+
+    @property
+    def climater_action_status(self):
+        """Return latest status of climater request."""
+        return self._requests['climatisation'].get('status', 'None')
+
+    @property
+    def pheater_action_status(self):
+        """Return latest status of parking heater request."""
+        return self._requests['rs'].get('status', 'None')
+
+    @property
+    def lock_action_status(self):
+        """Return latest status of lock action request."""
+        return self._requests['rlu'].get('status', 'None')
+
   # Requests data
     @property
+    def refresh_data(self):
+        """Get state of data refresh"""
+        if self._requests.get('vsr', {}).get('id', False):
+            return True
+
+    @property
+    def is_refresh_data_supported(self):
+        """Data refresh is always supported."""
+        return True
+
+    @property
     def request_in_progress(self):
-        return self._request_in_progress
+        """Request in progress is always supported."""
+        try:
+            for section in self._requests:
+                if self._requests[section].get('id', False):
+                    return True
+        except:
+            pass
+        return False
 
     @property
     def is_request_in_progress_supported(self):
@@ -1353,13 +1493,19 @@ class Vehicle:
         return True
 
     @property
-    def request_result(self):
+    def request_results(self):
         """Get last request result."""
-        return self._request_result
+        data = {}
+        data['latest'] = self._requests['latest']
+        data['state'] = self._requests['state']
+        for section in self._requests:
+            if section in ['departuretimer', 'batterycharge', 'climatisation', 'vsr', 'rlu', 'rs']:
+                data[section] = self._requests[section].get('status', 'Unknown')
+        return data
 
     @property
-    def is_request_result_supported(self):
-        """Request result is supported if in progress is supported."""
+    def is_request_results_supported(self):
+        """Request results is supported if in progress is supported."""
         return self.is_request_in_progress_supported
 
     @property
@@ -1368,211 +1514,16 @@ class Vehicle:
         if self.attrs.get('rate_limit_remaining', False):
             self.requests_remaining = self.attrs.get('rate_limit_remaining')
             self.attrs.pop('rate_limit_remaining')
-        return self._requests_remaining
+        return self._requests['remaining']
 
     @requests_remaining.setter
     def requests_remaining(self, value):
-        self._requests_remaining = value
+        self._requests['remaining'] = value
 
     @property
     def is_requests_remaining_supported(self):
-        return True if self._requests_remaining else False
+        return True if self._requests.get('remaining', False) else False
 
- #### Vehicle Actions ####
-  # Data refresh
-    async def trigger_request_update(self):
-        if self.is_request_in_progress_supported:
-            if not self.request_in_progress:
-                resp = await self.call('fs-car/bs/vsr/v1/skoda/CZ/vehicles/$vin/requests', data=None)
-                if not resp:
-                    _LOGGER.error('Failed to request vehicle update')
-                else:
-                    await self.getRequestProgressStatus(resp,"vsr")
-                    await self.update()
-                    return resp
-            else:
-                _LOGGER.warning('Another request is already in progress')
-        else:
-            _LOGGER.error('No request update support.')
-
-  # Lock/Unlock actions
-    async def door_lock(self, spin, action):
-        """Remote lock and unlock actions."""
-        if self.is_door_locked_supported:
-            if not action in ['lock', 'unlock']:
-                _LOGGER.warning('Invalid door lock action provided.')
-                return False
-            if spin:
-                # Prepare data, headers and fetch security token
-                data = '<rluAction xmlns="http://audi.de/connect/rlu"><action>' + action + '</action></rluAction>'
-                secToken = await self.requestSecToken(spin, action)
-                if 'Content-Type' in self._connection._session_headers:
-                    contType = self._connection._session_headers['Content-Type']
-                else:
-                    contType = ''
-                try:
-                    self._connection._session_headers['X-mbbSecToken'] = secToken
-                    self._connection._session_headers["Content-Type"] = "application/vnd.vwg.mbb.RemoteLockUnlock_v1_0_0+xml"
-                    resp = await self.call('fs-car/bs/rlu/v1/skoda/CZ/vehicles/$vin/actions', data=data)
-                    if not resp:
-                        _LOGGER.warning(f'Failed to {action} car.')
-                    else:
-                        _LOGGER.debug(f'Successfully {action}ed car!')
-                        await self.getRequestProgressStatus(resp, 'rlu')
-                        await self.update()
-                except Exception as error:
-                    _LOGGER.error(f'Failed to {action} car - {error}')
-                #Cleanup headers
-                if 'X-mbbSecToken' in self._connection._session_headers: del self._connection._session_headers['X-mbbSecToken']
-                if "Content-Type" in self._connection._session_headers: del self._connection._session_headers["Content-Type"]
-                if contType: self._connection._session_headers["Content-Type"]=contType
-            else:
-                _LOGGER.error('Invalid SPIN provided.')
-                return False
-        else:
-            _LOGGER.error('No car lock support.')
-            return False
-
-  # Parking heater petrol/diesel (non EV/PHEV or pre 2020 models?)
-    async def pheater_climatisation(self, spin=False, mode='off'):
-        """Set the mode for the parking heater."""
-        if spin:
-            if self.is_combustion_climatisation_supported:
-                if not mode in ['heating', 'ventilation', 'off']:
-                    _LOGGER.error(f'Invalid action for parking heater: {mode}')
-                    return False
-                secToken = await self.requestSecToken(spin, 'heating')
-                self._connection._session_headers['x-mbbSecToken'] = secToken
-                if mode == 'off':
-                    data = {'performAction': {'quickstop': {'active': False }}}
-                else:
-                    data = {'performAction': {'quickstart': {'climatisationDuration': self.pheater_duration, 'startMode': mode, 'active': True }}}
-                return await self.pheater_actions(data)
-            else:
-                _LOGGER.error('No parking heater support.')
-        else:
-            _LOGGER.error('Invalid SPIN provided')
-
-    async def pheater_actions(self, data):
-        """Petrol/diesel parking heater actions."""
-        try:
-            if 'Content-Type' in self._connection._session_headers:
-                contType = self._connection._session_headers['Content-Type']
-            else:
-                contType = ''
-            self._connection._session_headers['Content-Type'] = 'application/vnd.vwg.mbb.RemoteStandheizung_v2_0_2+json'
-            resp = await self.call('fs-car/bs/rs/v1/skoda/CZ/vehicles/$vin/action', data=data)
-
-            # Clean up headers
-            if 'x-mbbSecToken' in self._connection._session_headers: del self._connection._session_headers['x-mbbSecToken']
-            if 'Content-Type' in self._connection._session_headers: del self._connection._session_headers['Content-Type']
-            if contType: self._connection._session_headers['Content-Type']=contType
-
-            if not resp:
-                _LOGGER.warning('Failed to execute aux heater action.')
-                return False
-            else:
-                await self.getRequestProgressStatus(resp, 'rs')
-                await self.update()
-                return True
-        except Exception as error:
-            _LOGGER.warning('Failed to execute aux heater action - %s' % error)
-            if 'x-mbbSecToken' in self._connection._session_headers: del self._connection._session_headers['x-mbbSecToken']
-            if 'Content-Type' in self._connection._session_headers: del self._connection._session_headers['Content-Type']
-            if contType: self._connection._session_headers['Content-Type']=contType
-            return False
-
-  # Electric charging
-    async def charger_actions(self, action):
-        """Charging actions."""
-        if not self.is_charging_supported:
-           _LOGGER.error('No charging supported.')
-           return False
-        if action in ['start', 'stop']:
-            try:
-                await self._connection.set_charger(self._url, action)
-                await self.update()
-                return True
-            except Exception as error:
-                _LOGGER.warning(f'Failed to {action} charging - %s' % error)
-                return False
-        else:
-            _LOGGER.error(f'Invalid charger action: {action}. Must be either start or stop')
-
-  # Climatisation for EV/PHEVs
-    async def climatisation_target(self, temperature=22):
-        """Set climatisation target temp."""
-        if self.is_electric_climatisation_supported or self.is_auxiliary_climatisation_supported:
-            if not 16 <= temperature <= 30:
-                _LOGGER.error(f'Set climatisation target temp to {temperature} is not supported.')
-                return False
-            temp = int((temperature+273)*10)
-            data = {"action": {"settings": {"targetTemperature": temp},"type": "setSettings"}}
-            return await self.climater_actions(data)
-        else:
-            _LOGGER.error('No climatisation support.')
-
-    async def climatisation_wo_HVpower(self, mode=False):
-        """Turn on/off electric climatisation from battery."""
-        if self.is_electric_climatisation_supported:
-            if not mode in [True, False]:
-                _LOGGER.error(f'Set climatisation without external power to {mode} is not supported.')
-                return False
-            data = {"action": {"settings": {"climatisationWithoutHVpower": mode},"type": "setSettings"}}
-            return await self.climater_actions(data)
-        else:
-            _LOGGER.error('No climatisation support.')
-
-    async def window_heating(self, action='stop'):
-        """Turn on/off window heater."""
-        if self.is_window_heater_supported:
-            if not action in ['start', 'stop']:
-                _LOGGER.error(f'Climatisation action: {action} not supported.')
-                return False
-            data = {"action": {"type": action+"WindowHeating"}}
-            return await self.climater_actions(data)
-        else:
-            _LOGGER.error('No climatisation support.')
-
-    async def climatisation(self, mode, spin=False):
-        """Turn on/off climatisation with electric/auxiliary heater."""
-        if self.is_electric_climatisation_supported:
-            if mode in ['electric', 'auxiliary']:
-                targetTemp = int((self.climatisation_target_temperature+273)*10)
-                withoutHVPower = self.climatisation_without_external_power
-                data = {'action':{'settings':{'climatisationWithoutHVpower': withoutHVPower, 'targetTemperature': targetTemp, 'heaterSource': mode},'type': 'startClimatisation'}}
-            elif mode == 'off':
-                data = {'action': {'type': 'stopClimatisation'}}
-            else:
-                _LOGGER.error(f'Invalid climatisation type: {mode}')
-                return False
-            # Get S-PIN security token if we are starting aux heater
-            if mode == 'auxiliary' and spin:
-                secToken = await self.requestSecToken(spin, 'rclima')
-                self._connection._session_headers['X-securityToken'] = secToken
-            elif mode == 'auxiliary':
-                _LOGGER.error('S-PIN needs to be set to turn on auxiliary heater.')
-                return False
-            return await self.climater_actions(data)
-        else:
-            _LOGGER.error('No climatisation support.')
-
-    async def climater_actions(self, data):
-        """Execute climatisation actions."""
-        try:
-            resp = await self.call('fs-car/bs/climatisation/v1/Skoda/CZ/vehicles/$vin/climater/actions', json=data)
-            if "X-securityToken" in self._connection._session_headers: del self._connection._session_headers["X-securityToken"]
-            if not resp:
-                _LOGGER.warning('Failed to execute climatisation action')
-                return False
-            else:
-                await self.getRequestProgressStatus(resp,"climatisation")
-                await self.update()
-                return True
-        except Exception as error:
-            _LOGGER.warning('Failed to execute climatisation action - %s' % error)
-            if "X-securityToken" in self._connection._session_headers: del self._connection._session_headers["X-securityToken"]
-            return False
  #### Helper functions ####
     def __str__(self):
         return self.vin
