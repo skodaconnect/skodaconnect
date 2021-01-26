@@ -1,6 +1,5 @@
 ![Version](https://img.shields.io/github/v/release/lendy007/skodaconnect?include_prereleases)
 ![PyPi](https://img.shields.io/pypi/v/skodaconnect?label=latest%20pypi)
-![Downloads](https://img.shields.io/github/downloads/lendy007/skodaconnect/total)
 ![Downloads PyPi](https://img.shields.io/pypi/dm/skodaconnect)
 
 # Skoda Connect v1.0.30
