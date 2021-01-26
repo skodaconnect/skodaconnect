@@ -185,6 +185,7 @@ class Vehicle:
             status = await self._connection.get_request_status(self.vin, section, request)
             _LOGGER.debug(f'Request ID {request}: {status}')
             if status == 'In progress':
+                self._requests['state'] = 'In progress'
                 time.sleep(5)
                 return await self.wait_for_request(section, request)
             else:
@@ -1466,7 +1467,6 @@ class Vehicle:
     @property
     def lock_action_status(self):
         """Return latest status of lock action request."""
-        _LOGGER.debug('in lock action status')
         return self._requests['lock'].get('status', 'None')
 
   # Requests data
