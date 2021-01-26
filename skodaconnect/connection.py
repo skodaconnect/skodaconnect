@@ -623,7 +623,7 @@ class Connection:
             elif sectionId == 'departuretimer':
                 url = 'fs-car/bs/$sectionId/v1/Skoda/CZ/vehicles/$vin/timer/actions/$requestId'
             elif sectionId == 'vsr':
-                url = 'fs-car/bs/$sectionId/v1/Skoda/CZ/vehicles/$vin/requests/$requestId/jobstatus'
+                url = "fs-car/bs/$sectionId/v1/Skoda/CZ/vehicles/$vin/requests/$requestId/jobstatus"
             else:
                 url = 'fs-car/bs/$sectionId/v1/Skoda/CZ/vehicles/$vin/requests/$requestId/status'
             url = re.sub('\$sectionId', sectionId, url)
