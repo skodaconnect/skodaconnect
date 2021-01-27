@@ -312,7 +312,7 @@ class Connection:
                 _LOGGER.info('Got HTTP 500 from VW-Group server, service might be temporarily unavailable')
             if error.status == 502:
                 _LOGGER.info('Got HTTP 502 from VW-Group server, this request might not be supported for this vehicle')
-            return {'status': err.status}
+            return {'status': error.status}
 
     async def post(self, url, vin='', **data):
         """Perform a post query to the online service."""
@@ -369,8 +369,8 @@ class Connection:
             self._session_auth_ref_url = response['homeRegion']['baseUri']['content'].split('/api')[0].replace('mal-', 'fal-') if response['homeRegion']['baseUri']['content'] != 'https://mal-1a.prd.ece.vwg-connect.com/api' else 'https://msg.volkswagen.de'
             self._session_spin_ref_url = response['homeRegion']['baseUri']['content'].split('/api')[0]
             return response['homeRegion']['baseUri']['content']
-        except Exception as err:
-            _LOGGER.debug(f'Could not get homeregion, error {err}')
+        except Exception as error:
+            _LOGGER.debug(f'Could not get homeregion, error {error}')
             self._session_logged_in = False
         return False
 
@@ -387,8 +387,8 @@ class Connection:
             else:
                 _LOGGER.info('Could not fetch operation list: {response}')
                 data = {'error': 'unknown'}
-        except Exception as err:
-            _LOGGER.warning(f'Could not fetch operation list, error: {err}')
+        except Exception as error:
+            _LOGGER.warning(f'Could not fetch operation list, error: {error}')
             data = {'error': 'unknown'}
         return data
 
@@ -411,8 +411,8 @@ class Connection:
             else:
                 _LOGGER.info('Unhandled error while trying to fetch realcar data')
                 data = {'error': 'unknown'}
-        except Exception as err:
-            _LOGGER.warning(f'Could not fetch realCarData, error: {err}')
+        except Exception as error:
+            _LOGGER.warning(f'Could not fetch realCarData, error: {error}')
             data = {'error': 'unknown'}
         return data
 
@@ -434,8 +434,8 @@ class Connection:
             else:
                 _LOGGER.info('Unhandled error while trying to fetch carport data')
                 data = {'error': 'unknown'}
-        except Exception as err:
-            _LOGGER.warning(f'Could not fetch carportData, error: {err}')
+        except Exception as error:
+            _LOGGER.warning(f'Could not fetch carportData, error: {error}')
             data = {'error': 'unknown'}
         return data
 
@@ -458,8 +458,8 @@ class Connection:
             else:
                 _LOGGER.info('Unhandled error while trying to fetch status data')
                 data = {'error': 'unknown'}
-        except Exception as err:
-            _LOGGER.warning(f'Could not fetch StoredVehicleDataResponse, error: {err}')
+        except Exception as error:
+            _LOGGER.warning(f'Could not fetch StoredVehicleDataResponse, error: {error}')
             data = {'error': 'unknown'}
         return data
 
@@ -479,8 +479,8 @@ class Connection:
             else:
                 _LOGGER.info(f'Unhandled error while trying to fetch trip statistics')
                 data = {'error': 'unknown'}
-        except Exception as err:
-            _LOGGER.warning(f'Could not fetch trip statistics, error: {err}')
+        except Exception as error:
+            _LOGGER.warning(f'Could not fetch trip statistics, error: {error}')
             data = {'error': 'unknown'}
         return data
 
@@ -510,8 +510,8 @@ class Connection:
             else:
                 _LOGGER.info('Unhandled error while trying to fetch positional data')
                 data = {'error': 'unknown'}
-        except Exception as err:
-            _LOGGER.warning(f'Could not fetch position, error: {err}')
+        except Exception as error:
+            _LOGGER.warning(f'Could not fetch position, error: {error}')
             data = {'error': 'unknown'}
         return data
 
@@ -531,8 +531,8 @@ class Connection:
             else:
                 _LOGGER.info('Unknown error while trying to fetch data for departure timers')
                 data = {'error': 'unknown'}
-        except Exception as err:
-            _LOGGER.warning(f'Could not fetch timers, error: {err}')
+        except Exception as error:
+            _LOGGER.warning(f'Could not fetch timers, error: {error}')
             data = {'error': 'unknown'}
         return data
 
@@ -552,8 +552,8 @@ class Connection:
             else:
                 _LOGGER.info('Unhandled error while trying to fetch climatisation data')
                 data = {'error': 'unknown'}
-        except Exception as err:
-            _LOGGER.warning(f'Could not fetch climatisation, error: {err}')
+        except Exception as error:
+            _LOGGER.warning(f'Could not fetch climatisation, error: {error}')
             data = {'error': 'unknown'}
         return data
 
@@ -573,8 +573,8 @@ class Connection:
             else:
                 _LOGGER.info('Unhandled error while trying to fetch charger data')
                 data = {'error': 'unknown'}
-        except Exception as err:
-            _LOGGER.warning(f'Could not fetch charger, error: {err}')
+        except Exception as error:
+            _LOGGER.warning(f'Could not fetch charger, error: {error}')
             data = {'error': 'unknown'}
         return data
 
@@ -594,8 +594,8 @@ class Connection:
             else:
                 _LOGGER.info('Unhandled error while trying to fetch pre-heating data')
                 data = {'error': 'unknown'}
-        except Exception as err:
-            _LOGGER.warning(f'Could not fetch pre-heating, error: {err}')
+        except Exception as error:
+            _LOGGER.warning(f'Could not fetch pre-heating, error: {error}')
             data = {'error': 'unknown'}
         return data
 
@@ -892,7 +892,7 @@ class Connection:
             payload = jwt.decode(token, key=pubkey, algorithms=['RS256'], audience=audience)
             return True
         except Exception as error:
-            _LOGGER.debug('Failed to verify token, error: %s' % error)
+            _LOGGER.debug(f'Failed to verify token, error: {error}')
             return False
 
     async def refresh_tokens(self):
