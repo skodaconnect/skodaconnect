@@ -433,9 +433,10 @@ class Vehicle:
    # Refresh vehicle data (VSR)
     async def set_refresh(self):
         """Wake up vehicle and update status data."""
-        if not self._services.get('statusreport_v1', False):
-           _LOGGER.info('Data refresh is not supported.')
-           raise Exception('Data refresh i not supported.')
+        # Disable statusreport check, might not work for some cars
+        #if not self._services.get('statusreport_v1', False):
+        #   _LOGGER.info('Data refresh is not supported.')
+        #   raise Exception('Data refresh is not supported.')
         if self._requests['refresh'].get('id', False):
             timestamp = self._requests.get('refresh', {}).get('timestamp', datetime.now() - timedelta(minutes=5))
             expired = datetime.now() - timedelta(minutes=3)
