@@ -65,46 +65,67 @@ COMPONENTS = {
     'lock': 'lock',
     'device_tracker': 'device_tracker',
     'switch': 'switch',
-    'climate': 'climate'
 }
 
 RESOURCES = [
-    'position',
-    'distance',
-    'electric_climatisation',
-    'combustion_climatisation',
-    'window_heater',
-    'combustion_engine_heating',
-    'charging',
-    'adblue_level',
-    'battery_level',
-    'fuel_level',
-    'service_inspection',
-    'service_inspection_km',
-    'oil_inspection',
-    'oil_inspection_km',
-    'last_connected',
-    'charging_time_left',
-    'electric_range',
-    'combustion_range',
-    'combined_range',
-    'charge_max_ampere',
-    'climatisation_target_temperature',
-    'external_power',
-    'energy_flow',
-    'parking_light',
-    'climatisation_without_external_power',
-    'door_locked',
-    'trunk_locked',
-    'request_in_progress',
-    'windows_closed',
-    'sunroof_closed',
-    'trip_last_average_speed',
-    'trip_last_average_electric_consumption',
-    'trip_last_average_fuel_consumption',
-    'trip_last_duration',
-    'trip_last_length',
-    'outside_temperature'
+        - charging_cable_connected
+        - charging_cable_locked
+        - door_closed_left_front
+        - door_closed_left_back
+        - door_closed_right_front
+        - door_closed_right_back
+        - doors_locked
+        - energy_flow
+        - external_power
+        - hood_closed
+        - parking_light
+        - request_in_progress
+        - sunroof_closed
+        - trunk_closed
+        - trunk_locked
+        - vehicle_moving
+        - window_closed_left_front
+        - window_closed_left_back
+        - window_closed_right_front
+        - window_closed_right_back
+        - windows_closed
+        - position
+        - door_locked
+        - trunk_locked
+        - adblue_level
+        - battery_level
+        - charger_max_ampere
+        - charging_time_left
+        - climatisation_target_temperature
+        - combined_range
+        - combustion_range
+        - electric_range
+        - fuel_level
+        - last_connected
+        - last_trip_average_electric_consumption
+        - last_trip_average_fuel_consumption
+        - last_trip_average_speed
+        - last_trip_duration
+        - last_trip_length
+        - odometer
+        - oil_inspection_days
+        - oil_inspection_distance
+        - outside_temperature
+        - parking_time
+        - pheater_status
+        - pheater_duration
+        - request_results
+        - requests_remaining
+        - service_inspection_days
+        - service_inspection_distance
+        - auxiliary_climatisation
+        - charging
+        - climatisation_from_battery
+        - electric_climatisation
+        - force_data_refresh
+        - parking_heater_heating
+        - parking_heater_ventilation
+        - window_heater
 ]
 
 def is_enabled(attr):
