@@ -21,7 +21,7 @@ Names have been changed to avoid confusion when working with the code.
 - **From version 1.0.30** and onwards there might be breaking changes for the combustion heating/climatisation.
 
 - **Parking Heater** is the auxiliary/parking heater for **non-PHEV** vehicles. This uses the "legacy" remotestandheizung API function.
-Heating is used for heating and ventilation for fan/climatisation/cooling or whatever it is called.
+Heating is what it sounds like and ventilation is used to ventilate/cool the car.
 
 - **Auxiliary Heater** is the auxiliary/parking heater for **PHEV** vehicles. This uses the climater API function, same as electric climatisation.
 

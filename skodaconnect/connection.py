@@ -234,6 +234,22 @@ class Connection:
             # Update headers for requests, defaults to using VWG token
             self._session_headers['Authorization'] = 'Bearer ' + self._session_tokens['vwg']['access_token']
             self._session_logged_in = True
+
+            # Get list of vehicles from account
+            _LOGGER.debug('Fetching vehicles associated with account')
+            await self.set_token('vwg')
+            self._session_headers.pop('Content-Type', None)
+            loaded_vehicles = await self.get(
+                url='https://msg.volkswagen.de/fs-car/usermanagement/users/v1/skoda/CZ/vehicles'
+            )
+            # Add all VIN-numbers from account to list of vehicles
+            if loaded_vehicles.get('userVehicles', {}).get('vehicle', []):
+                _LOGGER.debug('Found vehicle(s) associated with account.')
+                for vehicle in loaded_vehicles.get('userVehicles').get('vehicle'):
+                    self._vehicles.append(Vehicle(self, vehicle))
+                    # Get the Vehicle class object for VIN number and discover initial data
+                    await self.vehicle(vehicle).discover()
+
             return True
 
         except Exception as error:
@@ -330,26 +346,6 @@ class Connection:
                 if not await self._login():
                     _LOGGER.warning('Login to Skoda Connect failed!')
                     raise Exception('Login failed')
-
-            if not self._session_first_update:
-                # Get list of vehicles from account
-                _LOGGER.debug('Fetching vehicles associated with account')
-                await self.set_token('vwg')
-                #if 'Content-Type' in self._session_headers:
-                #    del self._session_headers['Content-Type']
-                self._session_headers.pop('Content-Type', None)
-                loaded_vehicles = await self.get(
-                    url='https://msg.volkswagen.de/fs-car/usermanagement/users/v1/skoda/CZ/vehicles'
-                )
-                # Add all VIN-numbers from account to list of vehicles
-                if loaded_vehicles.get('userVehicles', {}).get('vehicle', []):
-                    _LOGGER.debug('Found vehicle(s) associated with account.')
-                    for vehicle in loaded_vehicles.get('userVehicles').get('vehicle'):
-                        self._vehicles.append(Vehicle(self, vehicle))
-                        # Get the Vehicle class object for VIN number and discover initial data
-                        await self.vehicle(vehicle).discover()
-                # First update is complete
-                self._session_first_update = True
 
             _LOGGER.debug('Going to call vehicle updates')
             # Get all Vehicle objects and update in parallell
@@ -672,7 +668,6 @@ class Connection:
             secToken = response['securityPinAuthInfo']['securityToken']
             challenge = response['securityPinAuthInfo']['securityPinTransmission']['challenge']
             spinHash = self.hash_spin(challenge, spin)
-            #body = "{ \"securityPinAuthentication\": { \"securityPin\": { \"challenge\": \""+challenge+"\", \"securityPinHash\": \""+securpin+"\" }, \"securityToken\": \""+secToken+"\" }}"
             body = {
                 'securityPinAuthentication': {
                     'securityPin': {
@@ -682,10 +677,8 @@ class Connection:
                     'securityToken': secToken
                 }
             }
-
             self._session_headers['Content-Type'] = 'application/json'
             response = await self.post(self._make_url('/api/rolesrights/authorization/v2/security-pin-auth-completed', vin = vin), json = body)
-            #del self._session_headers['Content-Type']
             self._session_headers.pop('Content-Type', None)
             if response.get('securityToken', False):
                 return response['securityToken']
@@ -759,7 +752,6 @@ class Connection:
             if data.get('action', {}).get('settings', {}).get('heaterSource', None) == 'auxiliary':
                 self._session_headers['X-securityToken'] = await self.get_sec_token(vin = vin, spin = spin, action = 'rclima')
             response = await self.dataCall('fs-car/bs/climatisation/v1/Skoda/CZ/vehicles/$vin/climater/actions', vin, json = data)
-            #if 'X-securityToken' in self._session_headers: del self._session_headers['X-securityToken']
             self._session_headers.pop('X-securityToken', None)
             if not response:
                 _LOGGER.warning('Failed to execute climater action')
@@ -772,9 +764,7 @@ class Connection:
                 return dict({'id': str(request_id), 'state': request_state, 'rate_limit_remaining': remaining})
         except Exception as error:
             _LOGGER.error(f'Failed to execute climater action - {error}')
-            #if 'X-securityToken' in self._session_headers: del self._session_headers['X-securityToken']
             self._session_headers.pop('X-securityToken', None)
-        #if 'X-securityToken' in self._session_headers: del self._session_headers['X-securityToken']
         self._session_headers.pop('X-securityToken', None)
         return False
 
@@ -790,8 +780,6 @@ class Connection:
             self._session_headers['x-mbbSecToken'] = await self.get_sec_token(vin = vin, spin = spin, action = 'heating')
             response = await self.dataCall('fs-car/bs/rs/v1/skoda/CZ/vehicles/$vin/action', vin, data = data)
             # Clean up headers
-            #if 'x-mbbSecToken' in self._session_headers: del self._session_headers['x-mbbSecToken']
-            #if 'Content-Type' in self._session_headers: del self._session_headers['Content-Type']
             self._session_headers.pop('x-mbbSecToken', None)
             self._session_headers.pop('Content-Type', None)
             if contType: self._session_headers['Content-Type'] = contType
@@ -807,8 +795,6 @@ class Connection:
                 return dict({'id': str(request_id), 'state': request_state, 'rate_limit_remaining': remaining})
         except Exception as error:
             _LOGGER.warning(f'Failed to execute parking heater action - {error}')
-        #if 'x-mbbSecToken' in self._session_headers: del self._session_headers['x-mbbSecToken']
-        #if 'Content-Type' in self._session_headers: del self._session_headers['Content-Type']
         self._session_headers.pop('x-mbbSecToken', None)
         self._session_headers.pop('Content-Type', None)
         if contType: self._session_headers['Content-Type'] = contType
@@ -827,8 +813,6 @@ class Connection:
             self._session_headers['Content-Type'] = 'application/vnd.vwg.mbb.RemoteLockUnlock_v1_0_0+xml'
             response = await self.dataCall('fs-car/bs/rlu/v1/skoda/CZ/vehicles/$vin/actions', vin, data = data)
             # Clean up headers
-            #if 'X-mbbSecToken' in self._session_headers: del self._session_headers['X-mbbSecToken']
-            #if 'Content-Type' in self._session_headers: del self._session_headers['Content-Type']
             self._session_headers.pop('X-mbbSecToken', None)
             self._session_headers.pop('Content-Type', None)
             if contType: self._session_headers['Content-Type'] = contType
@@ -843,8 +827,6 @@ class Connection:
                 return dict({'id': str(request_id), 'state': request_state, 'rate_limit_remaining': remaining})
         except Exception as error:
             _LOGGER.error(f'Failed to execute lock action - {error}')
-        #if 'X-mbbSecToken' in self._session_headers: del self._session_headers['X-mbbSecToken']
-        #if 'Content-Type' in self._session_headers: del self._session_headers['Content-Type']
         self._session_headers.pop('X-mbbSecToken', None)
         self._session_headers.pop('Content-Type', None)
         if contType: self._session_headers['Content-Type'] = contType
@@ -875,9 +857,6 @@ class Connection:
                 _LOGGER.debug('Successfully refreshed tokens')
             else:
                 return False
-        #else:
-        #    expString = id_dt.strftime('%Y-%m-%d %H:%M:%S')
-        #    _LOGGER.debug(f'Tokens valid until {expString}')
         return True
 
     async def verify_tokens(self, token, type):
