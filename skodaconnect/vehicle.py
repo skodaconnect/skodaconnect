@@ -20,6 +20,7 @@ class Vehicle:
         self._connection = conn
         self._url = url
         self._homeregion = 'https://msg.volkswagen.de'
+        self._discovered = False
         self._requests = {
             'departuretimer': {'status': None, 'timestamp': datetime.now()},
             'batterycharge': {'status': None, 'timestamp': datetime.now()},
@@ -68,6 +69,9 @@ class Vehicle:
                             data = {service['serviceId']: {} }
                             urlInfo = {'url': service['invocationUrl']['content']}
                             data[service['serviceId']].update(urlInfo)
+                            if service.get('cumulatedLicense', {}).get('expirationDate', False):
+                                expiration = {'expire': service['cumulatedLicense']['expirationDate']['content']}
+                                data[service['serviceId']].update(expiration)
                             if service.get('operation', False):
                                 urlInfo = {'operation': service['operation']}
                                 data[service['serviceId']].update(urlInfo)
@@ -84,20 +88,26 @@ class Vehicle:
                         self._services['preheater'] = False
         else:
             _LOGGER.warning(f'Could not determine available API endpoints for {self.vin}, enableing all services')
+        self._discovered = True
 
 
     async def update(self):
         """Try to fetch data for all known API endpoints."""
-        await asyncio.gather(
-            self.get_preheater(),
-            self.get_climater(),
-            self.get_trip_statistic(),
-            self.get_position(),
-            self.get_statusreport(),
-            self.get_charger(),
-            self.get_timerprogramming(),
-            return_exceptions=True
-        )
+        if not self._discovered:
+            await self.discover()
+        if not self.deactivated:
+            await asyncio.gather(
+                self.get_preheater(),
+                self.get_climater(),
+                self.get_trip_statistic(),
+                self.get_position(),
+                self.get_statusreport(),
+                self.get_charger(),
+                self.get_timerprogramming(),
+                return_exceptions=True
+            )
+        else:
+            _LOGGER.info(f'Vehicle with VIN {self.vin} is deactivated from Skoda Connect')
 
   # Data collection functions
     async def get_realcardata(self):
@@ -119,61 +129,67 @@ class Vehicle:
             if data:
                 await self._states.update(data)
             else:
-                _LOGGER.debug('Could not fetch pre-heater data')
+                _LOGGER.debug('Could not fetch preheater data')
 
     async def get_climater(self):
         """Fetch climater data if function is enabled."""
         if self._services.get('rclima_v1', False):
-            data = await self._connection.getClimater(self.vin)
-            if data:
-                await self._states.update(data)
-            else:
-                _LOGGER.debug('Could not fetch climater data')
+            if not await self.expired('rclima_v1'):
+                data = await self._connection.getClimater(self.vin)
+                if data:
+                    await self._states.update(data)
+                else:
+                    _LOGGER.debug('Could not fetch climater data')
 
     async def get_trip_statistic(self):
         """Fetch trip data if function is enabled."""
         if self._services.get('trip_statistic_v1', False):
-            data = await self._connection.getTripStatistics(self.vin)
-            if data:
-                await self._states.update(data)
-            else:
-                _LOGGER.debug('Could not fetch trip statistics')
+            if not await self.expired('trip_statistic_v1'):
+                data = await self._connection.getTripStatistics(self.vin)
+                if data:
+                    await self._states.update(data)
+                else:
+                    _LOGGER.debug('Could not fetch trip statistics')
 
     async def get_position(self):
         """Fetch position data if function is enabled."""
         if self._services.get('carfinder_v1', False):
-            data = await self._connection.getPosition(self.vin)
-            if data:
-                await self._states.update(data)
-            else:
-                _LOGGER.debug('Could not fetch any positional data')
+            if not await self.expired('carfinder_v1'):
+                data = await self._connection.getPosition(self.vin)
+                if data:
+                    await self._states.update(data)
+                else:
+                    _LOGGER.debug('Could not fetch any positional data')
 
     async def get_statusreport(self):
         """Fetch status data if function is enabled."""
         if self._services.get('statusreport_v1', False):
-            data = await self._connection.getVehicleStatusData(self.vin)
-            if data:
-                await self._states.update(data)
-            else:
-                _LOGGER.debug('Could not fetch status report')
+            if not await self.expired('statusreport_v1'):
+                data = await self._connection.getVehicleStatusData(self.vin)
+                if data:
+                    await self._states.update(data)
+                else:
+                    _LOGGER.debug('Could not fetch status report')
 
     async def get_charger(self):
         """Fetch charger data if function is enabled."""
         if self._services.get('rbatterycharge_v1', False):
-            data = await self._connection.getCharger(self.vin)
-            if data:
-                await self._states.update(data)
-            else:
-                _LOGGER.debug('Could not fetch charger data')
+            if not await self.expired('rbatterycharge_v1'):
+                data = await self._connection.getCharger(self.vin)
+                if data:
+                    await self._states.update(data)
+                else:
+                    _LOGGER.debug('Could not fetch charger data')
 
     async def get_timerprogramming(self):
         """Fetch timer data if function is enabled."""
         if self._services.get('timerprogramming_v1', False):
-            data = await self._connection.getTimers(self.vin)
-            if data:
-                await self._states.update(data)
-            else:
-                _LOGGER.debug('Could not fetch timers')
+            if not await self.expired('timerprogramming_v1'):
+                data = await self._connection.getTimers(self.vin)
+                if data:
+                    await self._states.update(data)
+                else:
+                    _LOGGER.debug('Could not fetch timers')
 
     async def wait_for_request(self, section, request, retryCount=36):
         """Update status of outstanding requests."""
@@ -464,6 +480,28 @@ class Vehicle:
     def get_attr(self, attr):
         return find_path(self.attrs, attr)
 
+    async def expired(self, service):
+        """Check if access to service has expired."""
+        try:
+            now = datetime.utcnow()
+            if self._services.get(service, {}).get('expire', False):
+                expiration = self._services.get(service, {}).get('expire', False)
+                if not expiration:
+                    expiration = datetime.utcnow() + timedelta(days = 1)
+            else:
+                _LOGGER.debug(f'Could not determine end of access for service {service}, assuming it is valid')
+                expiration = datetime.utcnow() + timedelta(days = 1)
+            expiration = expiration.replace(tzinfo = None)
+            if now >= expiration:
+                _LOGGER.warning(f'Skoda Connect access to {service} has expired!')
+                self._discovered = False
+                return True
+            else:
+                return False
+        except:
+            _LOGGER.debug(f'Exception. Could not determine end of access for service {service}, assuming it is valid')
+            return False
+
     def dashboard(self, **config):
         #Classic python notation
         from skodaconnect.dashboard import Dashboard
@@ -476,6 +514,7 @@ class Vehicle:
     @property
     def unique_id(self):
         return self.vin
+
 
  #### Information from vehicle states ####
   # Car information
