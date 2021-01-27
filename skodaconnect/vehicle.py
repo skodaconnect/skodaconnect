@@ -35,9 +35,14 @@ class Vehicle:
 
         self._climate_duration = 30
         self._services = {
-            'preheater': True,
-            'realcar': True,
-            'carport': True,
+            'rheating_v1': {'active': False},
+            'rclima_v1': {'active': False},
+            'trip_statistic_v1': {'active': False},
+            'statusreport_v1': {'active': False},
+            'rbatterycharge_v1': {'active': False},
+            'rhonk_v1': {'active': False},
+            'carfinder_v1': {'active': False},
+            'timerprogramming_v1': {'active': False},
         }
         self._states = {}
 
@@ -61,35 +66,36 @@ class Vehicle:
         operationList = await self._connection.getOperationList(self.vin)
         if operationList:
             serviceInfo = operationList['serviceInfo']
+            # Iterate over all endpoints in ServiceInfo list
             for service in serviceInfo:
                 try:
-                    if service['serviceStatus']['status'] == 'Enabled':
+                    if service.get('serviceId', 'Invalid') in self._services.keys():
                         data = {}
-                        if service.get('invocationUrl', False):
-                            data = {service['serviceId']: {} }
-                            urlInfo = {'url': service['invocationUrl']['content']}
-                            data[service['serviceId']].update(urlInfo)
+                        serviceName = service.get('serviceId', None)
+                        if service.get('serviceStatus', {}).get('status', 'Disabled') == 'Enabled':
+                            _LOGGER.debug(f'Discovered enabled service: {service["serviceId"]}')
+                            data['active'] = True
                             if service.get('cumulatedLicense', {}).get('expirationDate', False):
-                                expiration = {'expire': service['cumulatedLicense']['expirationDate']['content']}
-                                data[service['serviceId']].update(expiration)
+                                data['expiration'] = service.get('cumulatedLicense', {}).get('expirationDate', None).get('content', None)
                             if service.get('operation', False):
-                                urlInfo = {'operation': service['operation']}
-                                data[service['serviceId']].update(urlInfo)
-                            self._services.update(dict(data))
-                except:
+                                data.update({'operations': []})
+                                for operation in service.get('operation', []):
+                                    data['operations'].append(operation.get('id', None))
+                        elif service.get('serviceStatus', {}).get('status', None) == 'Disabled':
+                            reason = service.get('serviceStatus', {}).get('reason', 'Unknown')
+                            _LOGGER.debug(f'Service: {serviceName} is disabled because of reason: {reason}')
+                            data['active'] = False
+                        else:
+                            _LOGGER.warning(f'Could not determine status of service: {serviceName}, assuming enabled')
+                            data['active'] = True
+                        self._services[serviceName].update(data)
+                except Exception as error:
+                    _LOGGER.warning(f'Encountered exception: "{error}" while parsing service item: {service}')
                     pass
-            _LOGGER.debug(f'Enabled API endpoints: {self._services.keys()}')
-            # Disable fetching of pre-heater if aux heater is available
-            if self._services.get('rclima_v1', False):
-                functions = self._services.get('rclima_v1', {}).get('operation', {})
-                for operation in functions:
-                    if operation['id'] == 'P_START_CLIMA_AU':
-                        _LOGGER.debug('New style auxiliary heater available, disabling old style pre-heater.')
-                        self._services['preheater'] = False
         else:
-            _LOGGER.warning(f'Could not determine available API endpoints for {self.vin}, enableing all services')
+            _LOGGER.warning(f'Could not determine available API endpoints for {self.vin}')
+        _LOGGER.debug(f'API endpoints: {self._services}')
         self._discovered = True
-
 
     async def update(self):
         """Try to fetch data for all known API endpoints."""
@@ -124,16 +130,17 @@ class Vehicle:
 
     async def get_preheater(self):
         """Fetch pre-heater data if function is enabled."""
-        if self._services.get('preheater', False):
-            data = await self._connection.getPreHeater(self.vin)
-            if data:
-                await self._states.update(data)
-            else:
-                _LOGGER.debug('Could not fetch preheater data')
+        if self._services.get('rheating_v1', {}).get('active', False):
+            if not await self.expired('rheating_v1'):
+                data = await self._connection.getPreHeater(self.vin)
+                if data:
+                    await self._states.update(data)
+                else:
+                    _LOGGER.debug('Could not fetch preheater data')
 
     async def get_climater(self):
         """Fetch climater data if function is enabled."""
-        if self._services.get('rclima_v1', False):
+        if self._services.get('rclima_v1', {}).get('active', False):
             if not await self.expired('rclima_v1'):
                 data = await self._connection.getClimater(self.vin)
                 if data:
@@ -143,7 +150,7 @@ class Vehicle:
 
     async def get_trip_statistic(self):
         """Fetch trip data if function is enabled."""
-        if self._services.get('trip_statistic_v1', False):
+        if self._services.get('trip_statistic_v1', {}).get('active', False):
             if not await self.expired('trip_statistic_v1'):
                 data = await self._connection.getTripStatistics(self.vin)
                 if data:
@@ -153,7 +160,7 @@ class Vehicle:
 
     async def get_position(self):
         """Fetch position data if function is enabled."""
-        if self._services.get('carfinder_v1', False):
+        if self._services.get('carfinder_v1', {}).get('active', False):
             if not await self.expired('carfinder_v1'):
                 data = await self._connection.getPosition(self.vin)
                 if data:
@@ -163,7 +170,7 @@ class Vehicle:
 
     async def get_statusreport(self):
         """Fetch status data if function is enabled."""
-        if self._services.get('statusreport_v1', False):
+        if self._services.get('statusreport_v1', {}).get('active', False):
             if not await self.expired('statusreport_v1'):
                 data = await self._connection.getVehicleStatusData(self.vin)
                 if data:
@@ -173,7 +180,7 @@ class Vehicle:
 
     async def get_charger(self):
         """Fetch charger data if function is enabled."""
-        if self._services.get('rbatterycharge_v1', False):
+        if self._services.get('rbatterycharge_v1', {}).get('active', False):
             if not await self.expired('rbatterycharge_v1'):
                 data = await self._connection.getCharger(self.vin)
                 if data:
@@ -183,7 +190,7 @@ class Vehicle:
 
     async def get_timerprogramming(self):
         """Fetch timer data if function is enabled."""
-        if self._services.get('timerprogramming_v1', False):
+        if self._services.get('timerprogramming_v1', {}).get('active', False):
             if not await self.expired('timerprogramming_v1'):
                 data = await self._connection.getTimers(self.vin)
                 if data:
@@ -433,10 +440,9 @@ class Vehicle:
    # Refresh vehicle data (VSR)
     async def set_refresh(self):
         """Wake up vehicle and update status data."""
-        # Disable statusreport check, might not work for some cars
-        #if not self._services.get('statusreport_v1', False):
-        #   _LOGGER.info('Data refresh is not supported.')
-        #   raise Exception('Data refresh is not supported.')
+        if not self._services.get('statusreport_v1', {}).get('active', False):
+           _LOGGER.info('Data refresh is not supported.')
+           raise Exception('Data refresh is not supported.')
         if self._requests['refresh'].get('id', False):
             timestamp = self._requests.get('refresh', {}).get('timestamp', datetime.now() - timedelta(minutes=5))
             expired = datetime.now() - timedelta(minutes=3)
@@ -485,8 +491,8 @@ class Vehicle:
         """Check if access to service has expired."""
         try:
             now = datetime.utcnow()
-            if self._services.get(service, {}).get('expire', False):
-                expiration = self._services.get(service, {}).get('expire', False)
+            if self._services.get(service, {}).get('expiration', False):
+                expiration = self._services.get(service, {}).get('expiration', False)
                 if not expiration:
                     expiration = datetime.utcnow() + timedelta(days = 1)
             else:
@@ -1055,9 +1061,10 @@ class Vehicle:
     def is_auxiliary_climatisation_supported(self):
         """Return true if vehicle has auxiliary climatisation."""
         if self._services.get('rclima_v1', False):
-            functions = self._services.get('rclima_v1', {}).get('operation', {})
-            for operation in functions:
-                if operation['id'] == 'P_START_CLIMA_AU':
+            functions = self._services.get('rclima_v1', {}).get('operations', [])
+            #for operation in functions:
+            #    if operation['id'] == 'P_START_CLIMA_AU':
+            if 'P_START_CLIMA_AU' in functions:
                     return True
         return False
 
