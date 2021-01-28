@@ -351,12 +351,12 @@ class Vehicle:
         except Exception as error:
             _LOGGER.warning(f'Failed to execute climatisation request - {error}')
             self._requests['climatisation'] = {'status': 'Exception'}
-            raise Exception(f'Failed to execute climatisation request - {error}')
+        raise Exception('Set climatisation failed')
 
    # Parking heater heating/ventilation (RS)
     async def set_pheater(self, mode, spin):
         """Set the mode for the parking heater."""
-        if not self.is_combustion_climatisation_supported:
+        if not self.is_pheater_heating_supported:
             _LOGGER.error('No parking heater support.')
             raise Exception('No parking heater support.')
         if self._requests['preheater'].get('id', False):
@@ -368,8 +368,8 @@ class Vehicle:
                 _LOGGER.debug('A parking heater action is already in progress')
                 return False
         if not mode in ['heating', 'ventilation', 'off']:
-            _LOGGER.error(f'Invalid action for parking heater: {mode}')
-            raise Exception(f'Invalid action for parking heater: {mode}')
+            _LOGGER.error(f'{mode} is an invalid action for parking heater')
+            raise Exception(f'{mode} is an invalid action for parking heater')
         if mode == 'off':
             data = {'performAction': {'quickstop': {'active': False }}}
         else:
@@ -380,7 +380,7 @@ class Vehicle:
             if not response:
                 self._requests['preheater'] = {'status': 'Failed'}
                 _LOGGER.error(f'Failed to set parking heater to {mode}')
-                raise Exception(f'Failed to set parking heater to {mode}')
+                raise Exception(f'setPreHeater returned "{response}"')
             else:
                 self._requests['remaining'] = response.get('rate_limit_remaining', -1)
                 self._requests['preheater'] = {
@@ -394,7 +394,7 @@ class Vehicle:
         except Exception as error:
             _LOGGER.warning(f'Failed to set parking heater mode to {mode} - {error}')
             self._requests['preheater'] = {'status': 'Exception'}
-            raise Exception(f'Failed to set parking heater mode to {mode} - {error}')
+        raise Exception('Set pre-heater failed')
 
    # Lock (RLU)
     async def set_lock(self, action, spin):
@@ -877,8 +877,9 @@ class Vehicle:
 
     @property
     def is_position_supported(self):
-        """Return true if vehichle has position."""
-        if self.attrs.get('findCarResponse', {}).get('Position', {}).get('carCoordinate', {}).get('latitude', False):
+        """Return true if carfinder_v1 service is active."""
+        if self._services.get('carfinder_v1', {}).get('active', False):
+        #if self.attrs.get('findCarResponse', {}).get('Position', {}).get('carCoordinate', {}).get('latitude', False):
             return True
         elif self.attrs.get('isMoving', False):
             return True
@@ -1131,8 +1132,9 @@ class Vehicle:
     @property
     def is_pheater_heating_supported(self):
         """Return true if vehichle has combustion engine heating."""
-        if self.attrs.get('heating', {}).get('climatisationStateReport', {}).get('climatisationState', False):
-            return True
+        #if self.attrs.get('heating', {}).get('climatisationStateReport', {}).get('climatisationState', False):
+        #    return True
+        return True
 
     @property
     def pheater_status(self):

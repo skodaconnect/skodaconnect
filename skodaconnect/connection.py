@@ -267,6 +267,7 @@ class Connection:
             headers=self._session_headers,
             timeout=ClientTimeout(total=TIMEOUT.seconds),
             cookies=self._jarCookie,
+            raise_for_status=False,
             **kwargs
         ) as response:
             response.raise_for_status()
@@ -280,6 +281,9 @@ class Connection:
             try:
                 if response.status == 204:
                     res = {'status_code': response.status}
+                if response.status == 429:
+                    _LOGGER.warning(f'Got HTTP 429 "Too many requests" from server. The server has throttled the connection, consider a longer refresh interval.')
+                    _LOGGER.debug(f'Headers: {response.headers}')
                 elif response.status >= 200 or response.status <= 300:
                     res = await response.json(loads=json_loads)
                 else:
@@ -301,17 +305,20 @@ class Connection:
     async def get(self, url, vin=''):
         """Perform a get query to the online service."""
         try:
-            return await self._request(METH_GET, self._make_url(url, vin))
+            response = await self._request(METH_GET, self._make_url(url, vin))
+            return response
         except aiohttp.client_exceptions.ClientResponseError as error:
             if error.status == 401:
                 _LOGGER.warning(f'Received "unauthorized" error while fetching data: {error}')
                 self._session_logged_in = False
             elif error.status == 400:
-                _LOGGER.error(f'Got HTTP 400 "Bad Request" from VW-Group server, this request might be malformed or not implemented correctly for this vehicle')
-            if error.status == 500:
-                _LOGGER.info('Got HTTP 500 from VW-Group server, service might be temporarily unavailable')
-            if error.status == 502:
-                _LOGGER.info('Got HTTP 502 from VW-Group server, this request might not be supported for this vehicle')
+                _LOGGER.error(f'Got HTTP 400 "Bad Request" from server, this request might be malformed or not implemented correctly for this vehicle')
+            elif error.status == 500:
+                _LOGGER.info('Got HTTP 500 from server, service might be temporarily unavailable')
+            elif error.status == 502:
+                _LOGGER.info('Got HTTP 502 from server, this request might not be supported for this vehicle')
+            else:
+                _LOGGER.error(f'Got unhandled error from server: {error.status}')
             return {'status': error.status}
 
     async def post(self, url, vin='', **data):
@@ -704,9 +711,22 @@ class Connection:
             response = await self.post(query, vin=vin, **data)
             _LOGGER.debug(f'Data call returned: {response}')
             return response
+        except aiohttp.client_exceptions.ClientResponseError as error:
+            if error.status == 401:
+                _LOGGER.error('Unauthorized')
+                self._session_logged_in = False
+            elif error.status == 400:
+                _LOGGER.error(f'Bad request')
+            elif error.status == 500:
+                _LOGGER.error('Internal server error, server might be temporarily unavailable')
+            elif error.status == 502:
+                _LOGGER.error('Bad gateway, this function may not be implemented for this vehicle')
+            else:
+                _LOGGER.error(f'Unhandled HTTP exception: {error}')
+            return False
         except Exception as error:
-            _LOGGER.warning(f'Failure to execute: {error}')
-            raise Exception(f'Failure to execute: {error}')
+            _LOGGER.error(f'Failure to execute: {error}')
+            return False
 
     async def setRefresh(self, vin):
         """"Force vehicle data update."""
@@ -754,8 +774,7 @@ class Connection:
             response = await self.dataCall('fs-car/bs/climatisation/v1/Skoda/CZ/vehicles/$vin/climater/actions', vin, json = data)
             self._session_headers.pop('X-securityToken', None)
             if not response:
-                _LOGGER.warning('Failed to execute climater action')
-                return False
+                raise Exception(f'Invalid response: "{response}"')
             else:
                 request_id = response.get('action', {}).get('actionId', 0)
                 request_state = response.get('action', {}).get('actionState', 'unknown')
@@ -763,9 +782,9 @@ class Connection:
                 _LOGGER.debug(f'Request for climater action returned with state "{request_state}", request id: {request_id}, remaining requests: {remaining}')
                 return dict({'id': str(request_id), 'state': request_state, 'rate_limit_remaining': remaining})
         except Exception as error:
-            _LOGGER.error(f'Failed to execute climater action - {error}')
             self._session_headers.pop('X-securityToken', None)
-        self._session_headers.pop('X-securityToken', None)
+            #_LOGGER.warning(f'Failed to execute charger action - {error}')
+            raise
         return False
 
     async def setPreHeater(self, vin, data, spin):
@@ -778,15 +797,14 @@ class Connection:
                 contType = ''
             self._session_headers['Content-Type'] = 'application/vnd.vwg.mbb.RemoteStandheizung_v2_0_2+json'
             self._session_headers['x-mbbSecToken'] = await self.get_sec_token(vin = vin, spin = spin, action = 'heating')
-            response = await self.dataCall('fs-car/bs/rs/v1/skoda/CZ/vehicles/$vin/action', vin, data = data)
+            response = await self.dataCall('fs-car/bs/rs/v1/skoda/CZ/vehicles/$vin/action', vin = vin, json = data)
             # Clean up headers
             self._session_headers.pop('x-mbbSecToken', None)
             self._session_headers.pop('Content-Type', None)
             if contType: self._session_headers['Content-Type'] = contType
 
             if not response:
-                _LOGGER.warning('Failed to execute parking heater action.')
-                return False
+                raise Exception(f'Invalid response: "{response}"')
             else:
                 request_id = response.get('performActionResponse', {}).get('requestId', 0)
                 request_state = response.get('performActionResponse', {}).get('requestState', 'unknown')
@@ -794,10 +812,10 @@ class Connection:
                 _LOGGER.debug(f'Request for parking heater returned with state "{request_state}", request id: {request_id}, remaining requests: {remaining}')
                 return dict({'id': str(request_id), 'state': request_state, 'rate_limit_remaining': remaining})
         except Exception as error:
-            _LOGGER.warning(f'Failed to execute parking heater action - {error}')
-        self._session_headers.pop('x-mbbSecToken', None)
-        self._session_headers.pop('Content-Type', None)
-        if contType: self._session_headers['Content-Type'] = contType
+            self._session_headers.pop('x-mbbSecToken', None)
+            self._session_headers.pop('Content-Type', None)
+            if contType: self._session_headers['Content-Type'] = contType
+            raise
         return False
 
     async def setLock(self, vin, data, spin):
