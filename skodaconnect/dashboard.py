@@ -330,8 +330,6 @@ class DoorLock(Instrument):
         return dict(last_result = self.vehicle.lock_action_status)
 
 
-
-
 class TrunkLock(Instrument):
     def __init__(self):
         super().__init__(component="lock", attr="trunk_locked", name="Trunk locked")
@@ -554,11 +552,11 @@ class PHeaterVentilation(Switch):
         return self.vehicle.pheater_ventilation
 
     async def turn_on(self):
-        await self.vehicle.pheater_climatisation(spin=self.spin, duration=self.duration, mode='ventilation')
+        await self.vehicle.set_pheater(mode='ventilation', spin=self.spin)
         await self.vehicle.update()
 
     async def turn_off(self):
-        await self.vehicle.pheater_climatisation(spin=self.spin, mode='off')
+        await self.vehicle.set_pheater(mode='off', spin=self.spin)
         await self.vehicle.update()
 
     @property
