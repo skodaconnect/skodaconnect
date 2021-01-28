@@ -257,6 +257,37 @@ class Connection:
             self._session_logged_in = False
             return False
 
+    async def terminate(self):
+        """Log out from Skoda Connect services"""
+        _LOGGER.info(f'Initiating logout')
+        await self.logout()
+
+    async def logout(self):
+        """Log out from Skoda Connect."""
+        self._session_headers.pop('Authorization', None)
+
+        _LOGGER.info('Revoking API Access Token...')
+        self._session_headers['token_type_hint'] = 'access_token'
+        params = {"token": self._session_tokens['vwg']['access_token']}
+        revoke_at = await self.post('https://mbboauth-1d.prd.ece.vwg-connect.com/mbbcoauth/mobile/oauth2/v1/revoke', data = params)
+        _LOGGER.info('Revoking API Refresh Token...')
+        self._session_headers['token_type_hint'] = 'refresh_token'
+        params = {"token": self._session_tokens['vwg']['refresh_token']}
+        revoke_rt = await self.post('https://mbboauth-1d.prd.ece.vwg-connect.com/mbbcoauth/mobile/oauth2/v1/revoke', data = params)
+        self._session_headers.pop('token_type_hint', None)
+        _LOGGER.info('Revoking API Refresh Token...')
+        params = {
+            "token": self._session_tokens['identity']['refresh_token'],
+            "brand": "Skoda"
+        }
+        revoke_rt = await self.post('https://tokenrefreshservice.apps.emea.vwapps.io/revokeToken', data = params)
+        _LOGGER.info('Revoking Identity Access Token...')
+        params = {
+            "token": self._session_tokens['identity']['access_token'],
+            "brand": "Skoda"
+        }
+        revoke_at = await self.post('https://tokenrefreshservice.apps.emea.vwapps.io/revokeToken', data = params)
+
   # HTTP methods to API
     async def _request(self, method, url, **kwargs):
         """Perform a query to the Skoda Connect service"""
@@ -293,9 +324,9 @@ class Connection:
                     res['rate_limit_remaining'] = response.headers.get('X-RateLimit-Remaining', '')
             except:
                 res = {}
-                _LOGGER.debug(f'Something went wrong [{response.status}] response: {response}')
+                if not "revoke" in url:
+                    _LOGGER.debug(f'Something went wrong [{response.status}] response: {response}')
                 return res
-
             if self._session_fulldebug:
                 _LOGGER.debug(f'Request for "{url}" returned with status code [{response.status}], response: {res}')
             else:
