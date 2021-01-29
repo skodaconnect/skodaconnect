@@ -23,7 +23,7 @@ class Vehicle:
         self._discovered = False
         self._states = {}
         self._requests = {
-            'departuretimer': {'status': None, 'timestamp': datetime.now()},
+            #'departuretimer': {'status': None, 'timestamp': datetime.now()}, # Not yet implemented
             'batterycharge': {'status': None, 'timestamp': datetime.now()},
             'climatisation': {'status': None, 'timestamp': datetime.now()},
             'refresh': {'status': None, 'timestamp': datetime.now()},
@@ -45,7 +45,7 @@ class Vehicle:
             'rbatterycharge_v1': {'active': False},
             'rhonk_v1': {'active': False},
             'carfinder_v1': {'active': False},
-            'timerprogramming_v1': {'active': False},
+            #'timerprogramming_v1': {'active': False}, # Not yet implemented
         }
 
  #### API get and set functions ####
@@ -139,6 +139,8 @@ class Vehicle:
                     await self._states.update(data)
                 else:
                     _LOGGER.debug('Could not fetch preheater data')
+        else:
+            self._requests.pop('preheater', None)
 
     async def get_climater(self):
         """Fetch climater data if function is enabled."""
@@ -149,6 +151,8 @@ class Vehicle:
                     await self._states.update(data)
                 else:
                     _LOGGER.debug('Could not fetch climater data')
+        else:
+            self._requests.pop('climatisation', None)
 
     async def get_trip_statistic(self):
         """Fetch trip data if function is enabled."""
@@ -189,6 +193,8 @@ class Vehicle:
                     await self._states.update(data)
                 else:
                     _LOGGER.debug('Could not fetch charger data')
+        else:
+            self._requests.pop('charger', None)
 
     async def get_timerprogramming(self):
         """Fetch timer data if function is enabled."""
@@ -199,6 +205,8 @@ class Vehicle:
                     await self._states.update(data)
                 else:
                     _LOGGER.debug('Could not fetch timers')
+        else:
+            self._requests.pop('departuretimer', None)
 
     async def wait_for_request(self, section, request, retryCount=36):
         """Update status of outstanding requests."""
@@ -218,7 +226,7 @@ class Vehicle:
                 return status
         except Exception as error:
             _LOGGER.warning(f'Exception encountered while waiting for request status: {error}')
-            raise Exception(f'Exception encountered while waiting for request status: {error}')
+            return 'Exception'
 
   # Data set functions
    # Charging (BATTERYCHARGE)
