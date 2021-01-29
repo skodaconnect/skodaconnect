@@ -632,7 +632,7 @@ class Vehicle:
     @property
     def service_inspection(self):
         """Return time left for service inspection"""
-        return self.attrs.get('StoredVehicleDataResponseParsed')['0x0203010004'].get('value')
+        return - int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0203010004'].get('value'))
 
     @property
     def is_service_inspection_supported(self):
@@ -645,7 +645,7 @@ class Vehicle:
     @property
     def service_inspection_distance(self):
         """Return time left for service inspection"""
-        return int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0203010003'].get('value'))
+        return - int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0203010003'].get('value'))
 
     @property
     def is_service_inspection_distance_supported(self):
@@ -658,7 +658,7 @@ class Vehicle:
     @property
     def oil_inspection(self):
         """Return time left for service inspection"""
-        return self.attrs.get('StoredVehicleDataResponseParsed')['0x0203010002'].get('value')
+        return - int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0203010002'].get('value'))
 
     @property
     def is_oil_inspection_supported(self):
@@ -670,7 +670,7 @@ class Vehicle:
     @property
     def oil_inspection_distance(self):
         """Return time left for service inspection"""
-        return int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0203010001'].get('value'))
+        return - int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0203010001'].get('value'))
 
     @property
     def is_oil_inspection_distance_supported(self):
