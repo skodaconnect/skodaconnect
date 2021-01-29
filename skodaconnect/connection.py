@@ -453,14 +453,10 @@ class Connection:
                 return data
             elif response.get('status_code', {}):
                 _LOGGER.warning(f'Could not fetch realCarData, HTTP status code: {response.get("status_code")}')
-                #data = response
             else:
                 _LOGGER.info('Unhandled error while trying to fetch realcar data')
-                #data = {'error': 'unknown'}
         except Exception as error:
             _LOGGER.warning(f'Could not fetch realCarData, error: {error}')
-            #data = {'error': 'unknown'}
-        #return data
         return False
 
     async def getCarportData(self, vin):
@@ -480,14 +476,10 @@ class Connection:
                 return data
             elif response.get('status_code', {}):
                 _LOGGER.warning(f'Could not fetch carportdata, HTTP status code: {response.get("status_code")}')
-                #data = response
             else:
                 _LOGGER.info('Unhandled error while trying to fetch carport data')
-                #data = {'error': 'unknown'}
         except Exception as error:
             _LOGGER.warning(f'Could not fetch carportData, error: {error}')
-            #data = {'error': 'unknown'}
-        #return data
         return False
 
     async def getVehicleStatusData(self, vin):
@@ -506,14 +498,10 @@ class Connection:
                 return data
             elif response.get('status_code', {}):
                 _LOGGER.warning(f'Could not fetch vehicle status report, HTTP status code: {response.get("status_code")}')
-                #data = response
             else:
                 _LOGGER.info('Unhandled error while trying to fetch status data')
-                #data = {'error': 'unknown'}
         except Exception as error:
             _LOGGER.warning(f'Could not fetch StoredVehicleDataResponse, error: {error}')
-            #data = {'error': 'unknown'}
-        #return data
         return False
 
     async def getTripStatistics(self, vin):
@@ -531,14 +519,10 @@ class Connection:
                 return data
             elif response.get('status_code', {}):
                 _LOGGER.warning(f'Could not fetch trip statistics, HTTP status code: {response.get("status_code")}')
-                #data = response
             else:
                 _LOGGER.info(f'Unhandled error while trying to fetch trip statistics')
-                #data = {'error': 'unknown'}
         except Exception as error:
             _LOGGER.warning(f'Could not fetch trip statistics, error: {error}')
-            #data = {'error': 'unknown'}
-        #return data
         return False
 
     async def getPosition(self, vin):
@@ -567,14 +551,10 @@ class Connection:
                     return data
                 else:
                     _LOGGER.warning(f'Could not fetch position, HTTP status code: {response.get("status_code")}')
-                    #data = response
             else:
                 _LOGGER.info('Unhandled error while trying to fetch positional data')
-                #data = {'error': 'unknown'}
         except Exception as error:
             _LOGGER.warning(f'Could not fetch position, error: {error}')
-            #data = {'error': 'unknown'}
-        #return data
         return False
 
     async def getTimers(self, vin):
@@ -592,14 +572,10 @@ class Connection:
                 return data
             elif response.get('status_code', {}):
                 _LOGGER.warning(f'Could not fetch timers, HTTP status code: {response.get("status_code")}')
-                #data = response
             else:
                 _LOGGER.info('Unknown error while trying to fetch data for departure timers')
-                #data = {'error': 'unknown'}
         except Exception as error:
             _LOGGER.warning(f'Could not fetch timers, error: {error}')
-            #data = {'error': 'unknown'}
-        #return data
         return False
 
     async def getClimater(self, vin):
@@ -617,14 +593,10 @@ class Connection:
                 return data
             elif response.get('status_code', {}):
                 _LOGGER.warning(f'Could not fetch climatisation, HTTP status code: {response.get("status_code")}')
-                #data = response
             else:
                 _LOGGER.info('Unhandled error while trying to fetch climatisation data')
-                #data = {'error': 'unknown'}
         except Exception as error:
             _LOGGER.warning(f'Could not fetch climatisation, error: {error}')
-            #data = {'error': 'unknown'}
-        #return data
         return False
 
     async def getCharger(self, vin):
@@ -642,14 +614,10 @@ class Connection:
                 return data
             elif response.get('status_code', {}):
                 _LOGGER.warning(f'Could not fetch pre-heating, HTTP status code: {response.get("status_code")}')
-                #data = response
             else:
                 _LOGGER.info('Unhandled error while trying to fetch charger data')
-                #data = {'error': 'unknown'}
         except Exception as error:
             _LOGGER.warning(f'Could not fetch charger, error: {error}')
-            #data = {'error': 'unknown'}
-        #return data
         return False
 
     async def getPreHeater(self, vin):
@@ -667,14 +635,10 @@ class Connection:
                 return data
             elif response.get('status_code', {}):
                 _LOGGER.warning(f'Could not fetch pre-heating, HTTP status code: {response.get("status_code")}')
-                #data = response
             else:
                 _LOGGER.info('Unhandled error while trying to fetch pre-heating data')
-                #data = {'error': 'unknown'}
         except Exception as error:
             _LOGGER.warning(f'Could not fetch pre-heating, error: {error}')
-            #data = {'error': 'unknown'}
-        #return data
         return False
 
     async def get_request_status(self, vin, sectionId, requestId):
@@ -806,7 +770,7 @@ class Connection:
             await self.set_token('vwg')
             response = await self.dataCall('fs-car/bs/vsr/v1/skoda/CZ/vehicles/$vin/requests', vin, data=None)
             if not response:
-                raise Exception('Invalid response')
+                raise Exception('Invalid or no response')
             else:
                 request_id = response.get('CurrentVehicleDataResponse', {}).get('requestId', 0)
                 request_state = response.get('CurrentVehicleDataResponse', {}).get('requestState', 'queued')
@@ -823,7 +787,7 @@ class Connection:
             await self.set_token('vwg')
             response = await self.dataCall('fs-car/bs/batterycharge/v1/Skoda/CZ/vehicles/$vin/charger/actions', vin, json = data)
             if not response:
-                raise Exception('Invalid response')
+                raise Exception('Invalid or no response')
             else:
                 request_id = response.get('action', {}).get('actionId', 0)
                 request_state = response.get('action', {}).get('actionState', 'unknown')
@@ -844,7 +808,7 @@ class Connection:
             response = await self.dataCall('fs-car/bs/climatisation/v1/Skoda/CZ/vehicles/$vin/climater/actions', vin, json = data)
             self._session_headers.pop('X-securityToken', None)
             if not response:
-                raise Exception('Invalid response')
+                raise Exception('Invalid or no response')
             else:
                 request_id = response.get('action', {}).get('actionId', 0)
                 request_state = response.get('action', {}).get('actionState', 'unknown')
@@ -873,7 +837,7 @@ class Connection:
             if contType: self._session_headers['Content-Type'] = contType
 
             if not response:
-                raise Exception('Invalid response')
+                raise Exception('Invalid or no response')
             else:
                 request_id = response.get('performActionResponse', {}).get('requestId', 0)
                 remaining = response.get('rate_limit_remaining', -1)
@@ -903,7 +867,7 @@ class Connection:
             self._session_headers.pop('Content-Type', None)
             if contType: self._session_headers['Content-Type'] = contType
             if not response:
-                raise Exception('Invalid response')
+                raise Exception('Invalid or no response')
             else:
                 request_id = response.get('rluActionResponse', {}).get('requestId', 0)
                 request_state = response.get('rluActionResponse', {}).get('requestId', 'unknown')
