@@ -45,7 +45,7 @@ TIMEOUT = timedelta(seconds=30)
 class Connection:
     """ Connection to Skoda connect """
   # Init connection class
-    def __init__(self, session, username, password, fulldebug = False):
+    def __init__(self, session, username, password, fulldebug=False, interval=timedelta(minutes=5)):
         """ Initialize """
         self._session = session
         self._session_fulldebug = fulldebug
@@ -53,6 +53,7 @@ class Connection:
         self._session_base = BASE_SESSION
         self._session_auth_headers = HEADERS_AUTH.copy()
         self._session_auth_base = BASE_AUTH
+        self._session_refresh_interval = interval
 
         self._session_auth_ref_url = BASE_SESSION
         self._session_spin_ref_url = BASE_SESSION
@@ -275,18 +276,18 @@ class Connection:
         params = {"token": self._session_tokens['vwg']['refresh_token']}
         revoke_rt = await self.post('https://mbboauth-1d.prd.ece.vwg-connect.com/mbbcoauth/mobile/oauth2/v1/revoke', data = params)
         self._session_headers.pop('token_type_hint', None)
-        _LOGGER.info('Revoking API Refresh Token...')
+        #_LOGGER.info('Revoking Identity Access Token...')
+        #params = {
+        #    "token": self._session_tokens['identity']['access_token'],
+        #    "brand": "Skoda"
+        #}
+        #revoke_at = await self.post('https://tokenrefreshservice.apps.emea.vwapps.io/revokeToken', data = params)
+        _LOGGER.info('Revoking Identity Refresh Token...')
         params = {
             "token": self._session_tokens['identity']['refresh_token'],
             "brand": "Skoda"
         }
         revoke_rt = await self.post('https://tokenrefreshservice.apps.emea.vwapps.io/revokeToken', data = params)
-        _LOGGER.info('Revoking Identity Access Token...')
-        params = {
-            "token": self._session_tokens['identity']['access_token'],
-            "brand": "Skoda"
-        }
-        revoke_at = await self.post('https://tokenrefreshservice.apps.emea.vwapps.io/revokeToken', data = params)
 
   # HTTP methods to API
     async def _request(self, method, url, **kwargs):
@@ -395,12 +396,14 @@ class Connection:
 
             return True
         except (IOError, OSError, LookupError, Exception) as error:
-            _LOGGER.warning(f'Could not update information from skoda connect: {error}')
+            _LOGGER.warning(f'Could not update information from Skoda Connect: {error}')
         return False
 
  #### Data collect functions ####
     async def getHomeRegion(self, vin):
         """Get API requests base url for VIN."""
+        if not await self.validate_tokens:
+            return False
         try:
             await self.set_token('vwg')
             response = await self.get('https://mal-1a.prd.ece.vwg-connect.com/api/cs/vds/v1/vehicles/$vin/homeRegion', vin)
@@ -414,6 +417,8 @@ class Connection:
 
     async def getOperationList(self, vin):
         """Collect operationlist for VIN, supported/licensed functions."""
+        if not await self.validate_tokens:
+            return False
         try:
             await self.set_token('vwg')
             response = await self.get('/api/rolesrights/operationlist/v3/vehicles/$vin', vin)
@@ -432,6 +437,8 @@ class Connection:
 
     async def getRealCarData(self, vin):
         """Get car information from customer profile, VIN, nickname, etc."""
+        if not await self.validate_tokens:
+            return False
         try:
             atoken = self._session_tokens['identity']['access_token']
             sub = jwt.decode(atoken, verify=False).get('sub', None)
@@ -443,19 +450,23 @@ class Connection:
                 data = {
                     'carData': next(item for item in response.get('realCars', []) if item['vehicleIdentificationNumber'] == vin)
                 }
+                return data
             elif response.get('status_code', {}):
                 _LOGGER.warning(f'Could not fetch realCarData, HTTP status code: {response.get("status_code")}')
-                data = response
+                #data = response
             else:
                 _LOGGER.info('Unhandled error while trying to fetch realcar data')
-                data = {'error': 'unknown'}
+                #data = {'error': 'unknown'}
         except Exception as error:
             _LOGGER.warning(f'Could not fetch realCarData, error: {error}')
-            data = {'error': 'unknown'}
-        return data
+            #data = {'error': 'unknown'}
+        #return data
+        return False
 
     async def getCarportData(self, vin):
         """Get carport data for vehicle, model, model year etc."""
+        if not await self.validate_tokens:
+            return False
         try:
             await self.set_token('vwg')
             response = await self.get(
@@ -466,16 +477,18 @@ class Connection:
                 data = {
                     'carportData': response.get('carportData', {})
                 }
+                return data
             elif response.get('status_code', {}):
                 _LOGGER.warning(f'Could not fetch carportdata, HTTP status code: {response.get("status_code")}')
-                data = response
+                #data = response
             else:
                 _LOGGER.info('Unhandled error while trying to fetch carport data')
-                data = {'error': 'unknown'}
+                #data = {'error': 'unknown'}
         except Exception as error:
             _LOGGER.warning(f'Could not fetch carportData, error: {error}')
-            data = {'error': 'unknown'}
-        return data
+            #data = {'error': 'unknown'}
+        #return data
+        return False
 
     async def getVehicleStatusData(self, vin):
         """Get stored vehicle data response."""
@@ -490,19 +503,23 @@ class Connection:
                     'StoredVehicleDataResponse': response.get('StoredVehicleDataResponse', {}),
                     'StoredVehicleDataResponseParsed': dict([(e['id'],e if 'value' in e else '') for f in [s['field'] for s in response['StoredVehicleDataResponse']['vehicleData']['data']] for e in f])
                 }
+                return data
             elif response.get('status_code', {}):
                 _LOGGER.warning(f'Could not fetch vehicle status report, HTTP status code: {response.get("status_code")}')
-                data = response
+                #data = response
             else:
                 _LOGGER.info('Unhandled error while trying to fetch status data')
-                data = {'error': 'unknown'}
+                #data = {'error': 'unknown'}
         except Exception as error:
             _LOGGER.warning(f'Could not fetch StoredVehicleDataResponse, error: {error}')
-            data = {'error': 'unknown'}
-        return data
+            #data = {'error': 'unknown'}
+        #return data
+        return False
 
     async def getTripStatistics(self, vin):
         """Get short term trip statistics."""
+        if not await self.validate_tokens:
+            return False
         try:
             await self.set_token('vwg')
             response = await self.get(
@@ -511,19 +528,23 @@ class Connection:
             )
             if response.get('tripData', {}):
                 data = {'tripstatistics': response.get('tripData', {})}
+                return data
             elif response.get('status_code', {}):
                 _LOGGER.warning(f'Could not fetch trip statistics, HTTP status code: {response.get("status_code")}')
-                data = response
+                #data = response
             else:
                 _LOGGER.info(f'Unhandled error while trying to fetch trip statistics')
-                data = {'error': 'unknown'}
+                #data = {'error': 'unknown'}
         except Exception as error:
             _LOGGER.warning(f'Could not fetch trip statistics, error: {error}')
-            data = {'error': 'unknown'}
-        return data
+            #data = {'error': 'unknown'}
+        #return data
+        return False
 
     async def getPosition(self, vin):
         """Get position data."""
+        if not await self.validate_tokens:
+            return False
         try:
             await self.set_token('vwg')
             response = await self.get(
@@ -535,6 +556,7 @@ class Connection:
                     'findCarResponse': response.get('findCarResponse', {}),
                     'isMoving': False
                 }
+                return data
             elif response.get('status_code', {}):
                 if response.get('status_code', 0) == 204:
                     _LOGGER.debug(f'Seems car is moving, HTTP 204 received from position')
@@ -542,19 +564,23 @@ class Connection:
                         'isMoving': True,
                         'rate_limit_remaining': 15
                     }
+                    return data
                 else:
                     _LOGGER.warning(f'Could not fetch position, HTTP status code: {response.get("status_code")}')
-                    data = response
+                    #data = response
             else:
                 _LOGGER.info('Unhandled error while trying to fetch positional data')
-                data = {'error': 'unknown'}
+                #data = {'error': 'unknown'}
         except Exception as error:
             _LOGGER.warning(f'Could not fetch position, error: {error}')
-            data = {'error': 'unknown'}
-        return data
+            #data = {'error': 'unknown'}
+        #return data
+        return False
 
     async def getTimers(self, vin):
         """Get departure timers."""
+        if not await self.validate_tokens:
+            return False
         try:
             await self.set_token('vwg')
             response = await self.get(
@@ -563,19 +589,23 @@ class Connection:
             )
             if response.get('timer', {}):
                 data = {'timers': response.get('timer', {})}
+                return data
             elif response.get('status_code', {}):
                 _LOGGER.warning(f'Could not fetch timers, HTTP status code: {response.get("status_code")}')
-                data = response
+                #data = response
             else:
                 _LOGGER.info('Unknown error while trying to fetch data for departure timers')
-                data = {'error': 'unknown'}
+                #data = {'error': 'unknown'}
         except Exception as error:
             _LOGGER.warning(f'Could not fetch timers, error: {error}')
-            data = {'error': 'unknown'}
-        return data
+            #data = {'error': 'unknown'}
+        #return data
+        return False
 
     async def getClimater(self, vin):
         """Get climatisation data."""
+        if not await self.validate_tokens:
+            return False
         try:
             await self.set_token('vwg')
             response = await self.get(
@@ -584,19 +614,23 @@ class Connection:
             )
             if response.get('climater', {}):
                 data = {'climater': response.get('climater', {})}
+                return data
             elif response.get('status_code', {}):
                 _LOGGER.warning(f'Could not fetch climatisation, HTTP status code: {response.get("status_code")}')
-                data = response
+                #data = response
             else:
                 _LOGGER.info('Unhandled error while trying to fetch climatisation data')
-                data = {'error': 'unknown'}
+                #data = {'error': 'unknown'}
         except Exception as error:
             _LOGGER.warning(f'Could not fetch climatisation, error: {error}')
-            data = {'error': 'unknown'}
-        return data
+            #data = {'error': 'unknown'}
+        #return data
+        return False
 
     async def getCharger(self, vin):
         """Get charger data."""
+        if not await self.validate_tokens:
+            return False
         try:
             await self.set_token('vwg')
             response = await self.get(
@@ -605,19 +639,23 @@ class Connection:
             )
             if response.get('charger', {}):
                 data = {'charger': response.get('charger', {})}
+                return data
             elif response.get('status_code', {}):
                 _LOGGER.warning(f'Could not fetch pre-heating, HTTP status code: {response.get("status_code")}')
-                data = response
+                #data = response
             else:
                 _LOGGER.info('Unhandled error while trying to fetch charger data')
-                data = {'error': 'unknown'}
+                #data = {'error': 'unknown'}
         except Exception as error:
             _LOGGER.warning(f'Could not fetch charger, error: {error}')
-            data = {'error': 'unknown'}
-        return data
+            #data = {'error': 'unknown'}
+        #return data
+        return False
 
     async def getPreHeater(self, vin):
         """Get parking heater data."""
+        if not await self.validate_tokens:
+            return False
         try:
             await self.set_token('vwg')
             response = await self.get(
@@ -626,16 +664,18 @@ class Connection:
             )
             if response.get('statusResponse', {}):
                 data = {'heating': response.get('statusResponse', {})}
+                return data
             elif response.get('status_code', {}):
                 _LOGGER.warning(f'Could not fetch pre-heating, HTTP status code: {response.get("status_code")}')
-                data = response
+                #data = response
             else:
                 _LOGGER.info('Unhandled error while trying to fetch pre-heating data')
-                data = {'error': 'unknown'}
+                #data = {'error': 'unknown'}
         except Exception as error:
             _LOGGER.warning(f'Could not fetch pre-heating, error: {error}')
-            data = {'error': 'unknown'}
-        return data
+            #data = {'error': 'unknown'}
+        #return data
+        return False
 
     async def get_request_status(self, vin, sectionId, requestId):
         """Return status of a request ID for a given section ID."""
@@ -725,6 +765,7 @@ class Connection:
                 raise Exception('Did not receive a valid security token')
         except Exception as error:
             _LOGGER.error(f'Could not generate security token (maybe wrong SPIN?), error: {error}')
+            raise
 
  #### Data set functions ####
     async def dataCall(self, query, vin='', **data):
@@ -765,17 +806,16 @@ class Connection:
             await self.set_token('vwg')
             response = await self.dataCall('fs-car/bs/vsr/v1/skoda/CZ/vehicles/$vin/requests', vin, data=None)
             if not response:
-                _LOGGER.warning(f'Failed to execute data refresh')
-                raise Exception(f'Failed to execute data refresh')
+                raise Exception('Invalid response')
             else:
                 request_id = response.get('CurrentVehicleDataResponse', {}).get('requestId', 0)
                 request_state = response.get('CurrentVehicleDataResponse', {}).get('requestState', 'queued')
                 remaining = response.get('rate_limit_remaining', -1)
                 _LOGGER.debug(f'Request to refresh data returned with state "{request_state}", request id: {request_id}, remaining requests: {remaining}')
                 return dict({'id': str(request_id), 'state': request_state, 'rate_limit_remaining': remaining})
-        except Exception as error:
-            _LOGGER.warning(f'Data refresh failed - {error}')
-            raise Exception(f'Data refresh failed - {error}')
+        except:
+            raise
+        return False
 
     async def setCharger(self, vin, data):
         """Start/Stop charger."""
@@ -783,16 +823,15 @@ class Connection:
             await self.set_token('vwg')
             response = await self.dataCall('fs-car/bs/batterycharge/v1/Skoda/CZ/vehicles/$vin/charger/actions', vin, json = data)
             if not response:
-                _LOGGER.warning('Failed to execute charger action.')
-                return False
+                raise Exception('Invalid response')
             else:
                 request_id = response.get('action', {}).get('actionId', 0)
                 request_state = response.get('action', {}).get('actionState', 'unknown')
                 remaining = response.get('rate_limit_remaining', -1)
                 _LOGGER.debug(f'Request for charger action returned with state "{request_state}", request id: {request_id}, remaining requests: {remaining}')
                 return dict({'id': str(request_id), 'state': request_state, 'rate_limit_remaining': remaining})
-        except Exception as error:
-            _LOGGER.warning(f'Failed to execute charger action - {error}')
+        except:
+            raise
         return False
 
     async def setClimater(self, vin, data, spin):
@@ -805,16 +844,15 @@ class Connection:
             response = await self.dataCall('fs-car/bs/climatisation/v1/Skoda/CZ/vehicles/$vin/climater/actions', vin, json = data)
             self._session_headers.pop('X-securityToken', None)
             if not response:
-                raise Exception(f'Invalid response: "{response}"')
+                raise Exception('Invalid response')
             else:
                 request_id = response.get('action', {}).get('actionId', 0)
                 request_state = response.get('action', {}).get('actionState', 'unknown')
                 remaining = response.get('rate_limit_remaining', -1)
                 _LOGGER.debug(f'Request for climater action returned with state "{request_state}", request id: {request_id}, remaining requests: {remaining}')
                 return dict({'id': str(request_id), 'state': request_state, 'rate_limit_remaining': remaining})
-        except Exception as error:
+        except:
             self._session_headers.pop('X-securityToken', None)
-            #_LOGGER.warning(f'Failed to execute charger action - {error}')
             raise
         return False
 
@@ -835,12 +873,11 @@ class Connection:
             if contType: self._session_headers['Content-Type'] = contType
 
             if not response:
-                raise Exception(f'Invalid response: "{response}"')
+                raise Exception('Invalid response')
             else:
                 request_id = response.get('performActionResponse', {}).get('requestId', 0)
-                request_state = response.get('performActionResponse', {}).get('requestState', 'unknown')
                 remaining = response.get('rate_limit_remaining', -1)
-                _LOGGER.debug(f'Request for parking heater returned with state "{request_state}", request id: {request_id}, remaining requests: {remaining}')
+                _LOGGER.debug(f'Request for parking heater is queued with request id: {request_id}, remaining requests: {remaining}')
                 return dict({'id': str(request_id), 'state': request_state, 'rate_limit_remaining': remaining})
         except Exception as error:
             self._session_headers.pop('x-mbbSecToken', None)
@@ -866,19 +903,18 @@ class Connection:
             self._session_headers.pop('Content-Type', None)
             if contType: self._session_headers['Content-Type'] = contType
             if not response:
-                _LOGGER.warning('Failed to execute lock action.')
-                return False
+                raise Exception('Invalid response')
             else:
                 request_id = response.get('rluActionResponse', {}).get('requestId', 0)
                 request_state = response.get('rluActionResponse', {}).get('requestId', 'unknown')
                 remaining = response.get('rate_limit_remaining', -1)
                 _LOGGER.debug(f'Request for lock action returned with state "{request_state}", request id: {request_id}, remaining requests: {remaining}')
                 return dict({'id': str(request_id), 'state': request_state, 'rate_limit_remaining': remaining})
-        except Exception as error:
-            _LOGGER.error(f'Failed to execute lock action - {error}')
-        self._session_headers.pop('X-mbbSecToken', None)
-        self._session_headers.pop('Content-Type', None)
-        if contType: self._session_headers['Content-Type'] = contType
+        except:
+            self._session_headers.pop('X-mbbSecToken', None)
+            self._session_headers.pop('Content-Type', None)
+            if contType: self._session_headers['Content-Type'] = contType
+            raise
         return False
 
  #### Token handling ####
@@ -892,14 +928,16 @@ class Connection:
         id_dt = datetime.fromtimestamp(int(id_exp))
         at_dt = datetime.fromtimestamp(int(at_exp))
         now = datetime.now()
-        # We check if the tokens expire in the next minute
-        later = now + timedelta(minutes=1)
+        later = now + self._session_refresh_interval
+
+        # Check if tokens have expired, or expires now
         if now >= id_dt or now >= at_dt:
             _LOGGER.debug('Tokens have expired. Try to fetch new tokens.')
             if await self.refresh_tokens():
                 _LOGGER.debug('Successfully refreshed tokens')
             else:
                 return False
+        # Check if tokens expires before next update
         elif later >= id_dt or later >= at_dt:
             _LOGGER.debug('Tokens about to expire. Try to fetch new tokens.')
             if await self.refresh_tokens():
