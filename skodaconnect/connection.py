@@ -313,9 +313,6 @@ class Connection:
             try:
                 if response.status == 204:
                     res = {'status_code': response.status}
-                if response.status == 429:
-                    _LOGGER.warning(f'Got HTTP 429 "Too many requests" from server. The server has throttled the connection, consider a longer refresh interval.')
-                    _LOGGER.debug(f'Headers: {response.headers}')
                 elif response.status >= 200 or response.status <= 300:
                     res = await response.json(loads=json_loads)
                 else:
@@ -325,9 +322,9 @@ class Connection:
                     res['rate_limit_remaining'] = response.headers.get('X-RateLimit-Remaining', '')
             except:
                 res = {}
-                if not "revoke" in url:
-                    _LOGGER.debug(f'Something went wrong [{response.status}] response: {response}')
+                _LOGGER.debug(f'Something went wrong [{response.status}] response: {response}')
                 return res
+
             if self._session_fulldebug:
                 _LOGGER.debug(f'Request for "{url}" returned with status code [{response.status}], response: {res}')
             else:
@@ -351,7 +348,7 @@ class Connection:
                 _LOGGER.info('Got HTTP 502 from server, this request might not be supported for this vehicle')
             else:
                 _LOGGER.error(f'Got unhandled error from server: {error.status}')
-            return {'status': error.status}
+            return {'status_code': error.status}
 
     async def post(self, url, vin='', **data):
         """Perform a post query to the online service."""
@@ -859,7 +856,10 @@ class Connection:
                 contType = self._session_headers['Content-Type']
             else:
                 contType = ''
-            self._session_headers['X-mbbSecToken'] = await self.get_sec_token(vin = vin, spin = spin, action = 'lock')
+            if 'unlock' in data:
+                self._session_headers['X-mbbSecToken'] = await self.get_sec_token(vin = vin, spin = spin, action = 'unlock')
+            else:
+                self._session_headers['X-mbbSecToken'] = await self.get_sec_token(vin = vin, spin = spin, action = 'lock')
             self._session_headers['Content-Type'] = 'application/vnd.vwg.mbb.RemoteLockUnlock_v1_0_0+xml'
             response = await self.dataCall('fs-car/bs/rlu/v1/skoda/CZ/vehicles/$vin/actions', vin, data = data)
             # Clean up headers
