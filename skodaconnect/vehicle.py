@@ -262,7 +262,10 @@ class Vehicle:
                     'status': response.get('state', 'Unknown'),
                     'id': response.get('id', 0)
                 }
-                status = await self.wait_for_request('batterycharge', response.get('id', 0))
+                if response.get('state', None) == 'Throttled':
+                    status = 'Throttled'
+                else:
+                    status = await self.wait_for_request('batterycharge', response.get('id', 0))
                 self._requests['batterycharge'] = {'status': status}
                 return True
         except Exception as error:
@@ -355,7 +358,10 @@ class Vehicle:
                     'status': response.get('state', 'Unknown'),
                     'id': response.get('id', 0),
                 }
-                status = await self.wait_for_request('climatisation', response.get('id', 0))
+                if response.get('state', None) == 'Throttled':
+                    status = 'Throttled'
+                else:
+                    status = await self.wait_for_request('climatisation', response.get('id', 0))
                 self._requests['climatisation'] = {'status': status}
                 return True
         except Exception as error:
@@ -398,7 +404,10 @@ class Vehicle:
                     'status': response.get('state', 'Unknown'),
                     'id': response.get('id', 0),
                 }
-                status = await self.wait_for_request('rs', response.get('id', 0))
+                if response.get('state', None) == 'Throttled':
+                    status = 'Throttled'
+                else:
+                    status = await self.wait_for_request('rs', response.get('id', 0))
                 self._requests['preheater'] = {'status': status}
                 return True
         except Exception as error:
@@ -439,7 +448,10 @@ class Vehicle:
                     'status': response.get('state', 'Unknown'),
                     'id': response.get('id', 0),
                 }
-                status = await self.wait_for_request('rlu', response.get('id', 0))
+                if response.get('state', None) == 'Throttled':
+                    status = 'Throttled'
+                else:
+                    status = await self.wait_for_request('rlu', response.get('id', 0))
                 self._requests['lock'] = {'status': status}
                 return True
         except Exception as error:
@@ -475,7 +487,10 @@ class Vehicle:
                     'status': response.get('status', 'Unknown'),
                     'id': response.get('id', 0)
                 }
-                status = await self.wait_for_request('vsr', response.get('id', 0))
+                if response.get('state', None) == 'Throttled':
+                    status = 'Throttled'
+                else:
+                    status = await self.wait_for_request('vsr', response.get('id', 0))
                 self._requests['refresh'] = {
                     'status': status
                 }
