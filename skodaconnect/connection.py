@@ -112,7 +112,8 @@ class Connection:
                 url=authorizationEndpoint+\
                     '?redirect_uri='+APP_URI+\
                     '&nonce='+getNonce()+\
-                    '&response_type=code id_token token'+\
+                    '&response_type=code id_token'+\
+                    #'&response_type=code id_token token'+\
                     '&client_id='+CLIENT_ID+\
                     '&scope=openid mbb profile address cars email birthdate badge phone driversLicense dealers',
                 headers=self._session_auth_headers,
@@ -149,16 +150,19 @@ class Connection:
             self._session_auth_headers['Origin'] = authissuer
             excepted = False
 
+            _LOGGER.debug('Authenticating with email and password.')
             req = await self._session.post(
                 url=pw_url,
                 headers=self._session_auth_headers,
                 data = pwform,
                 allow_redirects=False
             )
+            _LOGGER.debug(f'Got: {req.text}')
             # Follow all redirects until we get redirected back to "our app"
             try:
                 maxDepth = 10
                 ref = req.headers['Location']
+                _LOGGER.debug(f'Redirected to: {ref}')
                 while not ref.startswith(APP_URI):
                     response = await self._session.get(
                         url=ref,
@@ -166,6 +170,7 @@ class Connection:
                         allow_redirects=False
                     )
                     ref = response.headers['Location']
+                    _LOGGER.debug(f'New location: {ref}')
                     # Set a max limit on requests to prevent forever loop
                     maxDepth -= 1
                     if maxDepth == 0:
@@ -176,10 +181,12 @@ class Connection:
                 _LOGGER.debug('Got code: %s' % ref)
                 pass
 
+            _LOGGER.debug('Parse auth code...')
             # Extract code and tokens
             jwt_auth_code = parse_qs(urlparse(ref).fragment).get('code')[0]
-            jwt_access_token = parse_qs(urlparse(ref).fragment).get('access_token')[0]
+            #jwt_access_token = parse_qs(urlparse(ref).fragment).get('access_token')[0]
             jwt_id_token = parse_qs(urlparse(ref).fragment).get('id_token')[0]
+            _LOGGER.debug('Get tokens...')
 
             # Exchange Auth code for Skoda tokens
             tokenBody = {
@@ -267,27 +274,32 @@ class Connection:
         """Log out from Skoda Connect."""
         self._session_headers.pop('Authorization', None)
 
-        _LOGGER.info('Revoking API Access Token...')
-        self._session_headers['token_type_hint'] = 'access_token'
-        params = {"token": self._session_tokens['vwg']['access_token']}
-        revoke_at = await self.post('https://mbboauth-1d.prd.ece.vwg-connect.com/mbbcoauth/mobile/oauth2/v1/revoke', data = params)
-        _LOGGER.info('Revoking API Refresh Token...')
-        self._session_headers['token_type_hint'] = 'refresh_token'
-        params = {"token": self._session_tokens['vwg']['refresh_token']}
-        revoke_rt = await self.post('https://mbboauth-1d.prd.ece.vwg-connect.com/mbbcoauth/mobile/oauth2/v1/revoke', data = params)
-        self._session_headers.pop('token_type_hint', None)
-        #_LOGGER.info('Revoking Identity Access Token...')
-        #params = {
-        #    "token": self._session_tokens['identity']['access_token'],
-        #    "brand": "Skoda"
-        #}
-        #revoke_at = await self.post('https://tokenrefreshservice.apps.emea.vwapps.io/revokeToken', data = params)
-        _LOGGER.info('Revoking Identity Refresh Token...')
-        params = {
-            "token": self._session_tokens['identity']['refresh_token'],
-            "brand": "Skoda"
-        }
-        revoke_rt = await self.post('https://tokenrefreshservice.apps.emea.vwapps.io/revokeToken', data = params)
+        if self._session_logged_in:
+            if self._session_headers.get('vwg', {}).get('access_token'):
+                _LOGGER.info('Revoking API Access Token...')
+                self._session_headers['token_type_hint'] = 'access_token'
+                params = {"token": self._session_tokens['vwg']['access_token']}
+                revoke_at = await self.post('https://mbboauth-1d.prd.ece.vwg-connect.com/mbbcoauth/mobile/oauth2/v1/revoke', data = params)
+            if self._session_headers.get('vwg', {}).get('refresh_token'):
+                _LOGGER.info('Revoking API Refresh Token...')
+                self._session_headers['token_type_hint'] = 'refresh_token'
+                params = {"token": self._session_tokens['vwg']['refresh_token']}
+                revoke_rt = await self.post('https://mbboauth-1d.prd.ece.vwg-connect.com/mbbcoauth/mobile/oauth2/v1/revoke', data = params)
+                self._session_headers.pop('token_type_hint', None)
+            if self._session_headers.get('identity', {}).get('identity_token'):
+                _LOGGER.info('Revoking Identity Access Token...')
+                #params = {
+                #    "token": self._session_tokens['identity']['access_token'],
+                #    "brand": "Skoda"
+                #}
+                #revoke_at = await self.post('https://tokenrefreshservice.apps.emea.vwapps.io/revokeToken', data = params)
+            if self._session_headers.get('identity', {}).get('refresh_token'):
+                _LOGGER.info('Revoking Identity Refresh Token...')
+                params = {
+                    "token": self._session_tokens['identity']['refresh_token'],
+                    "brand": "Skoda"
+                }
+                revoke_rt = await self.post('https://tokenrefreshservice.apps.emea.vwapps.io/revokeToken', data = params)
 
   # HTTP methods to API
     async def _request(self, method, url, **kwargs):
@@ -750,16 +762,19 @@ class Connection:
                 self._session_logged_in = False
             elif error.status == 400:
                 _LOGGER.error(f'Bad request')
+            elif error.status == 429:
+                _LOGGER.warning('Too many requests. Further requests can only be made after the end of next trip in order to protect your vehicles battery.')
+                return 429
             elif error.status == 500:
                 _LOGGER.error('Internal server error, server might be temporarily unavailable')
             elif error.status == 502:
                 _LOGGER.error('Bad gateway, this function may not be implemented for this vehicle')
             else:
                 _LOGGER.error(f'Unhandled HTTP exception: {error}')
-            return False
+            #return False
         except Exception as error:
             _LOGGER.error(f'Failure to execute: {error}')
-            return False
+        return False
 
     async def setRefresh(self, vin):
         """"Force vehicle data update."""
@@ -768,6 +783,8 @@ class Connection:
             response = await self.dataCall('fs-car/bs/vsr/v1/skoda/CZ/vehicles/$vin/requests', vin, data=None)
             if not response:
                 raise Exception('Invalid or no response')
+            elif response == 429:
+                return dict({'id': None, 'state': 'Throttled', 'rate_limit_remaining': 0})
             else:
                 request_id = response.get('CurrentVehicleDataResponse', {}).get('requestId', 0)
                 request_state = response.get('CurrentVehicleDataResponse', {}).get('requestState', 'queued')
@@ -785,6 +802,8 @@ class Connection:
             response = await self.dataCall('fs-car/bs/batterycharge/v1/Skoda/CZ/vehicles/$vin/charger/actions', vin, json = data)
             if not response:
                 raise Exception('Invalid or no response')
+            elif response == 429:
+                return dict({'id': None, 'state': 'Throttled', 'rate_limit_remaining': 0})
             else:
                 request_id = response.get('action', {}).get('actionId', 0)
                 request_state = response.get('action', {}).get('actionState', 'unknown')
@@ -806,6 +825,8 @@ class Connection:
             self._session_headers.pop('X-securityToken', None)
             if not response:
                 raise Exception('Invalid or no response')
+            elif response == 429:
+                return dict({'id': None, 'state': 'Throttled', 'rate_limit_remaining': 0})
             else:
                 request_id = response.get('action', {}).get('actionId', 0)
                 request_state = response.get('action', {}).get('actionState', 'unknown')
@@ -826,7 +847,8 @@ class Connection:
             else:
                 contType = ''
             self._session_headers['Content-Type'] = 'application/vnd.vwg.mbb.RemoteStandheizung_v2_0_2+json'
-            self._session_headers['x-mbbSecToken'] = await self.get_sec_token(vin = vin, spin = spin, action = 'heating')
+            if not 'quickstop' in data:
+                self._session_headers['x-mbbSecToken'] = await self.get_sec_token(vin = vin, spin = spin, action = 'heating')
             response = await self.dataCall('fs-car/bs/rs/v1/skoda/CZ/vehicles/$vin/action', vin = vin, json = data)
             # Clean up headers
             self._session_headers.pop('x-mbbSecToken', None)
@@ -835,11 +857,13 @@ class Connection:
 
             if not response:
                 raise Exception('Invalid or no response')
+            elif response == 429:
+                return dict({'id': None, 'state': 'Throttled', 'rate_limit_remaining': 0})
             else:
                 request_id = response.get('performActionResponse', {}).get('requestId', 0)
                 remaining = response.get('rate_limit_remaining', -1)
                 _LOGGER.debug(f'Request for parking heater is queued with request id: {request_id}, remaining requests: {remaining}')
-                return dict({'id': str(request_id), 'state': request_state, 'rate_limit_remaining': remaining})
+                return dict({'id': str(request_id), 'state': None, 'rate_limit_remaining': remaining})
         except Exception as error:
             self._session_headers.pop('x-mbbSecToken', None)
             self._session_headers.pop('Content-Type', None)
@@ -868,6 +892,8 @@ class Connection:
             if contType: self._session_headers['Content-Type'] = contType
             if not response:
                 raise Exception('Invalid or no response')
+            elif response == 429:
+                return dict({'id': None, 'state': 'Throttled', 'rate_limit_remaining': 0})
             else:
                 request_id = response.get('rluActionResponse', {}).get('requestId', 0)
                 request_state = response.get('rluActionResponse', {}).get('requestId', 'unknown')
