@@ -23,15 +23,15 @@ class Vehicle:
         self._discovered = False
         self._states = {}
         self._requests = {
-            #'departuretimer': {'status': None, 'timestamp': datetime.now()}, # Not yet implemented
-            'batterycharge': {'status': None, 'timestamp': datetime.now()},
-            'climatisation': {'status': None, 'timestamp': datetime.now()},
-            'refresh': {'status': None, 'timestamp': datetime.now()},
-            'lock': {'status': None, 'timestamp': datetime.now()},
-            'preheater': {'status': None, 'timestamp': datetime.now()},
+            #'departuretimer': {'status': '', 'timestamp': datetime.now()}, # Not yet implemented
+            'batterycharge': {'status': '', 'timestamp': datetime.now()},
+            'climatisation': {'status': '', 'timestamp': datetime.now()},
+            'refresh': {'status': '', 'timestamp': datetime.now()},
+            'lock': {'status': '', 'timestamp': datetime.now()},
+            'preheater': {'status': '', 'timestamp': datetime.now()},
             'remaining': -1,
-            'latest': None,
-            'state': None
+            'latest': '',
+            'state': ''
         }
         self._climate_duration = 30
 
@@ -62,7 +62,7 @@ class Vehicle:
             self.get_realcardata(),
             return_exceptions=True
         )
-        _LOGGER.info(f'Vehicle {self.vin} added from Skoda Connect. Homeregion is "{self._homeregion}"')
+        _LOGGER.info(f'Vehicle {self.vin} added. Homeregion is "{self._homeregion}"')
 
         _LOGGER.debug('Attempting discovery of supported API endpoints for vehicle.')
         operationList = await self._connection.getOperationList(self.vin)
@@ -115,7 +115,7 @@ class Vehicle:
                 return_exceptions=True
             )
         else:
-            _LOGGER.info(f'Vehicle with VIN {self.vin} is deactivated from Skoda Connect')
+            _LOGGER.info(f'Vehicle with VIN {self.vin} is deactivated.')
 
   # Data collection functions
     async def get_realcardata(self):
@@ -136,7 +136,7 @@ class Vehicle:
             if not await self.expired('rheating_v1'):
                 data = await self._connection.getPreHeater(self.vin)
                 if data:
-                    await self._states.update(data)
+                    self._states.update(data)
                 else:
                     _LOGGER.debug('Could not fetch preheater data')
         else:
@@ -148,7 +148,7 @@ class Vehicle:
             if not await self.expired('rclima_v1'):
                 data = await self._connection.getClimater(self.vin)
                 if data:
-                    await self._states.update(data)
+                    self._states.update(data)
                 else:
                     _LOGGER.debug('Could not fetch climater data')
         else:
@@ -160,7 +160,7 @@ class Vehicle:
             if not await self.expired('trip_statistic_v1'):
                 data = await self._connection.getTripStatistics(self.vin)
                 if data:
-                    await self._states.update(data)
+                    self._states.update(data)
                 else:
                     _LOGGER.debug('Could not fetch trip statistics')
 
@@ -170,7 +170,7 @@ class Vehicle:
             if not await self.expired('carfinder_v1'):
                 data = await self._connection.getPosition(self.vin)
                 if data:
-                    await self._states.update(data)
+                    self._states.update(data)
                 else:
                     _LOGGER.debug('Could not fetch any positional data')
 
@@ -180,7 +180,7 @@ class Vehicle:
             if not await self.expired('statusreport_v1'):
                 data = await self._connection.getVehicleStatusData(self.vin)
                 if data:
-                    await self._states.update(data)
+                    self._states.update(data)
                 else:
                     _LOGGER.debug('Could not fetch status report')
 
@@ -190,7 +190,7 @@ class Vehicle:
             if not await self.expired('rbatterycharge_v1'):
                 data = await self._connection.getCharger(self.vin)
                 if data:
-                    await self._states.update(data)
+                    self._states.update(data)
                 else:
                     _LOGGER.debug('Could not fetch charger data')
         else:
@@ -202,7 +202,7 @@ class Vehicle:
             if not await self.expired('timerprogramming_v1'):
                 data = await self._connection.getTimers(self.vin)
                 if data:
-                    await self._states.update(data)
+                    self._states.update(data)
                 else:
                     _LOGGER.debug('Could not fetch timers')
         else:
@@ -230,6 +230,19 @@ class Vehicle:
 
   # Data set functions
    # Charging (BATTERYCHARGE)
+    async def set_charger_current(self, value):
+        """Set charger current"""
+        if self.is_charging_supported:
+            if 1 <= int(value) <= 255:
+                data = {'action': {'settings': {'maxChargeCurrent': int(value)},'type': 'setSettings'}}
+            else:
+                _LOGGER.error(f'Set charger maximum current to {value} is not supported.')
+                raise Exception(f'Set charger maximum current to {value} is not supported.')
+            return await self.set_charger(data)
+        else:
+            _LOGGER.error('No charger support.')
+            raise Exception('No charger support.')
+
     async def set_charger(self, action):
         """Charging actions."""
         if not self._services.get('rbatterycharge_v1', False):
@@ -245,6 +258,8 @@ class Vehicle:
                 return False
         if action in ['start', 'stop']:
             data = {'action': {'type': action}}
+        elif action.get('action', {}).get('type', '') == 'setSettings':
+            data = action
         else:
             _LOGGER.error(f'Invalid charger action: {action}. Must be either start or stop')
             raise Exception(f'Invalid charger action: {action}. Must be either start or stop')
@@ -525,7 +540,7 @@ class Vehicle:
                 expiration = datetime.utcnow() + timedelta(days = 1)
             expiration = expiration.replace(tzinfo = None)
             if now >= expiration:
-                _LOGGER.warning(f'Skoda Connect access to {service} has expired!')
+                _LOGGER.warning(f'Access to {service} has expired!')
                 self._discovered = False
                 return True
             else:
@@ -592,13 +607,13 @@ class Vehicle:
 
     @property
     def model_image(self):
-        #Not implemented for SKODA
+        #Not implemented
         """Return model image"""
         return self.attrs.get('imageUrl')
 
     @property
     def is_model_image_supported(self):
-        #Not implemented for SKODA
+        #Not implemented
         if self.attrs.get('imageUrl', False):
             return True
 
@@ -624,14 +639,14 @@ class Vehicle:
   # Connection status
     @property
     def last_connected(self):
-        """Return when vehicle was last connected to skoda connect."""
+        """Return when vehicle was last connected to connect servers."""
         last_connected_utc = self.attrs.get('StoredVehicleDataResponse').get('vehicleData').get('data')[0].get('field')[0].get('tsCarSentUtc')
         last_connected = last_connected_utc.replace(tzinfo=timezone.utc).astimezone(tz=None)
         return last_connected.strftime('%Y-%m-%d %H:%M:%S')
 
     @property
     def is_last_connected_supported(self):
-        """Return when vehicle was last connected to skoda connect."""
+        """Return when vehicle was last connected to connect servers."""
         if next(iter(next(iter(self.attrs.get('StoredVehicleDataResponse', {}).get('vehicleData', {}).get('data', {})), None).get('field', {})), None).get('tsCarSentUtc', []):
             return True
 
@@ -668,7 +683,7 @@ class Vehicle:
     @property
     def service_inspection_distance(self):
         """Return time left for service inspection"""
-        return - int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0203010003'].get('value'))
+        return - int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0203010003'].get('value', 0))
 
     @property
     def is_service_inspection_distance_supported(self):
@@ -681,27 +696,28 @@ class Vehicle:
     @property
     def oil_inspection(self):
         """Return time left for service inspection"""
-        return - int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0203010002'].get('value'))
+        return - int(self.attrs.get('StoredVehicleDataResponseParsed', {}).get('0x0203010002', {}).get('value', 0))
 
     @property
     def is_oil_inspection_supported(self):
         if self.attrs.get('StoredVehicleDataResponseParsed', False):
             if '0x0203010002' in self.attrs.get('StoredVehicleDataResponseParsed'):
-                return True
-            else:
-                return False
+                if self.attrs.get('StoredVehicleDataResponseParsed').get('0x0203010002').get('value', None) is not None:
+                    return True
+        return False
+
     @property
     def oil_inspection_distance(self):
         """Return time left for service inspection"""
-        return - int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0203010001'].get('value'))
+        return - int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0203010001'].get('value', 0))
 
     @property
     def is_oil_inspection_distance_supported(self):
         if self.attrs.get('StoredVehicleDataResponseParsed', False):
             if '0x0203010001' in self.attrs.get('StoredVehicleDataResponseParsed'):
-                return True
-            else:
-                return False
+                if self.attrs.get('StoredVehicleDataResponseParsed').get('0x0203010001').get('value', None) is not None:
+                    return True
+        return False
 
     @property
     def adblue_level(self):
@@ -1533,24 +1549,24 @@ class Vehicle:
 
     @property
     def trip_last_recuperation(self):
-        #Not implemented for SKODA
+        #Not implemented
         return self.trip_last_entry.get('recuperation')
 
     @property
     def is_trip_last_recuperation_supported(self):
-        #Not implemented for SKODA
+        #Not implemented
         response = self.trip_last_entry
         if response and type(response.get('recuperation', None)) in (float, int):
             return True
 
     @property
     def trip_last_total_electric_consumption(self):
-        #Not implemented for SKODA
+        #Not implemented
         return self.trip_last_entry.get('totalElectricConsumption')
 
     @property
     def is_trip_last_total_electric_consumption_supported(self):
-        #Not implemented for SKODA
+        #Not implemented
         response = self.trip_last_entry
         if response and type(response.get('totalElectricConsumption', None)) in (float, int):
             return True
@@ -1559,27 +1575,27 @@ class Vehicle:
     @property
     def refresh_action_status(self):
         """Return latest status of data refresh request."""
-        return self._requests['refresh'].get('status', 'None')
+        return self._requests.get('refresh', {}).get('status', 'None')
 
     @property
     def charger_action_status(self):
         """Return latest status of charger request."""
-        return self._requests['batterycharge'].get('status', 'None')
+        return self._requests.get('batterycharge', {}).get('status', 'None')
 
     @property
     def climater_action_status(self):
         """Return latest status of climater request."""
-        return self._requests['climatisation'].get('status', 'None')
+        return self._requests.get('climatisation', {}).get('status', 'None')
 
     @property
     def pheater_action_status(self):
         """Return latest status of parking heater request."""
-        return self._requests['preheater'].get('status', 'None')
+        return self._requests.get('preheater', {}).get('status', 'None')
 
     @property
     def lock_action_status(self):
         """Return latest status of lock action request."""
-        return self._requests['lock'].get('status', 'None')
+        return self._requests.get('lock', {}).get('status', 'None')
 
   # Requests data
     @property

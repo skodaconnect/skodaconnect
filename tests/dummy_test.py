@@ -4,9 +4,9 @@ import os
 from aiohttp import ClientSession
 
 # we need to change os path to be able to import volkswagecarnet
-myPath = os.path.dirname(os.path.abspath(__file__))
-print(myPath)
-sys.path.insert(0, myPath + '/../')
+#myPath = os.path.dirname(os.path.abspath(__file__))
+#print(myPath)
+#sys.path.insert(0, myPath + '/../')
 
 
 @pytest.mark.asyncio
@@ -16,5 +16,8 @@ async def test_skodaconnect():
         connection = skodaconnect.Connection(session, 'test@example.com', 'test_password')
         # if await connection._login():
         if not connection.logged_in:
+            print("Not logged in")
             return True
+        else:
+            print("Logged in")
     pytest.fail('Something happend we should have got a False from skodaconnect connection.logged_in')

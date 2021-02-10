@@ -44,131 +44,37 @@ $ pip install skodaconnect
 
 ### Example
 
-```python
-#!/usr/bin/env python3
-import skodaconnect
-import pprint
-import asyncio
-import logging
+For an extensive example, please use the code found in example/example.py.
+When logged in the library will automatically create a vehicle object for every car registered to the account. Initially no data is fetched other than basic information about the car.
+To update all available data use the update method of the Connect class. This will call the update function for all registered vehicles, which in turn will fetch data from all available API endpoints.
 
-from aiohttp import ClientSession
+#### Attributes
+The Vehicle class contains all of the attributes with values fetched from the API.
+To access a single attribute, please see and use the example/example.py.
+This will print all available methods, variables and properties as well as a list of supported attributes for discovered car.
 
-logging.basicConfig(level=logging.DEBUG)
+#### Methods
+Vehicle, in the following example the car object is an object of Vehicle class:
+```
+car.set_charger(action = "start")                          # action = "start" or "stop"
+car.set_charger_current(value=<int>)                       # value = integer between 1 and 255. Unknown what values to use other than 252 (reduced) and 254 (max) for PHEV
+car.set_battery_climatisation(mode = False)                # mode = False or True
+car.set_climater(data = json, spin = "1234")               # DO NOT USE DIRECTLY - Argument is json formatted data
+car.set_climatisation(mode = "auxilliary", spin="1234")    # mode = "auxilliary", "electric" or "off". spin is S-PIN and only needed for aux heating
+car.set_climatisation_temp(temperature = 22)               # temperature = integer from 16 to 30
+car.set_window_heating(action = "start")                   # action = "start" or "stop"
+car.set_lock(action = "unlock", spin = "1234")             # action = "unlock" or "lock". spin = SPIN, needed for both
+car.set_pheater(mode = "heating", spin = "1234")           # action = "heating", "ventilation" or "off". spin = SPIN, not needed for off
+car.set_refresh()                                          # Takes no arguments, will trigger force update
+```
 
-USERNAME='test@example.com'
-PASSWORD='mysecretpassword'
-
-
-COMPONENTS = {
-    'sensor': 'sensor',
-    'binary_sensor': 'binary_sensor',
-    'lock': 'lock',
-    'device_tracker': 'device_tracker',
-    'switch': 'switch',
-}
-
-RESOURCES = [
-        - charging_cable_connected
-        - charging_cable_locked
-        - door_closed_left_front
-        - door_closed_left_back
-        - door_closed_right_front
-        - door_closed_right_back
-        - doors_locked
-        - energy_flow
-        - external_power
-        - hood_closed
-        - parking_light
-        - request_in_progress
-        - sunroof_closed
-        - trunk_closed
-        - trunk_locked
-        - vehicle_moving
-        - window_closed_left_front
-        - window_closed_left_back
-        - window_closed_right_front
-        - window_closed_right_back
-        - windows_closed
-        - position
-        - door_locked
-        - trunk_locked
-        - adblue_level
-        - battery_level
-        - charger_max_ampere
-        - charging_time_left
-        - climatisation_target_temperature
-        - combined_range
-        - combustion_range
-        - electric_range
-        - fuel_level
-        - last_connected
-        - last_trip_average_electric_consumption
-        - last_trip_average_fuel_consumption
-        - last_trip_average_speed
-        - last_trip_duration
-        - last_trip_length
-        - odometer
-        - oil_inspection_days
-        - oil_inspection_distance
-        - outside_temperature
-        - parking_time
-        - pheater_status
-        - pheater_duration
-        - request_results
-        - requests_remaining
-        - service_inspection_days
-        - service_inspection_distance
-        - auxiliary_climatisation
-        - charging
-        - climatisation_from_battery
-        - electric_climatisation
-        - force_data_refresh
-        - parking_heater_heating
-        - parking_heater_ventilation
-        - window_heater
-]
-
-def is_enabled(attr):
-    """Return true if the user has enabled the resource."""
-    return attr in RESOURCES
-
-async def main():
-    """Main method."""
-    async with ClientSession(headers={'Connection': 'keep-alive'}) as session:
-        connection = skodaconnect.Connection(session, USERNAME, PASSWORD)
-        if await connection._login():
-            if await connection.update():
-                # Print overall state
-                pprint.pprint(connection._state)
-
-                # Print vehicles
-                for vehicle in connection.vehicles:
-                    pprint.pprint(vehicle)
-
-                # get all instruments
-                instruments = set()
-                for vehicle in connection.vehicles:
-                    dashboard = vehicle.dashboard(mutable=True)
-
-                    for instrument in (
-                            instrument
-                            for instrument in dashboard.instruments
-                            if instrument.component in COMPONENTS
-                            and is_enabled(instrument.slug_attr)):
-
-                        instruments.add(instrument)
-
-                # Output all supported instruments
-                for instrument in instruments:
-                    print(f'name: {instrument.full_name}')
-                    print(f'str_state: {instrument.str_state}')
-                    print(f'state: {instrument.state}')
-                    print(f'supported: {instrument.is_supported}')
-                    print(f'attr: {instrument.attr}')
-                    print(f'attributes: {instrument.attributes}')
-
-if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
-    # loop.run(main())
-    loop.run_until_complete(main())
-``` 
+Connection:
+```
+session = aiohttp.ClientSession(headers={'Connection': 'keep-alive'})   # Create a aiohttp session object
+conn = Connection(session, username, password, fulldebug)               #
+conn._login()                                                           # Attempt a login, returns true/false, variable conn._session_logged_in will tell if logged in or not
+conn.update()                                                           # Calls update for all vehicle objects
+conn.logout()                                                           # Logout from API, call for revoke of tokens
+conn.terminate()                                                        # Terminate session, calls logout()
+conn.validate_tokens()                                                  # Checks if tokens are OK, trys a refresh if expired
+```
