@@ -180,8 +180,19 @@ class Connection:
                         return False
             except:
                 # If we get excepted it should be because we can't redirect to the APP_URI URL
-                _LOGGER.debug('Got code: %s' % ref)
-                pass
+                if 'error' in ref:
+                    error = parse_qs(urlparse(ref).query).get('error', '')[0]
+                    if error == 'login.error.throttled':
+                        timeout = parse_qs(urlparse(ref).query).get('enableNextButtonAfterSeconds', '')[0]
+                        _LOGGER.warning(f'Login failed, login is disabled for another {timeout} seconds')
+                    elif error == 'login.errors.password_invalid':
+                        _LOGGER.warning(f'Login failed, invalid password')
+                    else:
+                        _LOGGER.warning(f'Login failed: {error}')
+                    return False
+                else:
+                    _LOGGER.debug('Got code: %s' % ref)
+                    pass
 
             # Extract code and tokens
             jwt_auth_code = parse_qs(urlparse(ref).fragment).get('code')[0]
@@ -249,14 +260,14 @@ class Connection:
             loaded_vehicles = await self.get(
                 url=f'https://msg.volkswagen.de/fs-car/usermanagement/users/v1/{BRAND}/{COUNTRY}/vehicles'
             )
-            # Add all VIN-numbers from account to list of vehicles
+            # Add Vehicle class object for all VIN-numbers from account
             if loaded_vehicles.get('userVehicles', {}).get('vehicle', []):
                 _LOGGER.debug('Found vehicle(s) associated with account.')
                 for vehicle in loaded_vehicles.get('userVehicles').get('vehicle'):
                     self._vehicles.append(Vehicle(self, vehicle))
-                    # Get the Vehicle class object for VIN number and discover initial data
-                    await self.vehicle(vehicle).discover()
 
+            # Update all vehicles data before returning
+            await self.update()
             return True
 
         except Exception as error:
@@ -848,7 +859,7 @@ class Connection:
             self._session_headers['Content-Type'] = 'application/vnd.vwg.mbb.RemoteStandheizung_v2_0_2+json'
             if not 'quickstop' in data:
                 self._session_headers['x-mbbSecToken'] = await self.get_sec_token(vin = vin, spin = spin, action = 'heating')
-            response = await self.dataCall('fs-car/bs/rs/v1/{BRAND}/{COUNTRY}/vehicles/$vin/action', vin = vin, json = data)
+            response = await self.dataCall(f'fs-car/bs/rs/v1/{BRAND}/{COUNTRY}/vehicles/$vin/action', vin = vin, json = data)
             # Clean up headers
             self._session_headers.pop('x-mbbSecToken', None)
             self._session_headers.pop('Content-Type', None)
@@ -1049,6 +1060,8 @@ class Connection:
 
     def vehicle(self, vin):
         """Return vehicle object for given vin."""
+        _LOGGER.debug('Trying to find vehicle object')
+
         return next(
             (
                 vehicle
