@@ -709,7 +709,7 @@ class Vehicle:
     @property
     def oil_inspection_distance(self):
         """Return time left for service inspection"""
-        return - int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0203010001'].get('value', 0))
+        return - int(self.attrs.get('StoredVehicleDataResponseParsed', {}).get('0x0203010001',{}).get('value', 0))
 
     @property
     def is_oil_inspection_distance_supported(self):
@@ -722,28 +722,23 @@ class Vehicle:
     @property
     def adblue_level(self):
         """Return adblue level."""
-        return self.attrs.get('StoredVehicleDataResponseParsed')['0x02040C0001'].get('value',0)
+        return int(self.attrs.get('StoredVehicleDataResponseParsed', {}).get('0x02040C0001', {}).get('value', 0))
 
     @property
     def is_adblue_level_supported(self):
         """Return true if adblue level is supported."""
         if self.attrs.get('StoredVehicleDataResponseParsed', False):
             if '0x02040C0001' in self.attrs.get('StoredVehicleDataResponseParsed'):
-                if "value" in self.attrs.get('StoredVehicleDataResponseParsed')['0x02040C0001']:
-                    if self.attrs.get('StoredVehicleDataResponseParsed')['0x02040C0001'].get('value',0) is None:
-                        return False
-                    else:
+                if 'value' in self.attrs.get('StoredVehicleDataResponseParsed')['0x02040C0001']:
+                    if self.attrs.get('StoredVehicleDataResponseParsed')['0x02040C0001'].get('value', 0) is not None:
                         return True
-                else:
-                    return False
-            else:
-                return False
+        return False
 
   # Charger related states for EV and PHEV
     @property
     def charging(self):
         """Return battery level"""
-        cstate = self.attrs.get('charger').get('status').get('chargingStatusData').get('chargingState').get('content', '')
+        cstate = self.attrs.get('charger', {}).get('status', {}).get('chargingStatusData', {}).get('chargingState', {}).get('content', '')
         return 1 if cstate == 'charging' else 0
 
     @property
@@ -754,19 +749,12 @@ class Vehicle:
                 if 'chargingStatusData' in self.attrs.get('charger')['status']:
                     if 'chargingState' in self.attrs.get('charger')['status']['chargingStatusData']:
                         return True
-                    else:
-                        return False
-                else:
-                    return False
-            else:
-                return False
-        else:
-            return False
+        return False
 
     @property
     def battery_level(self):
         """Return battery level"""
-        return self.attrs.get('charger').get('status').get('batteryStatusData').get('stateOfCharge').get('content', 0)
+        return int(self.attrs.get('charger').get('status').get('batteryStatusData').get('stateOfCharge').get('content', 0))
 
     @property
     def is_battery_level_supported(self):
@@ -776,14 +764,7 @@ class Vehicle:
                 if 'batteryStatusData' in self.attrs.get('charger')['status']:
                     if 'stateOfCharge' in self.attrs.get('charger')['status']['batteryStatusData']:
                         return True
-                    else:
-                        return False
-                else:
-                    return False
-            else:
-                return False
-        else:
-            return False
+        return False
 
     @property
     def charge_max_ampere(self):
