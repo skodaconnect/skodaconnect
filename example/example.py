@@ -9,10 +9,10 @@ from skodaconnect import Connection
 
 logging.basicConfig(level=logging.DEBUG)
 
-USERNAME='mail@mail.com'
-PASSWORD='password'
-PRINTRESPONSE=False
-INTERVAL=20
+USERNAME = 'example@example.com'
+PASSWORD = 'SomeSecret1234'
+PRINTRESPONSE = False
+INTERVAL = 20
 
 COMPONENTS = {
     'sensor': 'sensor',
