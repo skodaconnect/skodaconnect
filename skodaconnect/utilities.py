@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from dateutil import parser
 from base64 import b64encode
 from string import ascii_letters as letters, digits
 from sys import argv
@@ -44,7 +44,8 @@ def obj_parser(obj):
     """Parse datetime."""
     for key, val in obj.items():
         try:
-            obj[key] = datetime.strptime(val, "%Y-%m-%dT%H:%M:%S%z")
+            if isinstance(val, str) and re.match('^\d{4}-\d{2}-\d{2}T', val):
+                obj[key] = parser.parse(val)
         except (TypeError, ValueError):
             pass
     return obj
