@@ -168,6 +168,8 @@ class Connection:
                 maxDepth = 10
                 ref = req.headers['Location']
                 while not ref.startswith(APP_URI):
+                    if self._session_fulldebug:
+                        _LOGGER.debug(f'Following redirect to "{ref}"')
                     response = await self._session.get(
                         url=ref,
                         headers=self._session_auth_headers,
