@@ -9,8 +9,8 @@ from skodaconnect import Connection
 
 logging.basicConfig(level=logging.DEBUG)
 
-USERNAME = 'example@example.com'
-PASSWORD = 'SomeSecret1234'
+USERNAME = 'account@domain.tld'
+PASSWORD = 'SomeSecretPassword123'
 PRINTRESPONSE = False
 INTERVAL = 20
 
