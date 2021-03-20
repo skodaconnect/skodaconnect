@@ -105,7 +105,7 @@ class Connection:
                 url='https://identity.vwgroup.io/.well-known/openid-configuration'
             )
             if req.status != 200:
-                return ""
+                return False
             response_data =  await req.json()
             authorizationEndpoint = response_data['authorization_endpoint']
             authissuer = response_data['issuer']
@@ -123,7 +123,7 @@ class Connection:
                 headers=self._session_auth_headers,
             )
             if req.status != 200:
-                return ""
+                return False
             _LOGGER.debug('Got authorization endpoint, logging on.')
             response_data = await req.text()
             responseSoup = BeautifulSoup(response_data, 'html.parser')
@@ -141,7 +141,7 @@ class Connection:
                 data = mailform
             )
             if req.status != 200:
-                return ""
+                return False
             response_data = await req.text()
             responseSoup = BeautifulSoup(response_data, 'html.parser')
             pwform = dict([(t['name'],t['value']) for t in responseSoup.find('form', id='credentialsForm').find_all('input', type='hidden')])
@@ -162,6 +162,7 @@ class Connection:
                 allow_redirects=False
             )
 
+            _LOGGER.debug('Parsing login response.')
             # Follow all redirects until we get redirected back to "our app"
             try:
                 maxDepth = 10
@@ -194,16 +195,17 @@ class Connection:
                     _LOGGER.debug('Got code: %s' % ref)
                     pass
 
+            _LOGGER.debug('Login successful, received authorization code.')
             # Extract code and tokens
             jwt_auth_code = parse_qs(urlparse(ref).fragment).get('code')[0]
             jwt_id_token = parse_qs(urlparse(ref).fragment).get('id_token')[0]
-
             # Exchange Auth code and id_token for new tokens with refresh_token (so we can easier fetch new ones later)
             tokenBody = {
                 'auth_code': jwt_auth_code,
                 'id_token':  jwt_id_token,
                 'brand': BRAND
             }
+            _LOGGER.debug('Trying to fetch user identity tokens.')
             tokenURL = 'https://tokenrefreshservice.apps.emea.vwapps.io/exchangeAuthCode'
             req = await self._session.post(
                 url=tokenURL,
@@ -212,10 +214,13 @@ class Connection:
                 allow_redirects=False
             )
             if req.status != 200:
-                return ""
+                return False
             # Save tokens as "identity", theese are tokens representing the user
             self._session_tokens['identity'] = await req.json()
-            if not await self.verify_tokens(self._session_tokens['identity']['id_token'], 'identity'):
+            if self._session_fulldebug:
+                for token in self._session_tokens.get('identity', {}):
+                    _LOGGER.debug(f'Got token {token}')
+            if not await self.verify_tokens(self._session_tokens['identity'].get('id_token', ''), 'identity'):
                 _LOGGER.warning('User identity token could not be verified!')
             else:
                 _LOGGER.debug('User identity token verified OK.')
@@ -227,24 +232,28 @@ class Connection:
                 'token': self._session_tokens['identity']['id_token'],
                 'scope': 'sc2:fal'
             }
+            _LOGGER.debug('Trying to fetch api tokens.')
             req = await self._session.post(
-                    url='https://mbboauth-1d.prd.ece.vwg-connect.com/mbbcoauth/mobile/oauth2/v1/token',
-                    headers= {
-                        'User-Agent': USER_AGENT,
-                        'X-App-Version': XAPPVERSION,
-                        'X-App-Name': XAPPNAME,
-                        'X-Client-Id': XCLIENT_ID,
-                    },
-                    data = tokenBody2,
-                    allow_redirects=False
-                )
+                url='https://mbboauth-1d.prd.ece.vwg-connect.com/mbbcoauth/mobile/oauth2/v1/token',
+                headers= {
+                    'User-Agent': USER_AGENT,
+                    'X-App-Version': XAPPVERSION,
+                    'X-App-Name': XAPPNAME,
+                    'X-Client-Id': XCLIENT_ID,
+                },
+                data = tokenBody2,
+                allow_redirects=False
+            )
             if req.status > 400:
-                _LOGGER.debug('Tokens wrong')
-                return ""
+                _LOGGER.debug('API token request failed.')
+                return False
             else:
                 # Save tokens as "vwg", use theese for get/posts to VW Group API
                 self._session_tokens['vwg'] = await req.json()
-                if not await self.verify_tokens(self._session_tokens['vwg']['access_token'], 'vwg'):
+                if self._session_fulldebug:
+                    for token in self._session_tokens.get('vwg', {}):
+                        _LOGGER.debug(f'Got token {token}')
+                if not await self.verify_tokens(self._session_tokens['vwg'].get('access_token', ''), 'vwg'):
                     _LOGGER.warning('VW-Group API token could not be verified!')
                 else:
                     _LOGGER.debug('VW-Group API token verified OK.')
@@ -459,6 +468,7 @@ class Connection:
         if not await self.validate_tokens:
             return False
         try:
+            _LOGGER.debug("Attempting extraction of subject from identity token.")
             atoken = self._session_tokens['identity']['access_token']
             subject = jwt.decode(atoken, verify=False).get('sub', None)
             await self.set_token('identity')
@@ -923,8 +933,8 @@ class Connection:
         """Function to validate expiry of tokens."""
         idtoken = self._session_tokens['identity']['id_token']
         atoken = self._session_tokens['vwg']['access_token']
-        id_exp = jwt.decode(idtoken, verify=False, algorithms=['RS256']).get('exp', None)
-        at_exp = jwt.decode(atoken, verify=False, algorithms=['RS256']).get('exp', None)
+        id_exp = jwt.decode(idtoken, verify=False).get('exp', None)
+        at_exp = jwt.decode(atoken, verify=False).get('exp', None)
         id_dt = datetime.fromtimestamp(int(id_exp))
         at_dt = datetime.fromtimestamp(int(at_exp))
         now = datetime.now()
@@ -1060,8 +1070,6 @@ class Connection:
 
     def vehicle(self, vin):
         """Return vehicle object for given vin."""
-        _LOGGER.debug('Trying to find vehicle object')
-
         return next(
             (
                 vehicle

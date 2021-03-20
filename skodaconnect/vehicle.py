@@ -927,7 +927,7 @@ class Vehicle:
     @property
     def parking_time(self):
         """Return timestamp of last parking time."""
-        parkTime_utc = self.attrs.get('findCarResponse').get('parkingTimeUTC', 'Unknown')
+        parkTime_utc = self.attrs.get('findCarResponse', {}).get('parkingTimeUTC', 'Unknown')
         parkTime = parkTime_utc.replace(tzinfo=timezone.utc).astimezone(tz=None)
         return parkTime.strftime('%Y-%m-%d %H:%M:%S')
 
@@ -940,11 +940,11 @@ class Vehicle:
   # Vehicle fuel level and range
     @property
     def electric_range(self):
-        value = self.attrs.get('StoredVehicleDataResponseParsed')['0x0301030008'].get('value',0)
-        if value:
-            return int(value)
-        else:
-            return -1
+        value = -1
+        if '0x0301030008' in self.attrs.get('StoredVehicleDataResponseParsed'):
+            if 'value' in self.attrs.get('StoredVehicleDataResponseParsed')['0x0301030008']:
+                value = self.attrs.get('StoredVehicleDataResponseParsed')['0x0301030008'].get('value', 0)
+        return int(value)
 
     @property
     def is_electric_range_supported(self):
@@ -952,56 +952,52 @@ class Vehicle:
             if '0x0301030008' in self.attrs.get('StoredVehicleDataResponseParsed'):
                 if 'value' in self.attrs.get('StoredVehicleDataResponseParsed')['0x0301030008']:
                     return True
-                else:
-                    return False
-            else:
-                return False
+        return False
 
     @property
     def combustion_range(self):
-        value = self.attrs.get('StoredVehicleDataResponseParsed')['0x0301030006'].get('value', 0)
-        if value:
-            return int(value)
-        else:
-            return -1
+        value = -1
+        if '0x0301030006' in self.attrs.get('StoredVehicleDataResponseParsed'):
+            if 'value' in self.attrs.get('StoredVehicleDataResponseParsed')['0x0301030006']:
+                value = self.attrs.get('StoredVehicleDataResponseParsed')['0x0301030006'].get('value', 0)
+        return int(value)
 
     @property
     def is_combustion_range_supported(self):
         if self.attrs.get('StoredVehicleDataResponseParsed', False):
             if '0x0301030006' in self.attrs.get('StoredVehicleDataResponseParsed'):
                 return True
-            else:
-                return False
+        return False
 
     @property
     def combined_range(self):
-        value = self.attrs.get('StoredVehicleDataResponseParsed')['0x0301030005'].get('value',0)
-        if value:
-            return int(value)
-        else:
-            return -1
+        value = -1
+        if '0x0301030005' in self.attrs.get('StoredVehicleDataResponseParsed'):
+            if 'value' in self.attrs.get('StoredVehicleDataResponseParsed')['0x0301030005']:
+                value = self.attrs.get('StoredVehicleDataResponseParsed')['0x0301030005'].get('value', 0)
+        return int(value)
 
     @property
     def is_combined_range_supported(self):
         if self.attrs.get('StoredVehicleDataResponseParsed', False):
             if '0x0301030005' in self.attrs.get('StoredVehicleDataResponseParsed'):
                 return True
-            else:
-                return False
+        return False
 
     @property
     def fuel_level(self):
-        value = self.attrs.get('StoredVehicleDataResponseParsed')['0x030103000A'].get('value',0)
-        if value:
-            return int(value)
+        value = -1
+        if '0x030103000A' in self.attrs.get('StoredVehicleDataResponseParsed'):
+            if 'value' in self.attrs.get('StoredVehicleDataResponseParsed')['0x030103000A']:
+                value = self.attrs.get('StoredVehicleDataResponseParsed')['0x030103000A'].get('value', 0)
+        return int(value)
 
     @property
     def is_fuel_level_supported(self):
         if self.attrs.get('StoredVehicleDataResponseParsed', False):
             if '0x030103000A' in self.attrs.get('StoredVehicleDataResponseParsed'):
                 return True
-            else:
-                return False
+        return False
 
   # Climatisation settings
     @property
