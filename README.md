@@ -2,7 +2,9 @@
 ![PyPi](https://img.shields.io/pypi/v/skodaconnect?label=latest%20pypi)
 ![Downloads PyPi](https://img.shields.io/pypi/dm/skodaconnect)
 
-# Skoda Connect v1.0.40-RC1
+# Skoda Connect v1.0.40-RC2
+**WARNING!**
+This is a BETA pre-release. Only install if you are having issues with latest stable release. Read release notes for more details.
 
 Fork of https://github.com/robinostlund/volkswagencarnet where it was modified to support also Skoda Connect.
 Changes made to utilize the same API calls as the MySkoda mobile app.

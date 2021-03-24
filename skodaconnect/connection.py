@@ -106,7 +106,7 @@ class Connection:
             url=f'https://msg.volkswagen.de/fs-car/usermanagement/users/v1/{BRAND}/{COUNTRY}/vehicles'
         )
         # Add Vehicle class object for all VIN-numbers from account
-        if loaded_vehicles.get('userVehicles', {}).get('vehicles', False):
+        if loaded_vehicles.get('userVehicles') is not None:
             _LOGGER.debug('Found vehicle(s) associated with account.')
             for vehicle in loaded_vehicles.get('userVehicles').get('vehicle'):
                 self._vehicles.append(Vehicle(self, vehicle))
