@@ -30,14 +30,12 @@ from .const import (
     HEADERS_AUTH,
     BASE_SESSION,
     BASE_AUTH,
-    CLIENT_ID,
+    CLIENT,
     XCLIENT_ID,
     XAPPVERSION,
     XAPPNAME,
     USER_AGENT,
     APP_URI,
-    SCOPE,
-    TOKEN_TYPES
 )
 
 version_info >= (3, 0) or exit('Python 3 required')
@@ -79,10 +77,67 @@ class Connection:
         self._session._cookie_jar._cookies.clear()
 
   # API Login
-    async def _login(self):
-        """ Reset session in case we would like to login again """
+    async def doLogin(self):
+        """Login method, clean login"""
+        _LOGGER.debug('Initiating new login')
+        # Remove cookies and re-init headers as we are doing a new login
+        self._clear_cookies()
         self._session_headers = HEADERS_SESSION.copy()
         self._session_auth_headers = HEADERS_AUTH.copy()
+        if not await self._login('Legacy'):
+            _LOGGER.info('Something failed')
+            self._session_logged_in = False
+            return False
+        else:
+            _LOGGER.info('Successfully logged in')
+            self._session_tokens['identity'] = self._session_tokens['Legacy'].copy()
+            self._session_logged_in = True
+
+        # Get VW-Group API tokens
+        if not await self._getAPITokens():
+            self._session_logged_in = False
+            return False
+
+        # Get list of vehicles from account
+        _LOGGER.debug('Fetching vehicles associated with account')
+        await self.set_token('vwg')
+        self._session_headers.pop('Content-Type', None)
+        loaded_vehicles = await self.get(
+            url=f'https://msg.volkswagen.de/fs-car/usermanagement/users/v1/{BRAND}/{COUNTRY}/vehicles'
+        )
+        # Add Vehicle class object for all VIN-numbers from account
+        if loaded_vehicles.get('userVehicles', {}).get('vehicles', False):
+            _LOGGER.debug('Found vehicle(s) associated with account.')
+            for vehicle in loaded_vehicles.get('userVehicles').get('vehicle'):
+                self._vehicles.append(Vehicle(self, vehicle))
+        else:
+            _LOGGER.debug('Failed to retrieve list of cars, trying new API')
+            if not await self._login('New'):
+                _LOGGER.warning('Failed to login to new Skoda API.')
+                self._session_logged_in = False
+                return False
+            else:
+                _LOGGER.info('Successfully logged in to Skoda new API')
+            self._session_headers['Authorization'] = 'Bearer ' + self._session_tokens['New'].get('access_token', '')
+            loaded_vehicles = await self.get(
+                'https://api.connect.skoda-auto.cz/api/v2/garage/vehicles'
+            )
+            for vehicle in loaded_vehicles:
+                self._vehicles.append(Vehicle(self, vehicle.get('vin', '')))
+
+        # Update all vehicles data before returning
+        await self.set_token('vwg')
+        await self.update()
+        return True
+
+    async def _login(self, client='Legacy'):
+        """Login function."""
+        # Helper functions
+        def getNonce():
+            ts = "%d" % (time.time())
+            sha256 = hashlib.sha256()
+            sha256.update(ts.encode())
+            return (b64encode(sha256.digest()).decode('utf-8')[:-1])
 
         def extract_csrf(req):
             return re.compile('<meta name="_csrf" content="([^"]*)"/>').search(req).group(1)
@@ -90,17 +145,14 @@ class Connection:
         def extract_guest_language_id(req):
             return req.split('_')[1].lower()
 
-        def getNonce():
-            ts = "%d" % (time.time())
-            sha256 = hashlib.sha256()
-            sha256.update(ts.encode())
-            return (b64encode(sha256.digest()).decode('utf-8')[:-1])
-
+        # Login starts here
         try:
-            # Remove cookies from session as we are doing a new login
+            # Get OpenID config:
             self._clear_cookies()
-
-            # Request landing page and get auth URL:
+            self._session_headers = HEADERS_SESSION.copy()
+            self._session_auth_headers = HEADERS_AUTH.copy()
+            if self._session_fulldebug:
+                _LOGGER.debug(f'Requesting openid config')
             req = await self._session.get(
                 url='https://identity.vwgroup.io/.well-known/openid-configuration'
             )
@@ -110,26 +162,62 @@ class Connection:
             authorizationEndpoint = response_data['authorization_endpoint']
             authissuer = response_data['issuer']
 
-            # Get authorization
+            # Get authorization page (login page)
             # https://identity.vwgroup.io/oidc/v1/authorize?nonce={NONCE}&state={STATE}&response_type={TOKEN_TYPES}&scope={SCOPE}&redirect_uri={APP_URI}&client_id={CLIENT_ID}
-            req = await self._session.get(
-                url=authorizationEndpoint+\
-                    '?redirect_uri='+APP_URI+\
-                    '&nonce='+getNonce()+\
-                    '&state='+getNonce()+\
-                    '&response_type='+TOKEN_TYPES+\
-                    '&client_id='+CLIENT_ID+\
-                    '&scope='+SCOPE,
-                headers=self._session_auth_headers,
-            )
+            if self._session_fulldebug:
+                _LOGGER.debug(f'Get authorization page from "{authorizationEndpoint}"')
+                self._session_auth_headers.pop('Referer', None)
+                self._session_auth_headers.pop('Origin', None)
+                _LOGGER.debug(f'Request headers: "{self._session_auth_headers}"')
+            try:
+                req = await self._session.get(
+                    url=authorizationEndpoint+\
+                        '?redirect_uri='+APP_URI+\
+                        '&nonce='+getNonce()+\
+                        '&state='+getNonce()+\
+                        '&response_type='+CLIENT[client].get('TOKEN_TYPES')+\
+                        '&client_id='+CLIENT[client].get('CLIENT_ID')+\
+                        '&scope='+CLIENT[client].get('SCOPE'),
+                    headers=self._session_auth_headers,
+                    allow_redirects=False
+                )
+                if req.headers.get('Location', False):
+                    ref = req.headers.get('Location', '')
+                    if 'error' in ref:
+                        error = parse_qs(urlparse(ref).query).get('error', '')[0]
+                        if 'error_description' in ref:
+                            error_description = parse_qs(urlparse(ref).query).get('error_description', '')[0]
+                            _LOGGER.info(f'Unable to login, {error_description}')
+                        else:
+                            _LOGGER.info(f'Unable to login.')
+                        raise Exception(error)
+                    else:
+                        if self._session_fulldebug:
+                            _LOGGER.debug(f'Got redirect to "{ref}"')
+                        req = await self._session.get(
+                            url=ref,
+                            headers=self._session_auth_headers,
+                            allow_redirects=False
+                        )
+                else:
+                    _LOGGER.warning(f'Unable to fetch authorization endpoint.')
+                    raise Exception('Missing "location" header')
+            except Exception as error:
+                _LOGGER.warning('Failed to get authorization endpoint.')
+                raise error
             if req.status != 200:
-                return False
-            _LOGGER.debug('Got authorization endpoint, logging on.')
-            response_data = await req.text()
-            responseSoup = BeautifulSoup(response_data, 'html.parser')
-            mailform = dict([(t['name'],t['value']) for t in responseSoup.find('form', id='emailPasswordForm').find_all('input', type='hidden')])
-            mailform['email'] = self._session_auth_username
-            pe_url = authissuer+responseSoup.find('form', id='emailPasswordForm').get('action')
+                raise Exception('Fetching authorization endpoint failed')
+            else:
+                _LOGGER.debug('Got authorization endpoint')
+            try:
+                response_data = await req.text()
+                responseSoup = BeautifulSoup(response_data, 'html.parser')
+                mailform = dict([(t['name'],t['value']) for t in responseSoup.find('form', id='emailPasswordForm').find_all('input', type='hidden')])
+                mailform['email'] = self._session_auth_username
+                pe_url = authissuer+responseSoup.find('form', id='emailPasswordForm').get('action')
+            except Exception as e:
+                _LOGGER.error('Failed to extract user login form.')
+                raise e
 
             # POST email
             # https://identity.vwgroup.io/signin-service/v1/{CLIENT_ID}/login/identifier
@@ -141,27 +229,30 @@ class Connection:
                 data = mailform
             )
             if req.status != 200:
-                return False
-            response_data = await req.text()
-            responseSoup = BeautifulSoup(response_data, 'html.parser')
-            pwform = dict([(t['name'],t['value']) for t in responseSoup.find('form', id='credentialsForm').find_all('input', type='hidden')])
-            pwform['password'] = self._session_auth_password
-            pw_url = authissuer+responseSoup.find('form', id='credentialsForm').get('action')
+                raise Exception('POST password request failed')
+            try:
+                response_data = await req.text()
+                responseSoup = BeautifulSoup(response_data, 'html.parser')
+                pwform = dict([(t['name'],t['value']) for t in responseSoup.find('form', id='credentialsForm').find_all('input', type='hidden')])
+                pwform['password'] = self._session_auth_password
+                pw_url = authissuer+responseSoup.find('form', id='credentialsForm').get('action')
+            except Exception as e:
+                _LOGGER.error('Failed to extract password login form.')
+                raise e
 
             # POST password
             # https://identity.vwgroup.io/signin-service/v1/{CLIENT_ID}/login/authenticate
             self._session_auth_headers['Referer'] = pe_url
             self._session_auth_headers['Origin'] = authissuer
-            excepted = False
-
             _LOGGER.debug('Authenticating with email and password.')
+            if self._session_fulldebug:
+                _LOGGER.debug(f'Using login action url: "{pw_url}"')
             req = await self._session.post(
                 url=pw_url,
                 headers=self._session_auth_headers,
                 data = pwform,
                 allow_redirects=False
             )
-
             _LOGGER.debug('Parsing login response.')
             # Follow all redirects until we get redirected back to "our app"
             try:
@@ -175,13 +266,16 @@ class Connection:
                         headers=self._session_auth_headers,
                         allow_redirects=False
                     )
+                    if not response.headers.get('Location', False):
+                        _LOGGER.info(f'Login failed, does this account have any vehicle with connect services enabled?')
+                        raise Exception('User appears unauthorized')
                     ref = response.headers['Location']
                     # Set a max limit on requests to prevent forever loop
                     maxDepth -= 1
                     if maxDepth == 0:
                         _LOGGER.warning('Should have gotten a token by now.')
-                        return False
-            except:
+                        raise Exception('Too many redirects')
+            except Exception as e:
                 # If we get excepted it should be because we can't redirect to the APP_URI URL
                 if 'error' in ref:
                     error = parse_qs(urlparse(ref).query).get('error', '')[0]
@@ -192,12 +286,15 @@ class Connection:
                         _LOGGER.warning(f'Login failed, invalid password')
                     else:
                         _LOGGER.warning(f'Login failed: {error}')
-                    return False
-                else:
+                    raise error
+                if 'code' in ref:
                     _LOGGER.debug('Got code: %s' % ref)
                     pass
-
+                else:
+                    _LOGGER.debug(f'Exception occured while logging in.')
+                    raise e
             _LOGGER.debug('Login successful, received authorization code.')
+
             # Extract code and tokens
             jwt_auth_code = parse_qs(urlparse(ref).fragment).get('code')[0]
             jwt_id_token = parse_qs(urlparse(ref).fragment).get('id_token')[0]
@@ -216,17 +313,31 @@ class Connection:
                 allow_redirects=False
             )
             if req.status != 200:
-                return False
+                raise Exception('Token exchange failed')
             # Save tokens as "identity", theese are tokens representing the user
-            self._session_tokens['identity'] = await req.json()
+            self._session_tokens[client] = await req.json()
+            if 'error' in self._session_tokens[client]:
+                error = self._session_tokens[client].get('error', '')
+                if 'error_description' in self._session_tokens[client]:
+                    error_description = self._session_tokens[client].get('error_description', '')
+                    raise Exception(f'{error} - {error_description}')
+                else:
+                    raise Exception(error)
             if self._session_fulldebug:
-                for token in self._session_tokens.get('identity', {}):
+                for token in self._session_tokens.get(client, {}):
                     _LOGGER.debug(f'Got token {token}')
-            if not await self.verify_tokens(self._session_tokens['identity'].get('id_token', ''), 'identity'):
+            if not await self.verify_tokens(self._session_tokens[client].get('id_token', ''), 'identity'):
                 _LOGGER.warning('User identity token could not be verified!')
             else:
                 _LOGGER.debug('User identity token verified OK.')
+        except Exception as error:
+            _LOGGER.error(f'Login failed for {BRAND} account, {error}')
+            self._session_logged_in = False
+            return False
+        return True
 
+    async def _getAPITokens(self):
+        try:
             # Get VW Group API tokens
             # https://mbboauth-1d.prd.ece.vwg-connect.com/mbbcoauth/mobile/oauth2/v1/token
             tokenBody2 =  {
@@ -248,10 +359,17 @@ class Connection:
             )
             if req.status > 400:
                 _LOGGER.debug('API token request failed.')
-                return False
+                raise Exception(f'API token request returned with status code {reg.status}')
             else:
                 # Save tokens as "vwg", use theese for get/posts to VW Group API
                 self._session_tokens['vwg'] = await req.json()
+                if 'error' in self._session_tokens['vwg']:
+                    error = self._session_tokens['vwg'].get('error', '')
+                    if 'error_description' in self._session_tokens['vwg']:
+                        error_description = self._session_tokens['vwg'].get('error_description', '')
+                        raise Exception(f'{error} - {error_description}')
+                    else:
+                        raise Exception(error)
                 if self._session_fulldebug:
                     for token in self._session_tokens.get('vwg', {}):
                         _LOGGER.debug(f'Got token {token}')
@@ -262,29 +380,11 @@ class Connection:
 
             # Update headers for requests, defaults to using VWG token
             self._session_headers['Authorization'] = 'Bearer ' + self._session_tokens['vwg']['access_token']
-            self._session_logged_in = True
-
-            # Get list of vehicles from account
-            _LOGGER.debug('Fetching vehicles associated with account')
-            await self.set_token('vwg')
-            self._session_headers.pop('Content-Type', None)
-            loaded_vehicles = await self.get(
-                url=f'https://msg.volkswagen.de/fs-car/usermanagement/users/v1/{BRAND}/{COUNTRY}/vehicles'
-            )
-            # Add Vehicle class object for all VIN-numbers from account
-            if loaded_vehicles.get('userVehicles', {}).get('vehicle', []):
-                _LOGGER.debug('Found vehicle(s) associated with account.')
-                for vehicle in loaded_vehicles.get('userVehicles').get('vehicle'):
-                    self._vehicles.append(Vehicle(self, vehicle))
-
-            # Update all vehicles data before returning
-            await self.update()
-            return True
-
         except Exception as error:
-            _LOGGER.error(f'Login failed for {BRAND} account, {error}')
+            _LOGGER.error(f'Failed to fetch VW-Group API tokens, {error}')
             self._session_logged_in = False
             return False
+        return True
 
     async def terminate(self):
         """Log out from connect services"""
@@ -412,7 +512,7 @@ class Connection:
         try:
             if not await self.validate_tokens:
                 _LOGGER.info(f'Session expired. Initiating new login for {BRAND} account.')
-                if not await self._login():
+                if not await self.doLogin():
                     _LOGGER.warning(f'Login for {BRAND} account failed!')
                     raise Exception(f'Login for {BRAND} account failed')
 
@@ -675,13 +775,13 @@ class Connection:
     async def get_request_status(self, vin, sectionId, requestId):
         """Return status of a request ID for a given section ID."""
         if self.logged_in == False:
-            if not await self._login():
+            if not await self.doLogin():
                 _LOGGER.warning(f'Login for {BRAND} account failed!')
                 raise Exception(f'Login for {BRAND} account failed')
         try:
             if not await self.validate_tokens:
                 _LOGGER.info(f'Session expired. Initiating new login for {BRAND} account.')
-                if not await self._login():
+                if not await self.doLogin():
                     _LOGGER.warning(f'Login for {BRAND} account failed!')
                     raise Exception(f'Login for {BRAND} account failed')
             await self.set_token('vwg')
@@ -766,13 +866,13 @@ class Connection:
     async def dataCall(self, query, vin='', **data):
         """Function to execute actions through VW-Group API."""
         if self.logged_in == False:
-            if not await self._login():
+            if not await self.doLogin():
                 _LOGGER.warning(f'Login for {BRAND} account failed!')
                 raise Exception(f'Login for {BRAND} account failed')
         try:
             if not await self.validate_tokens:
                 _LOGGER.info(f'Session expired. Initiating new login for {BRAND} account.')
-                if not await self._login():
+                if not await self.doLogin():
                     _LOGGER.warning(f'Login for {BRAND} account failed!')
                     raise Exception(f'Login for {BRAND} account failed')
             response = await self.post(query, vin=vin, **data)
@@ -958,13 +1058,13 @@ class Connection:
                 return False
         return True
 
-    async def verify_tokens(self, token, type):
+    async def verify_tokens(self, token, type, client='Legacy'):
         """Function to verify JWT against JWK(s)."""
         if type == 'identity':
             req = await self._session.get(url = 'https://identity.vwgroup.io/oidc/v1/keys')
             keys = await req.json()
             audience = [
-                CLIENT_ID,
+                CLIENT[client].get('CLIENT_ID'),
                 'VWGMBB01DELIV1',
                 'https://api.vas.eu.dp15.vwg-connect.com',
                 'https://api.vas.eu.wcardp.io'
@@ -1098,7 +1198,7 @@ async def main():
 
     async with ClientSession(headers={'Connection': 'keep-alive'}) as session:
         connection = Connection(session, **read_config())
-        if await connection._login():
+        if await connection.doLogin():
             if await connection.update():
                 for vehicle in connection.vehicles:
                     print(f'Vehicle id: {vehicle}')
