@@ -170,6 +170,16 @@ class Vehicle:
             if not await self.expired('carfinder_v1'):
                 data = await self._connection.getPosition(self.vin)
                 if data:
+                    # Reset requests remaining to 15 if parking time has been updated
+                    if data.get('findCarResponse', {}).get('parkingTimeUTC', False):
+                        try:
+                            newTime = data.get('findCarResponse').get('parkingTimeUTC')
+                            oldTime = self.attrs.get('findCarResponse').get('parkingTimeUTC')
+                            if newTime > oldTime:
+                                _LOGGER.debug('Detected new parking time')
+                                self.requests_remaining = 15
+                        except:
+                            pass
                     self._states.update(data)
                 else:
                     _LOGGER.debug('Could not fetch any positional data')

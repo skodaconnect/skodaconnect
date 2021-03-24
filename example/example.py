@@ -9,9 +9,9 @@ from skodaconnect import Connection
 
 logging.basicConfig(level=logging.DEBUG)
 
-USERNAME = 'account@domain.tld'
-PASSWORD = 'SomeSecretPassword123'
-PRINTRESPONSE = False
+USERNAME = 'mail@domain.tld'
+PASSWORD = 'password'
+PRINTRESPONSE = True
 INTERVAL = 20
 
 COMPONENTS = {
@@ -98,7 +98,7 @@ async def main():
         print(f"Initiating new session to Skoda Connect with {USERNAME} as username")
         connection = Connection(session, USERNAME, PASSWORD, PRINTRESPONSE)
         print("Attempting to login to the Skoda Connect service")
-        if await connection._login():
+        if await connection.doLogin():
             print('Login success!')
             # Login was successful, library should have created class objects for vehicles.
             # Call update to fetch new data for all vehicles
