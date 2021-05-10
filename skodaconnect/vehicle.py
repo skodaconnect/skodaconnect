@@ -16,9 +16,13 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class Vehicle:
-    def __init__(self, conn, url):
+    def __init__(self, conn, data):
+        _LOGGER.debug(f'Creating Vehicle class object with data {data}')
         self._connection = conn
-        self._url = url
+        #self._url = url
+        self._url = data.get('vin', '')
+        self._service = data.get('service', '')
+        self._capabilities = data.get('capabilities', '')
         self._homeregion = 'https://msg.volkswagen.de'
         self._discovered = False
         self._states = {}
@@ -36,66 +40,81 @@ class Vehicle:
         self._climate_duration = 30
 
         # API Endpoints that might be enabled for car (that we support)
-        self._services = {
-            'rheating_v1': {'active': False},
-            'rclima_v1': {'active': False},
-            'rlu_v1': {'active': False},
-            'trip_statistic_v1': {'active': False},
-            'statusreport_v1': {'active': False},
-            'rbatterycharge_v1': {'active': False},
-            'rhonk_v1': {'active': False},
-            'carfinder_v1': {'active': False},
-            #'timerprogramming_v1': {'active': False}, # Not yet implemented
-        }
+        if self._service == 'ONLINE':
+            self._services = {
+                'rheating_v1': {'active': False},
+                'rclima_v1': {'active': False},
+                'rlu_v1': {'active': False},
+                'trip_statistic_v1': {'active': False},
+                'statusreport_v1': {'active': False},
+                'rbatterycharge_v1': {'active': False},
+                'rhonk_v1': {'active': False},
+                'carfinder_v1': {'active': False},
+                #'timerprogramming_v1': {'active': False}, # Not yet implemented
+            }
+        elif self._service == 'REMOTE':
+            self._services = {
+                'CHARGING': {'active': False}
+            }
 
  #### API get and set functions ####
   # Init and update vehicle data
     async def discover(self):
         """Discover vehicle and initial data."""
-        homeregion = await self._connection.getHomeRegion(self.vin)
-        _LOGGER.debug(f'Get homeregion for VIN {self.vin}')
-        if homeregion:
-            self._homeregion = homeregion
+        # For VW-Group API
+        if self._service == 'ONLINE':
+            _LOGGER.debug(f'Starting discovery for vehicle {self.vin}')
+            homeregion = await self._connection.getHomeRegion(self.vin)
+            _LOGGER.debug(f'Get homeregion for VIN {self.vin}')
+            if homeregion:
+                self._homeregion = homeregion
 
-        await asyncio.gather(
-            self.get_carportdata(),
-            self.get_realcardata(),
-            return_exceptions=True
-        )
-        _LOGGER.info(f'Vehicle {self.vin} added. Homeregion is "{self._homeregion}"')
+            await asyncio.gather(
+                self.get_carportdata(),
+                self.get_realcardata(),
+                return_exceptions=True
+            )
+            _LOGGER.info(f'Vehicle {self.vin} added. Homeregion is "{self._homeregion}"')
 
-        _LOGGER.debug('Attempting discovery of supported API endpoints for vehicle.')
-        operationList = await self._connection.getOperationList(self.vin)
-        if operationList:
-            serviceInfo = operationList['serviceInfo']
-            # Iterate over all endpoints in ServiceInfo list
-            for service in serviceInfo:
-                try:
-                    if service.get('serviceId', 'Invalid') in self._services.keys():
-                        data = {}
-                        serviceName = service.get('serviceId', None)
-                        if service.get('serviceStatus', {}).get('status', 'Disabled') == 'Enabled':
-                            _LOGGER.debug(f'Discovered enabled service: {service["serviceId"]}')
-                            data['active'] = True
-                            if service.get('cumulatedLicense', {}).get('expirationDate', False):
-                                data['expiration'] = service.get('cumulatedLicense', {}).get('expirationDate', None).get('content', None)
-                            if service.get('operation', False):
-                                data.update({'operations': []})
-                                for operation in service.get('operation', []):
-                                    data['operations'].append(operation.get('id', None))
-                        elif service.get('serviceStatus', {}).get('status', None) == 'Disabled':
-                            reason = service.get('serviceStatus', {}).get('reason', 'Unknown')
-                            _LOGGER.debug(f'Service: {serviceName} is disabled because of reason: {reason}')
-                            data['active'] = False
-                        else:
-                            _LOGGER.warning(f'Could not determine status of service: {serviceName}, assuming enabled')
-                            data['active'] = True
-                        self._services[serviceName].update(data)
-                except Exception as error:
-                    _LOGGER.warning(f'Encountered exception: "{error}" while parsing service item: {service}')
-                    pass
+            _LOGGER.debug('Attempting discovery of supported API endpoints for vehicle.')
+            operationList = await self._connection.getOperationList(self.vin)
+            if operationList:
+                serviceInfo = operationList['serviceInfo']
+                # Iterate over all endpoints in ServiceInfo list
+                for service in serviceInfo:
+                    try:
+                        if service.get('serviceId', 'Invalid') in self._services.keys():
+                            data = {}
+                            serviceName = service.get('serviceId', None)
+                            if service.get('serviceStatus', {}).get('status', 'Disabled') == 'Enabled':
+                                _LOGGER.debug(f'Discovered enabled service: {service["serviceId"]}')
+                                data['active'] = True
+                                if service.get('cumulatedLicense', {}).get('expirationDate', False):
+                                    data['expiration'] = service.get('cumulatedLicense', {}).get('expirationDate', None).get('content', None)
+                                if service.get('operation', False):
+                                    data.update({'operations': []})
+                                    for operation in service.get('operation', []):
+                                        data['operations'].append(operation.get('id', None))
+                            elif service.get('serviceStatus', {}).get('status', None) == 'Disabled':
+                                reason = service.get('serviceStatus', {}).get('reason', 'Unknown')
+                                _LOGGER.debug(f'Service: {serviceName} is disabled because of reason: {reason}')
+                                data['active'] = False
+                            else:
+                                _LOGGER.warning(f'Could not determine status of service: {serviceName}, assuming enabled')
+                                data['active'] = True
+                            self._services[serviceName].update(data)
+                    except Exception as error:
+                        _LOGGER.warning(f'Encountered exception: "{error}" while parsing service item: {service}')
+                        pass
+            else:
+                _LOGGER.warning(f'Could not determine available API endpoints for {self.vin}')
+        # For Skoda native API:
         else:
-            _LOGGER.warning(f'Could not determine available API endpoints for {self.vin}')
+            for service in self._services:
+                for capability in self._capabilities:
+                    if capability == service:
+                        self._services[service]['active'] = True
+
         _LOGGER.debug(f'API endpoints: {self._services}')
         self._discovered = True
 
@@ -176,7 +195,6 @@ class Vehicle:
                             newTime = data.get('findCarResponse').get('parkingTimeUTC')
                             oldTime = self.attrs.get('findCarResponse').get('parkingTimeUTC')
                             if newTime > oldTime:
-                                _LOGGER.debug('Detected new parking time')
                                 self.requests_remaining = 15
                         except:
                             pass
@@ -203,6 +221,12 @@ class Vehicle:
                     self._states.update(data)
                 else:
                     _LOGGER.debug('Could not fetch charger data')
+        elif self._services.get('CHARGING', {}).get('active', False):
+            data = await self._connection.getCharging(self.vin)
+            if data:
+                self._states.update(data)
+            else:
+                _LOGGER.debug('Could not fetch charger data')
         else:
             self._requests.pop('charger', None)
 
@@ -759,12 +783,19 @@ class Vehicle:
                 if 'chargingStatusData' in self.attrs.get('charger')['status']:
                     if 'chargingState' in self.attrs.get('charger')['status']['chargingStatusData']:
                         return True
+        elif self.attrs.get('charging', False):
+            return True
         return False
 
     @property
     def battery_level(self):
         """Return battery level"""
-        return int(self.attrs.get('charger').get('status').get('batteryStatusData').get('stateOfCharge').get('content', 0))
+        if self.attrs.get('charger', False):
+            return int(self.attrs.get('charger').get('status').get('batteryStatusData').get('stateOfCharge').get('content', 0))
+        elif self.attrs.get('battery', False):
+            return int(self.attrs.get('battery').get('stateOfChargeInPercent'))
+        else:
+            return 0
 
     @property
     def is_battery_level_supported(self):
@@ -774,6 +805,9 @@ class Vehicle:
                 if 'batteryStatusData' in self.attrs.get('charger')['status']:
                     if 'stateOfCharge' in self.attrs.get('charger')['status']['batteryStatusData']:
                         return True
+        elif self.attrs.get('battery', False):
+            if 'stateOfChargeInPercent' in self.attrs.get('battery', {}):
+                return True
         return False
 
     @property
@@ -802,9 +836,16 @@ class Vehicle:
     @property
     def charging_cable_locked(self):
         """Return plug locked state"""
-        response = self.attrs.get('charger')['status']['plugStatusData']['lockState'].get('content',0)
-        if response == 'locked':
-            return True
+        if self.attrs.get('charger', False):
+            response = self.attrs.get('charger')['status']['plugStatusData']['lockState'].get('content',0)
+            if response == 'locked':
+                return True
+        elif self.attrs.get('plug', False):
+            response = self.attrs.get('plug', {}).get('lockState', 0)
+            if response == 'Unlocked':
+                return False
+            else:
+                return False
         else:
             return False
 
@@ -816,14 +857,22 @@ class Vehicle:
                 if 'plugStatusData' in self.attrs.get('charger').get('status', {}):
                     if 'lockState' in self.attrs.get('charger')['status'].get('plugStatusData', {}):
                         return True
+        elif self.attrs.get('plug', False):
+            if 'lockState' in self.attrs.get('plug', {}):
+                return True
         return False
 
     @property
     def charging_cable_connected(self):
         """Return plug locked state"""
-        response = self.attrs.get('charger')['status']['plugStatusData']['plugState'].get('content',0)
-        if response == 'connected':
-            return False
+        if self.attrs.get('charger', False):
+            response = self.attrs.get('charger')['status']['plugStatusData']['plugState'].get('content',0)
+            if response == 'connected':
+                return False
+        elif self.attrs.get('plug', False):
+            response = self.attrs.get('plug').get('connectionState', 0)
+            if response == 'Disconnected':
+                return True
         else:
             return True
 
@@ -835,19 +884,24 @@ class Vehicle:
                 if 'plugStatusData' in self.attrs.get('charger').get('status', {}):
                     if 'plugState' in self.attrs.get('charger')['status'].get('plugStatusData', {}):
                         return True
+        if self.attrs.get('plug', False):
+            if 'connectionState' in self.attrs.get('plug', {}):
+                return True
         return False
 
     @property
     def charging_time_left(self):
         """Return minutes to charing complete"""
         if self.external_power:
-            minutes = self.attrs.get('charger', {}).get('status', {}).get('batteryStatusData', {}).get('remainingChargingTime', {}).get('content', 0)
-            if minutes:
-                try:
-                    if minutes == 65535: return "00:00"
-                    return "%02d:%02d" % divmod(minutes, 60)
-                except Exception:
-                    pass
+            if self.attrs.get('charging', {}).get('remainingToCompleteInSeconds', False):
+                minutes = int(self.attrs.get('charging', {}).get('remainingToCompleteInSeconds', 0))/60
+            elif self.attrs.get('charger', {}).get('status', {}).get('batteryStatusData', {}).get('remainingChargingTime', False):
+                minutes = self.attrs.get('charger', {}).get('status', {}).get('batteryStatusData', {}).get('remainingChargingTime', {}).get('content', 0)
+            try:
+                if minutes == 65535: return "00:00"
+                return "%02d:%02d" % divmod(minutes, 60)
+            except Exception:
+                pass
         return 0
 
     @property
@@ -861,6 +915,8 @@ class Vehicle:
         check = self.attrs.get('charger', {}).get('status', {}).get('chargingStatusData', {}).get('externalPowerSupplyState', {}).get('content', '')
         if check in ['stationConnected', 'available']:
             return True
+        if self.attrs.get('charging', {}).get('chargingType', 'Invalid') is not 'Invalid':
+            return True
         else:
             return False
 
@@ -868,6 +924,8 @@ class Vehicle:
     def is_external_power_supported(self):
         """External power supported."""
         if self.attrs.get('charger', {}).get('status', {}).get('chargingStatusData', {}).get('externalPowerSupplyState', False):
+            return True
+        if self.attrs.get('charging', {}).get('chargingType', False):
             return True
 
     @property
@@ -951,9 +1009,11 @@ class Vehicle:
     @property
     def electric_range(self):
         value = -1
-        if '0x0301030008' in self.attrs.get('StoredVehicleDataResponseParsed'):
+        if '0x0301030008' in self.attrs.get('StoredVehicleDataResponseParsed', {}):
             if 'value' in self.attrs.get('StoredVehicleDataResponseParsed')['0x0301030008']:
                 value = self.attrs.get('StoredVehicleDataResponseParsed')['0x0301030008'].get('value', 0)
+        elif self.attrs.get('battery', False):
+            value = int(self.attrs.get('battery', {}).get('cruisingRangeElectricInMeters', 0))/1000
         return int(value)
 
     @property
@@ -962,6 +1022,9 @@ class Vehicle:
             if '0x0301030008' in self.attrs.get('StoredVehicleDataResponseParsed'):
                 if 'value' in self.attrs.get('StoredVehicleDataResponseParsed')['0x0301030008']:
                     return True
+        elif self.attrs.get('battery', False):
+            if 'cruisingRangeElectricInMeters' in self.attrs.get('battery'):
+                return True
         return False
 
     @property
