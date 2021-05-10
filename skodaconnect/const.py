@@ -7,20 +7,20 @@ COUNTRY = 'CZ'
 
 # Data used in communication
 CLIENT = {
-    'Legacy': {
-        'CLIENT_ID':    '7f045eee-7003-4379-9968-9355ed2adb06%40apps_vw-dilab_com',     # client id for VWG API, legacy Skoda Connect/MySkoda
-        'SCOPE':        'openid mbb profile cars address email birthdate badge phone driversLicense dealers profession vin',
-        'TOKEN_TYPES':  'code id_token'
+    'connect': {
+        'CLIENT_ID':    '7f045eee-7003-4379-9968-9355ed2adb06%40apps_vw-dilab_com',     # client id for VWG API, Skoda Connect Services
+        'SCOPE':        'openid mbb profile cars address email birthdate badge phone driversLicense dealers profession vin',    # Requests to vwg-connect.com/ msg.volkswagen.de etc...
+        'TOKEN_TYPES':  'code id_token'                                                 #tokentype=IDK_CONNECT / MBB (API token)
     },
-    'New': {
+    'skoda': {
         'CLIENT_ID':    'f9a2359a-b776-46d9-bd0c-db1904343117@apps_vw-dilab_com',       # Provides access to new API? tokentype=IDK_TECHNICAL..
-        'SCOPE':        'openid mbb profile',
-        'TOKEN_TYPES':  'code id_token'
+        'SCOPE':        'openid mbb profile',                                           # Requests to api.connect.skoda-auto.cz
+        'TOKEN_TYPES':  'code id_token'                                                 # tokentype=IDK_TECHNICAL
     },
-    'Unknown': {
-        'CLIENT_ID':    '72f9d29d-aa2b-40c1-bebe-4c7683681d4c@apps_vw-dilab_com',       # gives tokentype=IDK_SMARTLINK ?
-        'SCOPE':        'openid dealers profile email cars address',
-        'TOKEN_TYPES':  'code id_token'
+    'smartlink': {
+        'CLIENT_ID':    '72f9d29d-aa2b-40c1-bebe-4c7683681d4c@apps_vw-dilab_com',       # SMARTLINK Tokens
+        'SCOPE':        'openid dealers profile email cars address',                    # Requests to consent.vwgroup.io
+        'TOKEN_TYPES':  'code id_token'                                                 # tokentype=IDK_SMARTLINK
     },
 }
 
