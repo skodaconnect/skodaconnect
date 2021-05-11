@@ -734,7 +734,7 @@ class Vehicle:
         if self.attrs.get('vehicle_status', {}).get('nextInspectionTime', False):
             value = self.attrs.get('vehicle_status', {}).get('nextInspectionTime', 0)
         elif self.attrs.get('StoredVehicleDataResponseParsed', {}).get('0x0203010004',{}).get('value', False):
-            value = -self.attrs.get('StoredVehicleDataResponseParsed', {}).get('0x0203010004',{}).get('value', 0)
+            value = 0-int(self.attrs.get('StoredVehicleDataResponseParsed', {}).get('0x0203010004',{}).get('value', 0))
         return int(value)
 
     @property
@@ -755,7 +755,7 @@ class Vehicle:
         if self.attrs.get('vehicle_status', {}).get('nextInspectionDistance', False):
             value = self.attrs.get('vehicle_status', {}).get('nextInspectionDistance', 0)
         elif self.attrs.get('StoredVehicleDataResponseParsed', {}).get('0x0203010003',{}).get('value', False):
-            value = -self.attrs.get('StoredVehicleDataResponseParsed', {}).get('0x0203010003',{}).get('value', 0)
+            value = 0-int(self.attrs.get('StoredVehicleDataResponseParsed', {}).get('0x0203010003',{}).get('value', 0))
         return int(value)
 
     @property
@@ -776,7 +776,7 @@ class Vehicle:
         if self.attrs.get('vehicle_status', {}).get('nextOilServiceTime', False):
             value = self.attrs.get('vehicle_status', {}).get('nextOilServiceTime', 0)
         elif self.attrs.get('StoredVehicleDataResponseParsed', {}).get('0x0203010002',{}).get('value', False):
-            value = -self.attrs.get('StoredVehicleDataResponseParsed', {}).get('0x0203010002',{}).get('value', 0)
+            value = 0-int(self.attrs.get('StoredVehicleDataResponseParsed', {}).get('0x0203010002',{}).get('value', 0))
         return int(value)
 
     @property
@@ -797,7 +797,7 @@ class Vehicle:
         if self.attrs.get('vehicle_status', {}).get('nextOilServiceDistance', False):
             value = self.attrs.get('vehicle_status', {}).get('nextOilServiceDistance', 0)
         elif self.attrs.get('StoredVehicleDataResponseParsed', {}).get('0x0203010001',{}).get('value', False):
-            value = -self.attrs.get('StoredVehicleDataResponseParsed', {}).get('0x0203010001',{}).get('value', 0)
+            value = 0-int(self.attrs.get('StoredVehicleDataResponseParsed', {}).get('0x0203010001',{}).get('value', 0))
         return int(value)
 
     @property
@@ -973,7 +973,7 @@ class Vehicle:
         check = self.attrs.get('charger', {}).get('status', {}).get('chargingStatusData', {}).get('externalPowerSupplyState', {}).get('content', '')
         if check in ['stationConnected', 'available']:
             return True
-        if self.attrs.get('charging', {}).get('chargingType', 'Invalid') is not 'Invalid':
+        if self.attrs.get('charging', {}).get('chargingType', 'Invalid') is 'Invalid':
             return True
         else:
             return False
