@@ -118,7 +118,8 @@ async def main():
                 print("Vehicles:")
                 for vehicle in connection.vehicles:
                     print(f"\tVIN: {vehicle.vin}")
-                    print(f"\tModel: {vehicle.model} - {vehicle.model_year}")
+                    print(f"\tModel: {vehicle.model}")
+                    print(f"\tManufactured: {vehicle.model_year}")
                     print(f"\tConnect service deactivated: {vehicle.deactivated}")
                     if vehicle.is_nickname_supported: print(f"\tNickname: {vehicle.nickname}")
                     print(f"\tObject attributes, and methods:")

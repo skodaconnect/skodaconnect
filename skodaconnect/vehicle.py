@@ -22,7 +22,10 @@ class Vehicle:
         #self._url = url
         self._url = data.get('vin', '')
         self._service = data.get('service', '')
-        self._capabilities = data.get('capabilities', '')
+        self._capabilities = data.get('capabilities', [])
+        self._specification = data.get('specification', {})
+        self._nickname = data.get('nickname', None)
+        self._deactivated = data.get('deactivated', None)
         self._homeregion = 'https://msg.volkswagen.de'
         self._discovered = False
         self._states = {}
@@ -71,7 +74,7 @@ class Vehicle:
 
             await asyncio.gather(
                 self.get_carportdata(),
-                self.get_realcardata(),
+                #self.get_realcardata(),
                 return_exceptions=True
             )
             _LOGGER.info(f'Vehicle {self.vin} added. Homeregion is "{self._homeregion}"')
@@ -601,42 +604,45 @@ class Vehicle:
   # Car information
     @property
     def nickname(self):
-        return self.attrs.get('carData', {}).get('nickname', None)
+        return self._nickname
 
     @property
     def is_nickname_supported(self):
-        if self.attrs.get('carData', {}).get('nickname', False):
+        if self._nickname is not None:
             return True
 
     @property
     def deactivated(self):
-        return self.attrs.get('carData', {}).get('deactivated', None)
+        return self._deactivated
 
     @property
     def is_deactivated_supported(self):
-        if self.attrs.get('carData', {}).get('deactivated', False):
+        if self._deactivated is not None:
             return True
 
     @property
     def model(self):
         """Return model"""
-        return self.attrs.get('carportData', {}).get('modelName', None)
+        if self._specification.get('trimLevel', False):
+            model = self._specification.get('title', 'Unknown') + self._specification.get('trimLevel', '')
+            return model
+        return self._specification.get('title', 'Unknown')
 
     @property
     def is_model_supported(self):
         """Return true if model is supported."""
-        if self.attrs.get('carportData', {}).get('modelName', False):
+        if self._specification.get('title', False):
             return True
 
     @property
     def model_year(self):
         """Return model year"""
-        return self.attrs.get('carportData', {}).get('modelYear', None)
+        return self._specification.get('manufacturingDate', 'Unknown')
 
     @property
     def is_model_year_supported(self):
         """Return true if model year is supported."""
-        if self.attrs.get('carportData', {}).get('modelYear', False):
+        if self._specification.get('manufacturingDate', False):
             return True
 
     @property
