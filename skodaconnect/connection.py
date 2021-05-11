@@ -91,8 +91,6 @@ class Connection:
             _LOGGER.info('Something failed')
             self._session_logged_in = False
             return False
-        else:
-            self._session_logged_in = True
 
         # Get list of vehicles from Skoda native API
         await self.set_token('skoda')
@@ -130,9 +128,14 @@ class Connection:
                 self._session_logged_in = False
                 return False
 
+        # Dump all tokens for debugging purposes
+        # WARNING! ONLY! Tokens can give indefinite access to your account
+        if self._session_fulldebug:
+            _LOGGER.debug(f'Available token {self._session_tokens}')
+
         # Update all vehicles data before returning
         await self.set_token('vwg')
-        _LOGGER.debug(f'Available token {self._session_tokens}')
+        self._session_logged_in = True
         await self.update()
         return True
 
@@ -174,7 +177,6 @@ class Connection:
                 _LOGGER.debug(f'Get authorization page from "{authorizationEndpoint}"')
                 self._session_auth_headers.pop('Referer', None)
                 self._session_auth_headers.pop('Origin', None)
-                _LOGGER.debug(f'Request headers: "{self._session_auth_headers}"')
             try:
                 req = await self._session.get(
                     url=authorizationEndpoint+\
@@ -220,7 +222,6 @@ class Connection:
                 responseSoup = BeautifulSoup(response_data, 'html.parser')
                 mailform = dict()
                 for t in responseSoup.find('form', id='emailPasswordForm').find_all('input', type='hidden'):
-                    _LOGGER.debug(f'Found item: {t["name"], t["value"]}')
                     mailform[t['name']] = t['value']
                 #mailform = dict([(t['name'],t['value']) for t in responseSoup.find('form', id='emailPasswordForm').find_all('input', type='hidden')])
                 mailform['email'] = self._session_auth_username
@@ -233,7 +234,6 @@ class Connection:
             # https://identity.vwgroup.io/signin-service/v1/{CLIENT_ID}/login/identifier
             self._session_auth_headers['Referer'] = authorizationEndpoint
             self._session_auth_headers['Origin'] = authissuer
-            _LOGGER.debug(f'Posting email with form data {mailform}')
             req = await self._session.post(
                 url = pe_url,
                 headers = self._session_auth_headers,
@@ -491,7 +491,6 @@ class Connection:
 
     async def get(self, url, vin=''):
         """Perform a get query."""
-        _LOGGER.debug(f'Executing GET request for URL: "{url}", with VIN: "{vin}"')
         try:
             response = await self._request(METH_GET, self._make_url(url, vin))
             return response
@@ -531,7 +530,7 @@ class Connection:
     async def update(self):
         """Update status."""
         if self.logged_in == False:
-            _LOGGER.debug
+            _LOGGER.debug("Connection was logged out. Initialising login.")
             if not await self._login():
                 _LOGGER.warning(f'Login for {BRAND} account failed!')
                 return False
@@ -767,7 +766,7 @@ class Connection:
         if not await self.validate_tokens:
             return False
         try:
-            await self.set_token('connect')
+            await self.set_token('vwg')
             response = await self.get(
                 f'fs-car/bs/batterycharge/v1/{BRAND}/{COUNTRY}/vehicles/$vin/charger',
                 vin = vin
