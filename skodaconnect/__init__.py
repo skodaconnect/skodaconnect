@@ -1,3 +1,3 @@
 from skodaconnect.connection import Connection
 
-__version__ = "1.0.40-rc3"
+__version__ = "1.0.40-rc5"

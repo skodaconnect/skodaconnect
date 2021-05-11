@@ -59,6 +59,12 @@ class Vehicle:
             self._services = {
                 'CHARGING': {'active': False}
             }
+        elif self._service == 'INCAR':
+            self._services = {
+                'vehicle_status': {'active': True}
+            }
+        else:
+            self._services = {}
 
  #### API get and set functions ####
   # Init and update vehicle data
@@ -112,12 +118,15 @@ class Vehicle:
             else:
                 _LOGGER.warning(f'Could not determine available API endpoints for {self.vin}')
         # For Skoda native API:
-        else:
+        elif self._service == 'REMOTE':
             for service in self._services:
                 for capability in self._capabilities:
                     if capability == service:
                         self._services[service]['active'] = True
-
+        elif self._service == 'INCAR':
+            self._services = {'vehicle_status': {'active': True}}
+        else:
+            self._services = {}
         _LOGGER.debug(f'API endpoints: {self._services}')
         self._discovered = True
 
@@ -209,11 +218,17 @@ class Vehicle:
         """Fetch status data if function is enabled."""
         if self._services.get('statusreport_v1', {}).get('active', False):
             if not await self.expired('statusreport_v1'):
-                data = await self._connection.getVehicleStatusData(self.vin)
+                data = await self._connection.getVehicleStatusReport(self.vin)
                 if data:
                     self._states.update(data)
                 else:
                     _LOGGER.debug('Could not fetch status report')
+        elif self._services.get('vehicle_status', {}).get('active', False):
+            data = await self._connection.getVehicleStatus(self.vin)
+            if data:
+                self._states.update(data)
+            else:
+                _LOGGER.debug('Could not fetch status report')
 
     async def get_charger(self):
         """Fetch charger data if function is enabled."""
@@ -694,53 +709,82 @@ class Vehicle:
     @property
     def distance(self):
         """Return vehicle odometer."""
-        value = self.attrs.get('StoredVehicleDataResponseParsed')['0x0101010002'].get('value',0)
+        if self.attrs.get('vehicle_status', False):
+            value = self.attrs.get('vehicle_status').get('totalMileage', 0)
+        else:
+            value = self.attrs.get('StoredVehicleDataResponseParsed')['0x0101010002'].get('value', 0)
         if value:
             return int(value)
 
     @property
     def is_distance_supported(self):
         """Return true if odometer is supported"""
-        if self.attrs.get('StoredVehicleDataResponseParsed', False):
+        if self.attrs.get('vehicle_status', False):
+            if 'totalMileage' in self.attrs.get('vehicle_status', {}):
+                return True
+        elif self.attrs.get('StoredVehicleDataResponseParsed', False):
             if '0x0101010002' in self.attrs.get('StoredVehicleDataResponseParsed'):
                 return True
-            else:
-                return False
+        return False
 
     @property
     def service_inspection(self):
-        """Return time left for service inspection"""
-        return - int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0203010004'].get('value'))
+        """Return time left until service inspection"""
+        value = -1
+        if self.attrs.get('vehicle_status', {}).get('nextInspectionTime', False):
+            value = self.attrs.get('vehicle_status', {}).get('nextInspectionTime', 0)
+        elif self.attrs.get('StoredVehicleDataResponseParsed', {}).get('0x0203010004',{}).get('value', False):
+            value = -self.attrs.get('StoredVehicleDataResponseParsed', {}).get('0x0203010004',{}).get('value', 0)
+        return int(value)
 
     @property
     def is_service_inspection_supported(self):
-        if self.attrs.get('StoredVehicleDataResponseParsed', False):
-            if '0x0203010004' in self.attrs.get('StoredVehicleDataResponseParsed'):
+        if self.attrs.get('vehicle_status', False):
+            if 'nextInspectionTime' in self.attrs.get('vehicle_status', {}):
                 return True
-            else:
-                return False
+        elif self.attrs.get('StoredVehicleDataResponseParsed', False):
+            if '0x0203010004' in self.attrs.get('StoredVehicleDataResponseParsed'):
+                if self.attrs.get('StoredVehicleDataResponseParsed').get('0x0203010004').get('value', None) is not None:
+                    return True
+        return False
 
     @property
     def service_inspection_distance(self):
-        """Return time left for service inspection"""
-        return - int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0203010003'].get('value', 0))
+        """Return time left until service inspection"""
+        value = -1
+        if self.attrs.get('vehicle_status', {}).get('nextInspectionDistance', False):
+            value = self.attrs.get('vehicle_status', {}).get('nextInspectionDistance', 0)
+        elif self.attrs.get('StoredVehicleDataResponseParsed', {}).get('0x0203010003',{}).get('value', False):
+            value = -self.attrs.get('StoredVehicleDataResponseParsed', {}).get('0x0203010003',{}).get('value', 0)
+        return int(value)
 
     @property
     def is_service_inspection_distance_supported(self):
-        if self.attrs.get('StoredVehicleDataResponseParsed', False):
-            if '0x0203010003' in self.attrs.get('StoredVehicleDataResponseParsed'):
+        if self.attrs.get('vehicle_status', False):
+            if 'nextInspectionDistance' in self.attrs.get('vehicle_status', {}):
                 return True
-            else:
-                return False
+        elif self.attrs.get('StoredVehicleDataResponseParsed', False):
+            if '0x0203010003' in self.attrs.get('StoredVehicleDataResponseParsed'):
+                if self.attrs.get('StoredVehicleDataResponseParsed').get('0x0203010003').get('value', None) is not None:
+                    return True
+        return False
 
     @property
     def oil_inspection(self):
-        """Return time left for service inspection"""
-        return - int(self.attrs.get('StoredVehicleDataResponseParsed', {}).get('0x0203010002', {}).get('value', 0))
+        """Return time left until oil inspection"""
+        value = -1
+        if self.attrs.get('vehicle_status', {}).get('nextOilServiceTime', False):
+            value = self.attrs.get('vehicle_status', {}).get('nextOilServiceTime', 0)
+        elif self.attrs.get('StoredVehicleDataResponseParsed', {}).get('0x0203010002',{}).get('value', False):
+            value = -self.attrs.get('StoredVehicleDataResponseParsed', {}).get('0x0203010002',{}).get('value', 0)
+        return int(value)
 
     @property
     def is_oil_inspection_supported(self):
-        if self.attrs.get('StoredVehicleDataResponseParsed', False):
+        if self.attrs.get('vehicle_status', False):
+            if 'nextOilServiceTime' in self.attrs.get('vehicle_status', {}):
+                return True
+        elif self.attrs.get('StoredVehicleDataResponseParsed', False):
             if '0x0203010002' in self.attrs.get('StoredVehicleDataResponseParsed'):
                 if self.attrs.get('StoredVehicleDataResponseParsed').get('0x0203010002').get('value', None) is not None:
                     return True
@@ -748,12 +792,20 @@ class Vehicle:
 
     @property
     def oil_inspection_distance(self):
-        """Return time left for service inspection"""
-        return - int(self.attrs.get('StoredVehicleDataResponseParsed', {}).get('0x0203010001',{}).get('value', 0))
+        """Return distance left until oil inspection"""
+        value = -1
+        if self.attrs.get('vehicle_status', {}).get('nextOilServiceDistance', False):
+            value = self.attrs.get('vehicle_status', {}).get('nextOilServiceDistance', 0)
+        elif self.attrs.get('StoredVehicleDataResponseParsed', {}).get('0x0203010001',{}).get('value', False):
+            value = -self.attrs.get('StoredVehicleDataResponseParsed', {}).get('0x0203010001',{}).get('value', 0)
+        return int(value)
 
     @property
     def is_oil_inspection_distance_supported(self):
-        if self.attrs.get('StoredVehicleDataResponseParsed', False):
+        if self.attrs.get('vehicle_status', False):
+            if 'nextOilServiceDistance' in self.attrs.get('vehicle_status', {}):
+                return True
+        elif self.attrs.get('StoredVehicleDataResponseParsed', False):
             if '0x0203010001' in self.attrs.get('StoredVehicleDataResponseParsed'):
                 if self.attrs.get('StoredVehicleDataResponseParsed').get('0x0203010001').get('value', None) is not None:
                     return True
@@ -1066,14 +1118,19 @@ class Vehicle:
     @property
     def fuel_level(self):
         value = -1
-        if '0x030103000A' in self.attrs.get('StoredVehicleDataResponseParsed'):
+        if self.attrs.get('vehicle_status', False):
+            value = round(100 * self.attrs.get('vehicle_status', {}).get('primaryFuelLevel', 0))
+        elif '0x030103000A' in self.attrs.get('StoredVehicleDataResponseParsed'):
             if 'value' in self.attrs.get('StoredVehicleDataResponseParsed')['0x030103000A']:
                 value = self.attrs.get('StoredVehicleDataResponseParsed')['0x030103000A'].get('value', 0)
         return int(value)
 
     @property
     def is_fuel_level_supported(self):
-        if self.attrs.get('StoredVehicleDataResponseParsed', False):
+        if self.attrs.get('vehicle_status', False):
+            if self.attrs.get('vehicle_status', {}).get('primaryFuelLevel', False):
+                return True
+        elif self.attrs.get('StoredVehicleDataResponseParsed', False):
             if '0x030103000A' in self.attrs.get('StoredVehicleDataResponseParsed'):
                 return True
         return False
@@ -1662,8 +1719,9 @@ class Vehicle:
 
     @property
     def is_refresh_data_supported(self):
-        """Data refresh is always supported."""
-        return True
+        """Data refresh is always supported for Skoda Connect."""
+        if self._service == 'ONLINE':
+            return True
 
     @property
     def request_in_progress(self):
@@ -1678,8 +1736,9 @@ class Vehicle:
 
     @property
     def is_request_in_progress_supported(self):
-        """Request in progress is always supported."""
-        return True
+        """Request in progress is always supported for Skoda Connect."""
+        if self._service == 'ONLINE':
+            return True
 
     @property
     def request_results(self):
@@ -1711,7 +1770,8 @@ class Vehicle:
 
     @property
     def is_requests_remaining_supported(self):
-        return True if self._requests.get('remaining', False) else False
+        if self.is_request_in_progress_supported:
+            return True if self._requests.get('remaining', False) else False
 
  #### Helper functions ####
     def __str__(self):
