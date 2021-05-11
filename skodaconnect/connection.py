@@ -135,7 +135,7 @@ class Connection:
                     'nickname': nickname,
                     'deactivated': deactivated
                 }
-                _LOGGER.debug(f'Found vehicle {vin} with connectivity: {connectivity}')
+                _LOGGER.debug(f'Adding vehicle {vin} with service {connectivity}')
                 self._vehicles.append(Vehicle(self, vehicle))
 
         # Check if any associated vehicle is serviced by VW-Group API
