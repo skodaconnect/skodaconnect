@@ -11,7 +11,9 @@ Changes made to utilize the same API calls as the MySkoda mobile app.
 
 ## Information
 
-Retrieve statistics about your Skoda from the Skoda Connect online service
+Retrieve statistics about your Skoda from the Skoda Connect online service.
+* Initial support for SmartLink
+* Initial support for Cars via new API (Skoda Enyaq iV)
 
 No licence, public domain, no guarantees, feel free to use for anything. Please contribute improvements/bugfixes etc.
 
