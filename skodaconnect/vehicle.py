@@ -853,8 +853,11 @@ class Vehicle:
     @property
     def charging(self):
         """Return battery level"""
-        cstate = self.attrs.get('charger', {}).get('status', {}).get('chargingStatusData', {}).get('chargingState', {}).get('content', '')
-        return 1 if cstate == 'charging' else 0
+        if self.attrs.get('charger', False):
+            cstate = self.attrs.get('charger', {}).get('status', {}).get('chargingStatusData', {}).get('chargingState', {}).get('content', '')
+        elif self.attrs.get('charging', False):
+            cstate = self.attrs.get('charging', {}).get('state', '')
+        return 1 if cstate in ['charging', 'Charging'] else 0
 
     @property
     def is_charging_supported(self):
@@ -923,10 +926,8 @@ class Vehicle:
                 return True
         elif self.attrs.get('plug', False):
             response = self.attrs.get('plug', {}).get('lockState', 0)
-            if response == 'Unlocked':
-                return False
-            else:
-                return False
+            if response == 'Locked':
+                return True
         else:
             return False
 
@@ -952,8 +953,8 @@ class Vehicle:
                 return False
         elif self.attrs.get('plug', False):
             response = self.attrs.get('plug').get('connectionState', 0)
-            if response == 'Disconnected':
-                return True
+            if response == 'Connected':
+                return False
         else:
             return True
 
@@ -997,7 +998,7 @@ class Vehicle:
         check = self.attrs.get('charger', {}).get('status', {}).get('chargingStatusData', {}).get('externalPowerSupplyState', {}).get('content', '')
         if check in ['stationConnected', 'available']:
             return True
-        if self.attrs.get('charging', {}).get('chargingType', 'Invalid') is 'Invalid':
+        if self.attrs.get('charging', {}).get('chargingType', 'Invalid') is not 'Invalid':
             return True
         else:
             return False
