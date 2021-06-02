@@ -264,7 +264,7 @@ class Vehicle:
         """Update status of outstanding requests."""
         retryCount -= 1
         if (retryCount == 0):
-            _LOGGER.info(f'Timeout while waiting for result of {requestId}.')
+            _LOGGER.info(f'Timeout while waiting for result of {request}.')
             return 'Timeout'
         try:
             status = await self._connection.get_request_status(self.vin, section, request)
@@ -286,7 +286,7 @@ class Vehicle:
         """Set charger current"""
         if self.is_charging_supported:
             if 1 <= int(value) <= 255:
-                data = {'action': {'settings': {'maxChargeCurrent': int(value)},'type': 'setSettings'}}
+                data = {'action': {'settings': {'maxChargeCurrent': int(value)}, 'type': 'setSettings'}}
             else:
                 _LOGGER.error(f'Set charger maximum current to {value} is not supported.')
                 raise Exception(f'Set charger maximum current to {value} is not supported.')
@@ -345,8 +345,8 @@ class Vehicle:
         """Set climatisation target temp."""
         if self.is_electric_climatisation_supported or self.is_auxiliary_climatisation_supported:
             if 16 <= int(temperature) <= 30:
-                temp = int((temperature+273)*10)
-                data = {'action': {'settings': {'targetTemperature': temp},'type': 'setSettings'}}
+                temp = int((temperature + 273) * 10)
+                data = {'action': {'settings': {'targetTemperature': temp}, 'type': 'setSettings'}}
             else:
                 _LOGGER.error(f'Set climatisation target temp to {temperature} is not supported.')
                 raise Exception(f'Set climatisation target temp to {temperature} is not supported.')
@@ -355,11 +355,11 @@ class Vehicle:
             _LOGGER.error('No climatisation support.')
             raise Exception('No climatisation support.')
 
-    async def set_window_heating(self, action='stop'):
+    async def set_window_heating(self, action = 'stop'):
         """Turn on/off window heater."""
         if self.is_window_heater_supported:
             if action in ['start', 'stop']:
-                data = {'action': {'type': action+'WindowHeating'}}
+                data = {'action': {'type': action + 'WindowHeating'}}
             else:
                 _LOGGER.error(f'Window heater action "{action}" is not supported.')
                 raise Exception(f'Window heater action "{action}" is not supported.')
@@ -385,9 +385,18 @@ class Vehicle:
         """Turn on/off climatisation with electric/auxiliary heater."""
         if self.is_electric_climatisation_supported:
             if mode in ['electric', 'auxiliary']:
-                targetTemp = int((self.climatisation_target_temperature+273)*10)
+                targetTemp = int((self.climatisation_target_temperature + 273) * 10)
                 withoutHVPower = self.climatisation_without_external_power
-                data = {'action':{'settings':{'climatisationWithoutHVpower': withoutHVPower, 'targetTemperature': targetTemp, 'heaterSource': mode},'type': 'startClimatisation'}}
+                data = {
+                    'action':{
+                        'settings':{
+                            'climatisationWithoutHVpower': withoutHVPower,
+                            'targetTemperature': targetTemp,
+                            'heaterSource': mode
+                        },
+                        'type': 'startClimatisation'
+                    }
+                }
             elif mode == 'off':
                 data = {'action': {'type': 'stopClimatisation'}}
             else:
@@ -454,9 +463,23 @@ class Vehicle:
             _LOGGER.error(f'{mode} is an invalid action for parking heater')
             raise Exception(f'{mode} is an invalid action for parking heater')
         if mode == 'off':
-            data = {'performAction': {'quickstop': {'active': False }}}
+            data = {
+                'performAction': {
+                    'quickstop': {
+                        'active': False
+                        }
+                    }
+                }
         else:
-            data = {'performAction': {'quickstart': {'climatisationDuration': self.pheater_duration, 'startMode': mode, 'active': True }}}
+            data = {
+                'performAction': {
+                    'quickstart': {
+                        'climatisationDuration': self.pheater_duration,
+                        'startMode': mode,
+                        'active': True
+                    }
+                }
+            }
         try:
             self._requests['latest'] = 'Preheater'
             response = await self._connection.setPreHeater(self.vin, data, spin)
@@ -676,7 +699,7 @@ class Vehicle:
     @property
     def parking_light(self):
         """Return true if parking light is on"""
-        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301010001'].get('value',0))
+        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301010001'].get('value', 0))
         if response != 2:
             return True
         else:
@@ -775,7 +798,7 @@ class Vehicle:
         value = -1
         if self.attrs.get('vehicle_status', {}).get('nextOilServiceTime', False):
             value = self.attrs.get('vehicle_status', {}).get('nextOilServiceTime', 0)
-        elif self.attrs.get('StoredVehicleDataResponseParsed', {}).get('0x0203010002',{}).get('value', False):
+        elif self.attrs.get('StoredVehicleDataResponseParsed', {}).get('0x0203010002', {}).get('value', False):
             value = 0-int(self.attrs.get('StoredVehicleDataResponseParsed', {}).get('0x0203010002',{}).get('value', 0))
         return int(value)
 
@@ -796,7 +819,7 @@ class Vehicle:
         value = -1
         if self.attrs.get('vehicle_status', {}).get('nextOilServiceDistance', False):
             value = self.attrs.get('vehicle_status', {}).get('nextOilServiceDistance', 0)
-        elif self.attrs.get('StoredVehicleDataResponseParsed', {}).get('0x0203010001',{}).get('value', False):
+        elif self.attrs.get('StoredVehicleDataResponseParsed', {}).get('0x0203010001', {}).get('value', False):
             value = 0-int(self.attrs.get('StoredVehicleDataResponseParsed', {}).get('0x0203010001',{}).get('value', 0))
         return int(value)
 
@@ -849,9 +872,9 @@ class Vehicle:
     def battery_level(self):
         """Return battery level"""
         if self.attrs.get('charger', False):
-            return int(self.attrs.get('charger').get('status').get('batteryStatusData').get('stateOfCharge').get('content', 0))
+            return int(self.attrs.get('charger').get('status', {}).get('batteryStatusData', {}).get('stateOfCharge', {}).get('content', 0))
         elif self.attrs.get('battery', False):
-            return int(self.attrs.get('battery').get('stateOfChargeInPercent'))
+            return int(self.attrs.get('battery').get('stateOfChargeInPercent', 0))
         else:
             return 0
 
@@ -895,7 +918,7 @@ class Vehicle:
     def charging_cable_locked(self):
         """Return plug locked state"""
         if self.attrs.get('charger', False):
-            response = self.attrs.get('charger')['status']['plugStatusData']['lockState'].get('content',0)
+            response = self.attrs.get('charger')['status']['plugStatusData']['lockState'].get('content', 0)
             if response == 'locked':
                 return True
         elif self.attrs.get('plug', False):
@@ -924,7 +947,7 @@ class Vehicle:
     def charging_cable_connected(self):
         """Return plug locked state"""
         if self.attrs.get('charger', False):
-            response = self.attrs.get('charger')['status']['plugStatusData']['plugState'].get('content',0)
+            response = self.attrs.get('charger')['status']['plugStatusData']['plugState'].get('content', 0)
             if response == 'connected':
                 return False
         elif self.attrs.get('plug', False):
@@ -956,11 +979,12 @@ class Vehicle:
             elif self.attrs.get('charger', {}).get('status', {}).get('batteryStatusData', {}).get('remainingChargingTime', False):
                 minutes = self.attrs.get('charger', {}).get('status', {}).get('batteryStatusData', {}).get('remainingChargingTime', {}).get('content', 0)
             try:
+                if minutes == -1: return "00:00"
                 if minutes == 65535: return "00:00"
                 return "%02d:%02d" % divmod(minutes, 60)
             except Exception:
                 pass
-        return 0
+        return "00:00"
 
     @property
     def is_charging_time_left_supported(self):
@@ -1141,8 +1165,8 @@ class Vehicle:
         """Return the target temperature from climater."""
         value = self.attrs.get('climater').get('settings').get('targetTemperature').get('content')
         if value:
-            reply = float((value/10)-273)
-            self._climatisation_target_temperature=reply
+            reply = float((value / 10) - 273)
+            self._climatisation_target_temperature = reply
             return reply
 
     @property
@@ -1173,9 +1197,9 @@ class Vehicle:
     @property
     def outside_temperature(self):
         """Return outside temperature."""
-        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301020001'].get('value',0))
+        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301020001'].get('value', 0))
         if response:
-            return round(float((response/10)-273.15), 1)
+            return round(float((response / 10) - 273.15), 1)
         else:
             return False
 
@@ -1323,7 +1347,7 @@ class Vehicle:
 
     @property
     def window_closed_left_front(self):
-        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301050001'].get('value',0))
+        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301050001'].get('value', 0))
         if response == 3:
             return True
         else:
@@ -1340,7 +1364,7 @@ class Vehicle:
 
     @property
     def window_closed_right_front(self):
-        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301050005'].get('value',0))
+        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301050005'].get('value', 0))
         if response == 3:
             return True
         else:
@@ -1357,7 +1381,7 @@ class Vehicle:
 
     @property
     def window_closed_left_back(self):
-        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301050003'].get('value',0))
+        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301050003'].get('value', 0))
         if response == 3:
             return True
         else:
@@ -1374,7 +1398,7 @@ class Vehicle:
 
     @property
     def window_closed_right_back(self):
-        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301050007'].get('value',0))
+        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301050007'].get('value', 0))
         if response == 3:
             return True
         else:
@@ -1391,7 +1415,7 @@ class Vehicle:
 
     @property
     def sunroof_closed(self):
-        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x030105000B'].get('value',0))
+        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x030105000B'].get('value', 0))
         if response == 3:
             return True
         else:
@@ -1402,7 +1426,7 @@ class Vehicle:
         """Return true if sunroof state is supported"""
         if self.attrs.get('StoredVehicleDataResponseParsed', False):
             if '0x030105000B' in self.attrs.get('StoredVehicleDataResponseParsed'):
-                if (int(self.attrs.get('StoredVehicleDataResponseParsed')['0x030105000B'].get('value',0)) == 0):
+                if int(self.attrs.get('StoredVehicleDataResponseParsed')['0x030105000B'].get('value', 0)) == 0:
                     return False
                 else:
                     return True
@@ -1412,20 +1436,20 @@ class Vehicle:
   # Locks
     @property
     def door_locked(self):
-        #LEFT FRONT
-        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040001'].get('value',0))
+        # LEFT FRONT
+        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040001'].get('value', 0))
         if response != 2:
             return False
-        #LEFT REAR
-        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040004'].get('value',0))
+        # LEFT REAR
+        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040004'].get('value', 0))
         if response != 2:
             return False
-        #RIGHT FRONT
-        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040007'].get('value',0))
+        # RIGHT FRONT
+        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040007'].get('value', 0))
         if response != 2:
             return False
-        #RIGHT REAR
-        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x030104000A'].get('value',0))
+        # RIGHT REAR
+        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x030104000A'].get('value', 0))
         if response != 2:
             return False
 
@@ -1441,7 +1465,7 @@ class Vehicle:
 
     @property
     def trunk_locked(self):
-        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x030104000D'].get('value',0))
+        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x030104000D'].get('value', 0))
         if response == 2:
             return True
         else:
@@ -1459,7 +1483,7 @@ class Vehicle:
     @property
     def hood_closed(self):
         """Return true if hood is closed"""
-        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040011'].get('value',0))
+        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040011'].get('value', 0))
         if response == 3:
             return True
         else:
@@ -1470,7 +1494,7 @@ class Vehicle:
         """Return true if hood state is supported"""
         if self.attrs.get('StoredVehicleDataResponseParsed', False):
             if '0x0301040011' in self.attrs.get('StoredVehicleDataResponseParsed', {}):
-                if (int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040011'].get('value',0)) == 0):
+                if int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040011'].get('value', 0)) == 0:
                     return False
                 else:
                     return True
@@ -1479,7 +1503,7 @@ class Vehicle:
 
     @property
     def door_closed_left_front(self):
-        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040002'].get('value',0))
+        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040002'].get('value', 0))
         if response == 3:
             return True
         else:
@@ -1496,7 +1520,7 @@ class Vehicle:
 
     @property
     def door_closed_right_front(self):
-        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040008'].get('value',0))
+        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040008'].get('value', 0))
         if response == 3:
             return True
         else:
@@ -1513,7 +1537,7 @@ class Vehicle:
 
     @property
     def door_closed_left_back(self):
-        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040005'].get('value',0))
+        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040005'].get('value', 0))
         if response == 3:
             return True
         else:
@@ -1530,7 +1554,7 @@ class Vehicle:
 
     @property
     def door_closed_right_back(self):
-        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x030104000B'].get('value',0))
+        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x030104000B'].get('value', 0))
         if response == 3:
             return True
         else:
@@ -1547,7 +1571,7 @@ class Vehicle:
 
     @property
     def trunk_closed(self):
-        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x030104000E'].get('value',0))
+        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x030104000E'].get('value', 0))
         if response == 3:
             return True
         else:
@@ -1622,7 +1646,7 @@ class Vehicle:
 
     @property
     def trip_last_average_fuel_consumption(self):
-        return int(self.trip_last_entry.get('averageFuelConsumption'))/10
+        return int(self.trip_last_entry.get('averageFuelConsumption')) / 10
 
     @property
     def is_trip_last_average_fuel_consumption_supported(self):
@@ -1638,6 +1662,17 @@ class Vehicle:
     def is_trip_last_average_auxillary_consumption_supported(self):
         response = self.trip_last_entry
         if response and type(response.get('averageAuxiliaryConsumption', None)) in (float, int):
+            return True
+
+    @property
+    def trip_last_average_aux_consumer_consumption(self):
+        value = self.trip_last_entry.get('averageAuxConsumerConsumption')
+        return float(value / 10)
+
+    @property
+    def is_trip_last_average_aux_consumer_consumption_supported(self):
+        response = self.trip_last_entry
+        if response and type(response.get('averageAuxConsumerConsumption', None)) in (float, int):
             return True
 
     @property
@@ -1662,24 +1697,35 @@ class Vehicle:
 
     @property
     def trip_last_recuperation(self):
-        #Not implemented
+        # Not implemented
         return self.trip_last_entry.get('recuperation')
 
     @property
     def is_trip_last_recuperation_supported(self):
-        #Not implemented
+        # Not implemented
         response = self.trip_last_entry
         if response and type(response.get('recuperation', None)) in (float, int):
             return True
 
     @property
+    def trip_last_average_recuperation(self):
+        value = self.trip_last_entry.get('averageRecuperation')
+        return float(value / 10)
+
+    @property
+    def is_trip_last_average_recuperation_supported(self):
+        response = self.trip_last_entry
+        if response and type(response.get('averageRecuperation', None)) in (float, int):
+            return True
+
+    @property
     def trip_last_total_electric_consumption(self):
-        #Not implemented
+        # Not implemented
         return self.trip_last_entry.get('totalElectricConsumption')
 
     @property
     def is_trip_last_total_electric_consumption_supported(self):
-        #Not implemented
+        # Not implemented
         response = self.trip_last_entry
         if response and type(response.get('totalElectricConsumption', None)) in (float, int):
             return True
@@ -1719,7 +1765,7 @@ class Vehicle:
 
     @property
     def is_refresh_data_supported(self):
-        """Data refresh is always supported for Skoda Connect."""
+        """Data refresh is supported for Skoda Connect."""
         if self._service == 'ONLINE':
             return True
 
@@ -1736,16 +1782,17 @@ class Vehicle:
 
     @property
     def is_request_in_progress_supported(self):
-        """Request in progress is always supported for Skoda Connect."""
+        """Request in progress is supported for Skoda Connect."""
         if self._service == 'ONLINE':
             return True
 
     @property
     def request_results(self):
         """Get last request result."""
-        data = {}
-        data['latest'] = self._requests.get('latest', None)
-        data['state'] = self._requests.get('state', None)
+        data = {
+            'latest': self._requests.get('latest', None),
+            'state': self._requests.get('state', None)
+        }
         for section in self._requests:
             if section in ['departuretimer', 'batterycharge', 'climatisation', 'refresh', 'lock', 'preheater']:
                 data[section] = self._requests[section].get('status', 'Unknown')
@@ -1782,6 +1829,7 @@ class Vehicle:
         def serialize(obj):
             if isinstance(obj, datetime):
                 return obj.isoformat()
+
         return to_json(
             OrderedDict(sorted(self.attrs.items())),
             indent=4,

@@ -13,6 +13,7 @@ class Instrument:
         self.name = name
         self.vehicle = None
         self.icon = icon
+        self.callback = None
 
     def __repr__(self):
         return self.full_name
@@ -112,23 +113,23 @@ class Sensor(Instrument):
     @property
     def state(self):
         val = super().state
-        if val and self.unit and "mi" in self.unit and self.convert == True:
+        if val and self.unit and "mi" in self.unit and self.convert is True:
             return int(round(val / 1.609344))
-        elif val and self.unit and "mi/h" in self.unit and self.convert == True:
+        elif val and self.unit and "mi/h" in self.unit and self.convert is True:
             return int(round(val / 1.609344))
-        elif val and self.unit and "gal/100 mi" in self.unit and self.convert == True:
+        elif val and self.unit and "gal/100 mi" in self.unit and self.convert is True:
             return round(val * 0.4251438, 1)
-        elif val and self.unit and "kWh/100 mi" in self.unit and self.convert == True:
+        elif val and self.unit and "kWh/100 mi" in self.unit and self.convert is True:
             return round(val * 0.4251438, 1)
-        elif val and self.unit and "°F" in self.unit and self.convert == True:
-            temp = round((val * 9/5) + 32, 1)
+        elif val and self.unit and "°F" in self.unit and self.convert is True:
+            temp = round((val * 9 / 5) + 32, 1)
             return temp
         else:
             return val
 
 
 class BinarySensor(Instrument):
-    def __init__(self, attr, name, device_class, icon='',reverse_state=False):
+    def __init__(self, attr, name, device_class, icon='', reverse_state=False):
         super().__init__(component="binary_sensor", attr=attr, name=name, icon=icon)
         self.device_class = device_class
         self.reverse_state = reverse_state
@@ -318,12 +319,26 @@ class DoorLock(Instrument):
         return self.state
 
     async def lock(self):
-        return await self.vehicle.set_lock('lock', self.spin)
-        await self.vehicle.update()
+        try:
+            response = await self.vehicle.set_lock('lock', self.spin)
+            await self.vehicle.update()
+            if self.callback is not None:
+                self.callback()
+            return response
+        except Exception as e:
+            _LOGGER.error("Lock failed: %", e.args[0])
+            return False
 
     async def unlock(self):
-        return await self.vehicle.set_lock('unlock', self.spin)
-        await self.vehicle.update()
+        try:
+            response = await self.vehicle.set_lock('unlock', self.spin)
+            await self.vehicle.update()
+            if self.callback is not None:
+                self.callback()
+            return response
+        except Exception as e:
+            _LOGGER.error("Unlock failed: %", e.args[0])
+            return False
 
     @property
     def attributes(self):
@@ -369,6 +384,8 @@ class RequestUpdate(Switch):
     async def turn_on(self):
         await self.vehicle.set_refresh()
         await self.vehicle.update()
+        if self.callback is not None:
+            self.callback()
 
     async def turn_off(self):
         pass
@@ -736,8 +753,20 @@ def create_instruments():
             unit="kWh/100 km",
         ),
         Sensor(
+            attr="trip_last_average_recuperation",
+            name="Last trip average recuperation",
+            icon="mdi:battery-plus",
+            unit="kWh/100 km",
+        ),
+        Sensor(
             attr="trip_last_average_auxillary_consumption",
             name="Last trip average auxillary consumption",
+            icon="mdi:flash",
+            unit="kWh/100 km",
+        ),
+        Sensor(
+            attr="trip_last_average_aux_consumer_consumption",
+            name="Last trip average auxillary consumer consumption",
             icon="mdi:flash",
             unit="kWh/100 km",
         ),
