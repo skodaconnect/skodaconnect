@@ -117,12 +117,12 @@ class Connection:
                         if item.get('vehicleIdentificationNumber', '') == vin:
                             _LOGGER.debug(f'Matched VIN with item: {item}')
                             if vehicle.get('name', False):
-                                nickname = vehicle.get('name', vin)
+                                nickname = vehicle.get('name', None)
                             else:
-                                nickname = item.get('nickname', vin)
+                                nickname = item.get('nickname', None)
                             deactivated = item.get('deactivated', False)
                 else:
-                    nickname = False
+                    nickname = None
                     deactivated = False
                 capabilities = []
                 for capability in vehicle.get('capabilities', []):
@@ -579,11 +579,7 @@ class Connection:
             await asyncio.gather(*updatelist)
 
             return True
-        #except (IOError, OSError, LookupError, Exception) as error:
-        except Exception as e:
-            exc_type, exc_obj, exc_tb = sys.exc_info()
-            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            print(exc_type, fname, exc_tb.tb_lineno)
+        except (IOError, OSError, LookupError, Exception) as error:
             _LOGGER.warning(f'Could not update information: {error}')
         return False
 
@@ -1358,6 +1354,18 @@ class Connection:
         spinArray.extend(byteChallenge)
         return hashlib.sha512(spinArray).hexdigest()
 
+    @property
+    async def validate_login(self):
+        try:
+            if not await self.validate_tokens:
+                return False
+
+            return True
+        except (IOError, OSError) as error:
+            _LOGGER.warning('Could not validate login: %s', error)
+            return False
+
+
 async def main():
     """Main method."""
     if '-v' in argv:
@@ -1376,6 +1384,7 @@ async def main():
                     print('Supported sensors:')
                     for instrument in vehicle.dashboard().instruments:
                         print(f' - {instrument.name} (domain:{instrument.component}) - {instrument.str_state}')
+
 
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()

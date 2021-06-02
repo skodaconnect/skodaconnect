@@ -2,10 +2,21 @@
 import pprint
 import asyncio
 import logging
+import inspect
 import time
-
+import sys
+import os
 from aiohttp import ClientSession
-from skodaconnect import Connection
+
+currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+parentdir = os.path.dirname(currentdir)
+sys.path.insert(0, parentdir)
+
+try:
+    from skodaconnect import Connection
+except ModuleNotFoundError:
+    print("Unable to import library")
+    sys.exit(1)
 
 logging.basicConfig(level=logging.DEBUG)
 
