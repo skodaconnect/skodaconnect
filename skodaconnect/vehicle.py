@@ -151,7 +151,7 @@ class Vehicle:
   # Data collection functions
     async def get_realcardata(self):
         """Fetch realcar data."""
-        data = await self._connection.getRealCarData(self.vin)
+        data = await self._connection.getRealCarData()
         if data:
             self._states.update(data)
 
