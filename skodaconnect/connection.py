@@ -619,7 +619,7 @@ class Connection:
             data = {'error': 'unknown'}
         return data
 
-    async def getRealCarData(self):#, vin):
+    async def getRealCarData(self):
         """Get car information from customer profile, VIN, nickname, etc."""
         if not await self.validate_tokens:
             return False
@@ -632,9 +632,6 @@ class Connection:
                 f'https://customer-profile.apps.emea.vwapps.io/v2/customers/{subject}/realCarData'
             )
             if response.get('realCars', {}):
-                #data = {
-                #    'carData': next(item for item in response.get('realCars', []) if item['vehicleIdentificationNumber'] == vin)
-                #}
                 data = response.get('realCars', {})
                 return data
             elif response.get('status_code', {}):
