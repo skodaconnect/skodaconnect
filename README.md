@@ -2,7 +2,7 @@
 ![PyPi](https://img.shields.io/pypi/v/skodaconnect?label=latest%20pypi)
 ![Downloads PyPi](https://img.shields.io/pypi/dm/skodaconnect)
 
-# Skoda Connect v1.0.40-RC5
+# Skoda Connect v1.0.40-RC6
 **WARNING!**
 This is a BETA pre-release. Only install if you are having issues with latest stable release. Read release notes for more details.
 
@@ -12,15 +12,16 @@ Changes made to utilize the same API calls as the MySkoda mobile app.
 ## Information
 
 Retrieve statistics about your Skoda from the Skoda Connect online service.
-* Initial support for SmartLink
-* Initial support for Cars via new API (Skoda Enyaq iV)
+* Support for Skoda Connect services
+* Support for SmartLink
+* All (native) Skoda cars supported though newer cars (Skoda Enyaq iV) use newer API that's under development
+* If your Skoda car don't work with the MySkoda app it won't work with this integration
 
 No licence, public domain, no guarantees, feel free to use for anything. Please contribute improvements/bugfixes etc.
 
 ## Breaking changes
 
-Major code changes have been made to consolidate functions and also enable auxiliary climatisation for PHEV vehicles.
-Names have been changed to avoid confusion when working with the code.
+- **From version 1.0.40** and onwards there has been changes to Skoda API and this might break the integration for some cars.
 
 - **From version 1.0.30** and onwards there might be breaking changes for the combustion heating/climatisation.
 
@@ -63,12 +64,14 @@ Vehicle, in the following example the car object is an object of Vehicle class:
 car.set_charger(action = "start")                          # action = "start" or "stop"
 car.set_charger_current(value=<int>)                       # value = integer between 1 and 255. Unknown what values to use other than 252 (reduced) and 254 (max) for PHEV
 car.set_battery_climatisation(mode = False)                # mode = False or True
-car.set_climater(data = json, spin = "1234")               # DO NOT USE DIRECTLY - Argument is json formatted data
 car.set_climatisation(mode = "auxilliary", spin="1234")    # mode = "auxilliary", "electric" or "off". spin is S-PIN and only needed for aux heating
 car.set_climatisation_temp(temperature = 22)               # temperature = integer from 16 to 30
 car.set_window_heating(action = "start")                   # action = "start" or "stop"
 car.set_lock(action = "unlock", spin = "1234")             # action = "unlock" or "lock". spin = SPIN, needed for both
 car.set_pheater(mode = "heating", spin = "1234")           # action = "heating", "ventilation" or "off". spin = SPIN, not needed for off
+car.set_charge_limit(limit = 30)                           # limit = 0,10,20,30,40,50
+car.set_timer_active(id = 1, action = "on"}                # id = 1, 2, 3, action = "on" or "off".
+car.set_timer_schedule(id = 1,  schedule = dict)           # id = 1, 2, 3, see example for full information about schedule variable
 car.set_refresh()                                          # Takes no arguments, will trigger force update
 ```
 

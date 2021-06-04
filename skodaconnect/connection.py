@@ -113,7 +113,7 @@ class Connection:
                 specs = vehicle.get('specification', '')
                 connectivity = vehicle.get('connectivities', [])[0].get('type', '')
                 if realCars is not False:
-                    for item in realCars:
+                    for item in realCars.get('realCars', {}):
                         if item.get('vehicleIdentificationNumber', '') == vin:
                             _LOGGER.debug(f'Matched VIN with item: {item}')
                             if vehicle.get('name', False):
@@ -632,7 +632,9 @@ class Connection:
                 f'https://customer-profile.apps.emea.vwapps.io/v2/customers/{subject}/realCarData'
             )
             if response.get('realCars', {}):
-                data = response.get('realCars', {})
+                data = {
+                    'realCars': response.get('realCars', {})
+                }
                 return data
             elif response.get('status_code', {}):
                 _LOGGER.warning(f'Could not fetch realCarData, HTTP status code: {response.get("status_code")}')
@@ -640,29 +642,6 @@ class Connection:
                 _LOGGER.info('Unhandled error while trying to fetch realcar data')
         except Exception as error:
             _LOGGER.warning(f'Could not fetch realCarData, error: {error}')
-        return False
-
-    async def getCarportData(self, vin):
-        """Get carport data for vehicle, model, model year etc."""
-        if not await self.validate_tokens:
-            return False
-        try:
-            await self.set_token('vwg')
-            response = await self.get(
-                f'fs-car/promoter/portfolio/v1/{BRAND}/{COUNTRY}/vehicle/$vin/carportdata',
-                vin = vin
-            )
-            if response.get('carportData', {}):
-                data = {
-                    'carportData': response.get('carportData', {})
-                }
-                return data
-            elif response.get('status_code', {}):
-                _LOGGER.warning(f'Could not fetch carportdata, HTTP status code: {response.get("status_code")}')
-            else:
-                _LOGGER.info('Unhandled error while trying to fetch carport data')
-        except Exception as error:
-            _LOGGER.warning(f'Could not fetch carportData, error: {error}')
         return False
 
     async def getVehicleStatusReport(self, vin):
@@ -1024,6 +1003,109 @@ class Connection:
                 _LOGGER.debug(f'Request for charger action returned with state "{request_state}", request id: {request_id}, remaining requests: {remaining}')
                 return dict({'id': str(request_id), 'state': request_state, 'rate_limit_remaining': remaining})
         except:
+            raise
+        return False
+
+    async def setTimers(self, vin, data, spin):
+        """Set departure timers."""
+        try:
+            # First get most recent departuretimer settings from server
+            departuretimers = await self.getTimers(vin)
+            timer = departuretimers.get('timers', {}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', [])
+            profile = departuretimers.get('timers', {}).get('timersAndProfiles', {}).get('timerProfileList', {}).get('timerProfile', [])
+            setting = departuretimers.get('timers', {}).get('timersAndProfiles', {}).get('timerBasicSetting', [])
+
+            # Construct Timer data
+            timers = [{},{},{}]
+            for i in range(0, 3):
+                timers[i]['currentCalendarProvider'] = {}
+                for key in timer[i]:
+                    # Ignore the timestamp key
+                    if key not in ['timestamp']:
+                        timers[i][key] = timer[i][key]
+                if timers[i].get('timerFrequency', '') == 'single':
+                    timers[i]['departureTimeOfDay'] = '00:00'
+
+            # Set charger minimum limit if action is chargelimit
+            if data.get('action', None) == 'chargelimit' :
+                actiontype = 'setChargeMinLimit'
+                setting['chargeMinLimit'] = int(data.get('limit', 50))
+            # Modify timers if action is on, off or schedule
+            elif data.get('action', None) in ['on', 'off', 'schedule']:
+                actiontype = 'setTimersAndProfiles'
+                timerid = int(data.get('id'))-1 if data.get('id', False) else 0
+                # Set timer programmed status if data contains action = on or off
+                if data.get('action', None) in ['on', 'off']:
+                    action = 'programmed' if data.get('action', False) else 'notProgrammed'
+                # Set departure schedule
+                elif data.get('action', None) == 'schedule':
+                    action = 'programmed' if data.get('schedule', {}).get('enabled', False) else 'notProgrammed'
+                    if data.get('schedule', {}).get('recurring', False):
+                        timers[timerid]['timerFrequency'] = 'cyclic'
+                        timers[timerid]['departureWeekdayMask'] = data.get('schedule', {}).get('days', 'nnnnnnn')
+                        timers[timerid]['departureTimeOfDay'] = data.get('schedule', {}).get('time', '08:00')
+                        timers[timerid].pop('departureDateTime', None)
+                    else:
+                        timers[timerid]['timerFrequency'] = 'single'
+                        timers[timerid]['departureWeekdayMask'] = 'nnnnnnn'
+                        timers[timerid]['departureTimeOfDay'] = '00:00'
+                        timers[timerid]['departureDateTime'] = \
+                            data.get('schedule', {}).get('date', '2020-01-01') + 'T' +\
+                            data.get('schedule', {}).get('time', '08:00')
+                # Catch uncatched scenario
+                else:
+                    action = 'notProgrammed'
+                timers[timerid]['timerProgrammedStatus'] = action
+            else:
+                raise Exception('Unknown action for departure timer')
+
+            # Construct Profiles data
+            profiles = [{},{},{}]
+            for i in range(0, 3):
+                for key in profile[i]:
+                    # Ignore the timestamp key
+                    if key not in ['timestamp']:
+                        profiles[i][key] = profile[i][key]
+
+            # Construct basic settings
+            settings = {
+                'chargeMinLimit': int(setting['chargeMinLimit']),
+                'heaterSource': 'electric',
+                'targetTemperature': int(data['temp'])
+            }
+            body = {
+                'action': {
+                    'timersAndProfiles': {
+                        'timerBasicSetting': settings,
+                        'timerList': {
+                            'timer': timers
+                        },
+                        'timerProfileList': {
+                            'timerProfile': profiles
+                        }
+                    },
+                    'type': actiontype
+                }
+            }
+            _LOGGER.debug(f'POSTing the following timer data: {body}')
+            await self.set_token('vwg')
+            # Only get security token if auxiliary heater is to be enabled
+            #if data.get... == 'auxiliary':
+            #   self._session_headers['X-securityToken'] = await self.get_sec_token(vin = vin, spin = spin, action = 'timer')
+            response = await self.dataCall(f'fs-car/bs/departuretimer/v1/{BRAND}/{COUNTRY}/vehicles/$vin/timer/actions', vin, json = body)
+            self._session_headers.pop('X-securityToken', None)
+            if not response:
+                raise Exception('Invalid or no response')
+            elif response == 429:
+                return dict({'id': None, 'state': 'Throttled', 'rate_limit_remaining': 0})
+            else:
+                request_id = response.get('action', {}).get('actionId', 0)
+                request_state = response.get('action', {}).get('actionState', 'unknown')
+                remaining = response.get('rate_limit_remaining', -1)
+                _LOGGER.debug(f'Request for departure timer action returned with state "{request_state}", request id: {request_id}, remaining requests: {remaining}')
+                return dict({'id': str(request_id), 'state': request_state, 'rate_limit_remaining': remaining})
+        except:
+            self._session_headers.pop('X-securityToken', None)
             raise
         return False
 

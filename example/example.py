@@ -20,9 +20,9 @@ except ModuleNotFoundError:
 
 logging.basicConfig(level=logging.DEBUG)
 
-USERNAME = 'mail@domain.tld'
-PASSWORD = 'password'
-PRINTRESPONSE = True
+USERNAME = 'email@domain.com'
+PASSWORD = 'password!'
+PRINTRESPONSE = False
 INTERVAL = 20
 
 COMPONENTS = {
@@ -48,6 +48,9 @@ RESOURCES = [
 		"climatisation_without_external_power",
 		"combined_range",
 		"combustion_range",
+        "departure1",
+        "departure2",
+        "departure3",
 		"distance",
 		"door_closed_left_back",
 		"door_closed_left_front",
@@ -106,111 +109,174 @@ def is_enabled(attr):
 async def main():
     """Main method."""
     async with ClientSession(headers={'Connection': 'keep-alive'}) as session:
+        print('')
+        print('########################################')
+        print('#      Logging on to Skoda Connect     #')
+        print('########################################')
         print(f"Initiating new session to Skoda Connect with {USERNAME} as username")
         connection = Connection(session, USERNAME, PASSWORD, PRINTRESPONSE)
         print("Attempting to login to the Skoda Connect service")
         if await connection.doLogin():
             print('Login success!')
-            # Login was successful, library should have created class objects for vehicles.
-            # Call update to fetch new data for all vehicles
-            if await connection.update():
-                # Set up dashboard, get instruments
-                instruments = set()
-                for vehicle in connection.vehicles:
-                    dashboard = vehicle.dashboard(mutable=True)
 
-                    for instrument in (
-                            instrument
-                            for instrument in dashboard.instruments
-                            if instrument.component in COMPONENTS
-                            and is_enabled(instrument.slug_attr)):
+            instruments = set()
+            for vehicle in connection.vehicles:
+                print('')
+                print('########################################')
+                print('#         Setting up dashboard         #')
+                print('########################################')
+                dashboard = vehicle.dashboard(mutable=True)
 
-                        instruments.add(instrument)
-                print("Vehicles:")
-                for vehicle in connection.vehicles:
-                    print(f"\tVIN: {vehicle.vin}")
-                    print(f"\tModel: {vehicle.model}")
-                    print(f"\tManufactured: {vehicle.model_year}")
-                    print(f"\tConnect service deactivated: {vehicle.deactivated}")
-                    if vehicle.is_nickname_supported: print(f"\tNickname: {vehicle.nickname}")
-                    print(f"\tObject attributes, and methods:")
-                    for prop in dir(vehicle):
-                        if not "__" in prop:
-                            try:
-                                func = f"vehicle.{prop}"
-                                typ = type(eval(func))
-                                print(f"\t\t{prop} - {typ}")
-                            except:
-                                pass
+                for instrument in (
+                        instrument
+                        for instrument in dashboard.instruments
+                        if instrument.component in COMPONENTS
+                        and is_enabled(instrument.slug_attr)):
+
+                    instruments.add(instrument)
+            print('')
+            print('########################################')
+            print('#          Vehicles discovered         #')
+            print('########################################')
+            for vehicle in connection.vehicles:
+                print(f"\tVIN: {vehicle.vin}")
+                print(f"\tModel: {vehicle.model}")
+                print(f"\tManufactured: {vehicle.model_year}")
+                print(f"\tConnect service deactivated: {vehicle.deactivated}")
+                if vehicle.is_nickname_supported: print(f"\tNickname: {vehicle.nickname}")
+                print(f"\tObject attributes, and methods:")
+                for prop in dir(vehicle):
+                    if not "__" in prop:
+                        try:
+                            func = f"vehicle.{prop}"
+                            typ = type(eval(func))
+                            print(f"\t\t{prop} - {typ}")
+                        except:
+                            pass
 
         else:
             return False
 
-        # Loop forever
-        while True:
-            localtime = time.localtime()
-            result = time.strftime("########## %I:%M:%S %p - NEW LOOP ##########", localtime)
+        # Output all instruments and states
+        print('')
+        print('########################################')
+        print('#      Instruments from dashboard      #')
+        print('########################################')
+        for instrument in instruments:
+            print(f'{instrument.full_name} - ({instrument.attr})')
+            print(f'\tstr_state: {instrument.str_state} - state: {instrument.state}')
+            print(f'\tattributes: {instrument.attributes}')
             print("")
-            print(result)
-            # Output all instruments and states
-            for instrument in instruments:
-                print(f'{instrument.full_name} - ({instrument.attr})')
-                print(f'\tstr_state: {instrument.str_state} - state: {instrument.state}')
-                print(f'\tattributes: {instrument.attributes}')
-                print("")
 
-            # Sleep for a given ammount of time and update all vehicles
+#        if await vehicle.set_timer_schedule(id=1, \
+#            schedule = {
+#                "enabled": True,
+#                "recurring": True,
+#                "date": "2021-05-21",
+#                "time": "08:00",
+#                "days": "yyynnnn"
+#            }):
+
+        # Sleep for a given ammount of time and update all vehicles
+        print('')
+        print(f"Sleeping for {INTERVAL} seconds")
+        time.sleep(INTERVAL)
+
+        print('')
+        print('########################################')
+        print('#    Updating all values from Skoda    #')
+        print('########################################')
+        print("Updating ALL values from Skoda Connect...")
+        if await connection.update():
+            print("Success!")
+        else:
+            print("Failed")
+
+        # Sleep for a given ammount of time and update individual API endpoints for each vehicle
+        print('')
+        print(f"Sleeping for {INTERVAL} seconds")
+        time.sleep(INTERVAL)
+
+        for vehicle in connection.vehicles:
+            txt = vehicle.vin
+            print('')
+            print('########################################')
+            print('#          Update carportdata          #')
+            print(txt.center(40, '#'))
+            await vehicle.get_carportdata()
+            print('')
+            print('########################################')
+            print('#          Update charger data         #')
+            print(txt.center(40, '#'))
+            await vehicle.get_charger()
+            print('')
+            print('########################################')
+            print('#         Update climater data         #')
+            print(txt.center(40, '#'))
+            await vehicle.get_climater()
+            print('')
+            print('########################################')
+            print('#         Update position data         #')
+            print(txt.center(40, '#'))
+            await vehicle.get_position()
+            print('')
+            print('########################################')
+            print('#         Update preheater data        #')
+            print(txt.center(40, '#'))
+            await vehicle.get_preheater()
+            print('')
+            print('########################################')
+            print('#          Update realcar data         #')
+            print(txt.center(40, '#'))
+            await vehicle.get_realcardata()
+            print('')
+            print('########################################')
+            print('#          Update status data          #')
+            print(txt.center(40, '#'))
+            await vehicle.get_statusreport()
+            print('')
+            print('########################################')
+            print('#       Update timer programming       #')
+            print(txt.center(40, '#'))
+            await vehicle.get_timerprogramming()
+            print('')
+            print('########################################')
+            print('#        Update trip statistics        #')
+            print(txt.center(40, '#'))
+            await vehicle.get_trip_statistic()
+            print('')
+            print('Updates complete')
+
             print(f"Sleeping for {INTERVAL} seconds")
             time.sleep(INTERVAL)
-            print("Updating ALL values from Skoda Connect...")
-            if await connection.update():
-                print("Success!")
-            else:
-                print("Failed")
+            # Examples for using set functions:
+            #vehicle.set_refresh()                                          # Takes no arguments, will trigger forced update
+            #vehicle.set_charger(action = "start")                          # action = "start" or "stop"
+            #vehicle.set_charger_current(value)                             # value = 1 <=> 255 (PHEV: 252 for reduced and 254 for max)
+            #vehicle.set_battery_climatisation(mode = False)                # mode = False or True
+            #vehicle.set_climatisation(mode = "auxilliary", spin="1234")    # mode = "auxilliary", "electric" or "off". spin is S-PIN and only needed for aux heating
+            #vehicle.set_climatisation_temp(temperature = 22)               # temperature = integer from 16 to 30
+            #vehicle.set_window_heating(action = "start")                   # action = "start" or "stop"
+            #vehicle.set_lock(action = "unlock", spin = "1234")             # action = "unlock" or "lock". spin = SPIN, needed for both
+            #vehicle.set_pheater(mode = "heating", spin = "1234")           # action = "heating", "ventilation" or "off". spin = SPIN, not needed for off
+            #vehicle.set_charge_limit(limit = 30)                           # limit = 0,10,20,30,40,50
+            #vehicle.set_timer_active(id = 1, action = "on"}                # id = 1, 2, 3, action = "on" or "off".
+            #vehicle.set_timer_schedule(id = 1,                             # id = 1, 2, 3
+            #    schedule = {                                               # Set the departure time, date and periodicity
+            #        "enabled": True,                                       # Set the timer active or not, True or False
+            #        "recurring": True,                                     # True or False for recurring
+            #        "date": "2021-05-21",                                  # Date for departure, not needed for recurring
+            #        "time": "08:00",                                       # Time for departure, always needed
+            #        "days": "nyynnnn"                                      # Days (mon-sun) for recurring schedule, n=disable, y=enable
+            #    })
 
-            # Sleep for a given ammount of time and update individual API endpoints for each vehicle
-            time.sleep(INTERVAL)
-            for vehicle in connection.vehicles:
-                print(f"Updating INDIVIDUAL values for {vehicle.vin}...")
-                print("Updating carportdata...")
-                await vehicle.get_carportdata()
-                print("Updating charger data...")
-                await vehicle.get_charger()
-                print("Updating climater data...")
-                await vehicle.get_climater()
-                print("Updating position data...")
-                await vehicle.get_position()
-                print("Updating pre-heater data...")
-                await vehicle.get_preheater()
-                print("Updating realcardata...")
-                await vehicle.get_realcardata()
-                print("Updating status data...")
-                await vehicle.get_statusreport()
-                print("Updating timer data...")
-                await vehicle.get_timerprogramming()
-                print("Updating trip data...")
-                await vehicle.get_trip_statistic()
-                print("Update done...")
-
-                time.sleep(INTERVAL)
-                # Examples for using set functions:
-                #vehicle.set_charger(action = "start")                          # action = "start" or "stop"
-                #vehicle.set_charger_current(value)                             # value = 1 <=> 255 (PHEV: 252 for reduced and 254 for max)
-                #vehicle.set_battery_climatisation(mode = False)                # mode = False or True
-                #vehicle.set_climater(data = json, spin = "1234")               # DO NOT USE DIRECTLY - Argument is json formatted data
-                #vehicle.set_climatisation(mode = "auxilliary", spin="1234")    # mode = "auxilliary", "electric" or "off". spin is S-PIN and only needed for aux heating
-                #vehicle.set_climatisation_temp(temperature = 22)               # temperature = integer from 16 to 30
-                #vehicle.set_window_heating(action = "start")                   # action = "start" or "stop"
-                #vehicle.set_lock(action = "unlock", spin = "1234")             # action = "unlock" or "lock". spin = SPIN, needed for both
-                #vehicle.set_pheater(mode = "heating", spin = "1234")           # action = "heating", "ventilation" or "off". spin = SPIN, not needed for off
-
-                print(f"Force refresh for {vehicle.vin} ...")
-                if await vehicle.set_refresh():                                 # Takes no arguments, will trigger force update
-                    print("Success!")
-                else:
-                    print(vehicle.refresh_action_status)
+            # Example using a set function
+            #if await vehicle.set_charge_limit(limit=40):
+            #    print("Request completed successfully.")
+            #else:
+            #    print("Request failed.")
+            #print(vehicle.timer_action_status)
 
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
-    # loop.run(main())
     loop.run_until_complete(main())

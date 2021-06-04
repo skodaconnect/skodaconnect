@@ -30,7 +30,7 @@ class Vehicle:
         self._discovered = False
         self._states = {}
         self._requests = {
-            #'departuretimer': {'status': '', 'timestamp': datetime.now()}, # Not yet implemented
+            'departuretimer': {'status': '', 'timestamp': datetime.now()},
             'batterycharge': {'status': '', 'timestamp': datetime.now()},
             'climatisation': {'status': '', 'timestamp': datetime.now()},
             'refresh': {'status': '', 'timestamp': datetime.now()},
@@ -53,7 +53,7 @@ class Vehicle:
                 'rbatterycharge_v1': {'active': False},
                 'rhonk_v1': {'active': False},
                 'carfinder_v1': {'active': False},
-                #'timerprogramming_v1': {'active': False}, # Not yet implemented
+                'timerprogramming_v1': {'active': False},
             }
         elif self._service == 'REMOTE':
             self._services = {
@@ -79,8 +79,7 @@ class Vehicle:
                 self._homeregion = homeregion
 
             await asyncio.gather(
-                self.get_carportdata(),
-                #self.get_realcardata(),
+                self.get_realcardata(),
                 return_exceptions=True
             )
             _LOGGER.info(f'Vehicle {self.vin} added. Homeregion is "{self._homeregion}"')
@@ -152,12 +151,6 @@ class Vehicle:
     async def get_realcardata(self):
         """Fetch realcar data."""
         data = await self._connection.getRealCarData()
-        if data:
-            self._states.update(data)
-
-    async def get_carportdata(self):
-        """Fetch carport data."""
-        data = await self._connection.getCarportData(self.vin)
         if data:
             self._states.update(data)
 
@@ -340,6 +333,125 @@ class Vehicle:
             self._requests['batterycharge'] = {'status': 'Exception'}
             raise Exception(f'Failed to {action} charging - {error}')
 
+   # Departure timers
+    async def set_charge_limit(self, limit=50):
+        """ Activate/deactivate departure timers. """
+        if self._services.get('timerprogramming_v1', False):
+            data = {}
+            if isinstance(limit, int):
+                if limit in [0,10,20,30,40,50]:
+                    data['limit'] = limit
+                    data['action'] = 'chargelimit'
+                else:
+                    raise Exception(f'Charge limit must be one of 0, 10, 20, 30, 40 or 50.')
+            else:
+                raise Exception(f'Charge limit "{limit}" is not supported.')
+            return await self._set_timers(data)
+        else:
+            raise Exception('Departure timers are note supported.')
+
+    async def set_timer_active(self, id=1, action='off'):
+        """ Activate/deactivate departure timers. """
+        if self._services.get('timerprogramming_v1', False):
+            if id in {1, 2, 3}:
+                data['id'] = id
+            else:
+                raise Exception(f'Timer id "{id}" is not supported.')
+            if action in ['on', 'off']:
+                data['action'] = action
+            else:
+                raise Exception(f'Timer action "{action}" is not supported.')
+            return await self._set_timers(data)
+        else:
+            raise Exception('Departure timers are note supported.')
+
+    async def set_timer_schedule(self, id=1, schedule={}):
+        """ Set departure schedules. """
+        if self._services.get('timerprogramming_v1', False):
+            # Verify input
+            data = {}
+            if id in {1, 2, 3}:
+                data['id'] = id
+            else:
+                raise Exception(f'Timer id "{id}" is not supported.')
+            if not schedule:
+                raise Exception('A schedule must be set.')
+            else:
+                if not isinstance(schedule.get('enabled', ''), bool):
+                    raise Exception('The enabled variable must be set to True or False.')
+                if not isinstance(schedule.get('recurring', ''), bool):
+                    raise Exception('The recurring variable must be set to True or False.')
+                # Sanity check for departure time
+                if not re.match('[0-9]{2}:[0-9]{2}', schedule.get('time', '')):
+                    raise Exception('The time for departure must be set in 24h format HH:MM.')
+                # For recurring schedules, check required variables
+                if schedule.get('recurring'):
+                    if not re.match('[yn]{7}', schedule.get('days', '')):
+                        raise Exception('For recurring schedules the days variable must be set to y/n mask (mon-sun with only wed enabled): nnynnnn.')
+                # For single departure, check required variables
+                elif not schedule.get('recurring'):
+                    if not re.match('[0-9]{4}-[0-9]{2}-[0-9]{2}', schedule.get('date', '')):
+                        raise Exception('For single departure schedule the date variable must be set to YYYY-mm-dd.')
+            data['action'] = 'schedule'
+            data['schedule'] = schedule
+            return await self._set_timers(data)
+        else:
+            _LOGGER.info('Departure timers are not supported.')
+            raise Exception('Departure timers are not supported.')
+
+    async def _set_timers(self, data=None):
+        """ Set departure timers. """
+        if not self._services.get('timerprogramming_v1', False):
+            raise Exception('Departure timers are not supported.')
+        if self._requests['departuretimer'].get('id', False):
+            timestamp = self._requests.get('departuretimer', {}).get('timestamp', datetime.now())
+            expired = datetime.now() - timedelta(minutes=3)
+            if expired > timestamp:
+                self._requests.get('departuretimer', {}).pop('id')
+            else:
+                _LOGGER.debug('Scheduling of departure timer is already in progress')
+                return False
+        # Verify temperature setting
+        if data.get('temp', False):
+            if data['temp'] in {16,16.5,17,17.5,18,18.5,19,19.5,20,20.5,21,21.5,22,22.5,23,23.5,24,24.5,25,25.5,26,26.5,27,27.5,28,28.5,29,29.5,30}:
+                data['temp'] = int((data['temp'] + 273) * 10)
+            else:
+                data['temp'] = int((int(data['temp']) + 273) * 10)
+        else:
+            try:
+                data['temp'] = int((self.climatisation_target_temperature + 273) * 10)
+            except:
+                data['temp'] = 2930
+                pass
+        if 2890 <= data['temp'] <= 3030:
+            pass
+        else:
+            data['temp'] = 2930
+
+        try:
+            self._requests['latest'] = 'Departuretimer'
+            response = await self._connection.setTimers(self.vin, data, spin=False)
+            if not response:
+                self._requests['departuretimer'] = {'status': 'Failed'}
+                _LOGGER.error('Failed to execute departure timer request')
+                raise Exception('Failed to execute departure timer request')
+            else:
+                self._requests['remaining'] = response.get('rate_limit_remaining', -1)
+                self._requests['departuretimer'] = {
+                    'timestamp': datetime.now(),
+                    'status': response.get('state', 'Unknown'),
+                    'id': response.get('id', 0),
+                }
+                if response.get('state', None) == 'Throttled':
+                    status = 'Throttled'
+                else:
+                    status = await self.wait_for_request('departuretimer', response.get('id', 0))
+                self._requests['departuretimer'] = {'status': status}
+                return True
+        except Exception as error:
+            self._requests['departuretimer'] = {'status': 'Exception'}
+            raise Exception(f'Failed to set departure timer schedule - {error}')
+
    # Climatisation electric/auxiliary/windows (CLIMATISATION)
     async def set_climatisation_temp(self, temperature=20):
         """Set climatisation target temp."""
@@ -350,7 +462,7 @@ class Vehicle:
             else:
                 _LOGGER.error(f'Set climatisation target temp to {temperature} is not supported.')
                 raise Exception(f'Set climatisation target temp to {temperature} is not supported.')
-            return await self.set_climater(data)
+            return await self._set_climater(data)
         else:
             _LOGGER.error('No climatisation support.')
             raise Exception('No climatisation support.')
@@ -363,7 +475,7 @@ class Vehicle:
             else:
                 _LOGGER.error(f'Window heater action "{action}" is not supported.')
                 raise Exception(f'Window heater action "{action}" is not supported.')
-            return await self.set_climater(data)
+            return await self._set_climater(data)
         else:
             _LOGGER.error('No climatisation support.')
             raise Exception('No climatisation support.')
@@ -376,7 +488,7 @@ class Vehicle:
             else:
                 _LOGGER.error(f'Set climatisation without external power to "{mode}" is not supported.')
                 raise Exception(f'Set climatisation without external power to "{mode}" is not supported.')
-            return await self.set_climater(data)
+            return await self._set_climater(data)
         else:
             _LOGGER.error('No climatisation support.')
             raise Exception('No climatisation support.')
@@ -407,7 +519,7 @@ class Vehicle:
             _LOGGER.error('No climatisation support.')
             raise Exception('No climatisation support.')
 
-    async def set_climater(self, data, spin = False):
+    async def _set_climater(self, data, spin = False):
         """Climater actions."""
         if not self._services.get('rclima_v1', False):
             _LOGGER.info('Remote control of climatisation functions is not supported.')
@@ -662,7 +774,7 @@ class Vehicle:
     def model(self):
         """Return model"""
         if self._specification.get('trimLevel', False):
-            model = self._specification.get('title', 'Unknown') + self._specification.get('trimLevel', '')
+            model = self._specification.get('title', 'Unknown') + ' ' + self._specification.get('trimLevel', '')
             return model
         return self._specification.get('title', 'Unknown')
 
@@ -1588,33 +1700,57 @@ class Vehicle:
                 return False
 
   # Departure timers
-   # Not yet implemented
+   # Under development
     @property
-    def schedule1(self):
+    def departure1(self):
+        try:
+            response = self.attrs.get('timers', {}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', False)
+            timer = response[0]
+            timer.pop('timestamp', None)
+            timer.pop('timerID', None)
+            timer.pop('profileID', None)
+            return timer
+        except:
+            return None
+
+    @property
+    def is_departure1_supported(self):
+        if self.attrs.get('timers', False):
+            return True
         return False
 
     @property
-    def is_schedule1_suppored(self):
+    def departure2(self):
+        try:
+            response = self.attrs.get('timers', {}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', False)
+            timer = response[1]
+            timer.pop('timestamp', None)
+            timer.pop('timerID', None)
+            timer.pop('profileID', None)
+            return timer
+        except:
+            return None
+
+    @property
+    def is_departure2_supported(self):
         if self.attrs.get('timers', {}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', False):
             return True
         return False
 
     @property
-    def schedule2(self):
-        return False
+    def departure3(self):
+        try:
+            response = self.attrs.get('timers', {}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', False)
+            timer = response[2]
+            timer.pop('timestamp', None)
+            timer.pop('timerID', None)
+            timer.pop('profileID', None)
+            return timer
+        except:
+            return None
 
     @property
-    def is_schedule2_suppored(self):
-        if self.attrs.get('timers', {}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', False):
-            return True
-        return False
-
-    @property
-    def schedule3(self):
-        return False
-
-    @property
-    def is_schedule3_suppored(self):
+    def is_departure3_supported(self):
         if self.attrs.get('timers', {}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', False):
             return True
         return False
@@ -1756,6 +1892,11 @@ class Vehicle:
     def lock_action_status(self):
         """Return latest status of lock action request."""
         return self._requests.get('lock', {}).get('status', 'None')
+
+    @property
+    def timer_action_status(self):
+        """Return latest status of lock action request."""
+        return self._requests.get('departuretimer', {}).get('status', 'None')
 
   # Requests data
     @property

@@ -585,6 +585,101 @@ class PHeaterVentilation(Switch):
         return dict(last_result = self.vehicle.pheater_action_status)
 
 
+class DepartureTimer1(Switch):
+    def __init__(self):
+        super().__init__(attr="departure1", name="Departure timer 1", icon="mdi:radiator")
+
+    def configurate(self, **config):
+        self.spin = config.get('spin', '')
+
+    @property
+    def state(self):
+        status = self.vehicle.departure1.get("timerProgrammedStatus", "")
+        if status == "programmed":
+            return True
+        else:
+            return False
+
+    async def turn_on(self):
+        await self.vehicle.set_timer_active(id=1, action="on")
+        await self.vehicle.update()
+
+    async def turn_off(self):
+        await self.vehicle.set_timer_active(id=1, action="off")
+        await self.vehicle.update()
+
+    @property
+    def assumed_state(self):
+        return False
+
+    @property
+    def attributes(self):
+        return dict(self.vehicle.departure1)
+
+
+class DepartureTimer2(Switch):
+    def __init__(self):
+        super().__init__(attr="departure2", name="Departure timer 2", icon="mdi:radiator")
+
+    def configurate(self, **config):
+        self.spin = config.get('spin', '')
+
+    @property
+    def state(self):
+        status = self.vehicle.departure2.get("timerProgrammedStatus", "")
+        if status == "programmed":
+            return True
+        else:
+            return False
+
+    async def turn_on(self):
+        await self.vehicle.set_timer_active(id=2, action="on")
+        await self.vehicle.update()
+
+    async def turn_off(self):
+        await self.vehicle.set_timer_active(id=2, action="off")
+        await self.vehicle.update()
+
+    @property
+    def assumed_state(self):
+        return False
+
+    @property
+    def attributes(self):
+        return dict(self.vehicle.departure2)
+
+class DepartureTimer3(Switch):
+    def __init__(self):
+        super().__init__(attr="departure3", name="Departure timer 3", icon="mdi:radiator")
+
+    def configurate(self, **config):
+        self.spin = config.get('spin', '')
+
+    @property
+    def state(self):
+        status = self.vehicle.departure3.get("timerProgrammedStatus", "")
+        if status == "programmed":
+            return True
+        else:
+            return False
+
+    async def turn_on(self):
+        await self.vehicle.set_timer_active(id=3, action="on")
+        await self.vehicle.update()
+
+    async def turn_off(self):
+        await self.vehicle.set_timer_active(id=3, action="off")
+        await self.vehicle.update()
+
+    @property
+    def assumed_state(self):
+        return False
+
+    @property
+    def attributes(self):
+        return dict(self.vehicle.departure3)
+
+
 class RequestResults(Sensor):
     def __init__(self):
         super().__init__(attr="request_results", name="Request results", icon="mdi:chat-alert", unit="")
@@ -620,6 +715,9 @@ def create_instruments():
         #CombustionClimatisationClimate(),
         Charging(),
         RequestResults(),
+        DepartureTimer1(),
+        DepartureTimer2(),
+        DepartureTimer3(),
         Sensor(
             attr="distance",
             name="Odometer",
