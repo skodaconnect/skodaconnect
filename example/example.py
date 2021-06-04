@@ -201,11 +201,6 @@ async def main():
             txt = vehicle.vin
             print('')
             print('########################################')
-            print('#          Update carportdata          #')
-            print(txt.center(40, '#'))
-            await vehicle.get_carportdata()
-            print('')
-            print('########################################')
             print('#          Update charger data         #')
             print(txt.center(40, '#'))
             await vehicle.get_charger()
