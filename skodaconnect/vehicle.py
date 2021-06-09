@@ -21,7 +21,7 @@ class Vehicle:
         self._connection = conn
         #self._url = url
         self._url = data.get('vin', '')
-        self._service = data.get('service', '')
+        self._connectivities = data.get('connectivities', '')
         self._capabilities = data.get('capabilities', [])
         self._specification = data.get('specification', {})
         self._nickname = data.get('nickname', None)
@@ -43,8 +43,15 @@ class Vehicle:
         self._climate_duration = 30
 
         # API Endpoints that might be enabled for car (that we support)
-        if self._service == 'ONLINE':
-            self._services = {
+        self._services = {}
+        # SmartLink connectivity is enabled
+        if 'INCAR' in self._connectivities:
+            self._services.update({
+                'vehicle_status': {'active': True}
+            })
+        # Connect connectivity is enabled
+        if 'ONLINE' in self._connectivities:
+            self._services.update({
                 'rheating_v1': {'active': False},
                 'rclima_v1': {'active': False},
                 'rlu_v1': {'active': False},
@@ -54,15 +61,12 @@ class Vehicle:
                 'rhonk_v1': {'active': False},
                 'carfinder_v1': {'active': False},
                 'timerprogramming_v1': {'active': False},
-            }
-        elif self._service == 'REMOTE':
-            self._services = {
+            })
+        # New API connectivity is enabled
+        elif 'REMOTE' in self._connectivities:
+            self._services.update({
                 'CHARGING': {'active': False}
-            }
-        elif self._service == 'INCAR':
-            self._services = {
-                'vehicle_status': {'active': True}
-            }
+            })
         else:
             self._services = {}
 
@@ -71,7 +75,7 @@ class Vehicle:
     async def discover(self):
         """Discover vehicle and initial data."""
         # For VW-Group API
-        if self._service == 'ONLINE':
+        if 'ONLINE' in self._connectivities:
             _LOGGER.debug(f'Starting discovery for vehicle {self.vin}')
             homeregion = await self._connection.getHomeRegion(self.vin)
             _LOGGER.debug(f'Get homeregion for VIN {self.vin}')
@@ -117,12 +121,12 @@ class Vehicle:
             else:
                 _LOGGER.warning(f'Could not determine available API endpoints for {self.vin}')
         # For Skoda native API:
-        elif self._service == 'REMOTE':
+        elif 'REMOTE' in self._connectivities:
             for service in self._services:
                 for capability in self._capabilities:
                     if capability == service:
                         self._services[service]['active'] = True
-        elif self._service == 'INCAR':
+        elif 'INCAR' in self._connectivities:
             self._services = {'vehicle_status': {'active': True}}
         else:
             self._services = {}
@@ -1908,7 +1912,7 @@ class Vehicle:
     @property
     def is_refresh_data_supported(self):
         """Data refresh is supported for Skoda Connect."""
-        if self._service == 'ONLINE':
+        if 'ONLINE' in self._connectivities:
             return True
 
     @property
@@ -1925,7 +1929,7 @@ class Vehicle:
     @property
     def is_request_in_progress_supported(self):
         """Request in progress is supported for Skoda Connect."""
-        if self._service == 'ONLINE':
+        if 'ONLINE' in self._connectivities:
             return True
 
     @property
