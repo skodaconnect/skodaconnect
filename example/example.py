@@ -22,7 +22,7 @@ logging.basicConfig(level=logging.DEBUG)
 
 USERNAME = 'email@domain.com'
 PASSWORD = 'password!'
-PRINTRESPONSE = False
+PRINTRESPONSE = True
 INTERVAL = 20
 
 COMPONENTS = {

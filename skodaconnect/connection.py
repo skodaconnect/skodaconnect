@@ -111,7 +111,11 @@ class Connection:
             for vehicle in skoda_vehicles:
                 vin = vehicle.get('vin', '')
                 specs = vehicle.get('specification', '')
-                connectivity = vehicle.get('connectivities', [])[0].get('type', '')
+                # Check which type of services are available, Connect, Smartlink
+                connectivity = []
+                for service in vehicle.get('connectivities', []):
+                    connectivity.append(service.get('type', ''))
+
                 if realCars is not False:
                     for item in realCars.get('realCars', {}):
                         if item.get('vehicleIdentificationNumber', '') == vin:
@@ -129,26 +133,26 @@ class Connection:
                     capabilities.append(capability.get('id', ''))
                 vehicle = {
                     'vin': vin,
-                    'service': connectivity,
+                    'connectivities': connectivity,
                     'capabilities': capabilities,
                     'specification': specs,
                     'nickname': nickname,
                     'deactivated': deactivated
                 }
-                _LOGGER.debug(f'Adding vehicle {vin} with service {connectivity}')
+                _LOGGER.debug(f'Adding vehicle {vin} with connectivities: {connectivity}')
                 self._vehicles.append(Vehicle(self, vehicle))
 
         # Check if any associated vehicle is serviced by VW-Group API
-        if any(car._service == 'ONLINE' for car in self._vehicles):
-            _LOGGER.info('Found vehicle serviced by VW-Group API, requesting VW-Group API tokens.')
+        if any('ONLINE' in car._connectivities for car in self._vehicles):
+            _LOGGER.info('Vehicle is enabled for VW-Group API, requesting VW-Group API tokens.')
             # Get VW-Group API tokens
             if not await self._getAPITokens():
                 self._session_logged_in = False
                 return False
 
         # Check if any associated vehicle is a SmartLink vehicle
-        if any(car._service == 'INCAR' for car in self._vehicles):
-            _LOGGER.info('Found SmartLink vehicle, requesting SmartLink tokens')
+        if any('INCAR' in car._connectivities for car in self._vehicles):
+            _LOGGER.info('Vehicle has SmartLink enabled, requesting SmartLink tokens')
             # Get SmartLink tokens
             if not await self._login('smartlink'):
                 _LOGGER.info('Something failed')
@@ -370,7 +374,7 @@ class Connection:
             if self._session_fulldebug:
                 for token in self._session_tokens.get(client, {}):
                     _LOGGER.debug(f'Got token {token} for client "{client}"')
-            if not await self.verify_tokens(self._session_tokens[client].get('id_token', ''), type='id_token', client=client):
+            if not await self.verify_tokens(self._session_tokens[client].get('id_token', ''), client=client):
                 _LOGGER.warning(f'Token for {client} could not be verified!')
             else:
                 _LOGGER.debug(f'Token for {client} verified OK.')
@@ -385,7 +389,7 @@ class Connection:
             # Get VW Group API tokens
             # First verify that we have valid connect tokens
             try:
-                if not await self.verify_tokens(self._session_tokens['connect'].get('id_token'), type='id_token', client='connect'):
+                if not await self.verify_tokens(self._session_tokens['connect'].get('id_token'), 'connect'):
                     _LOGGER.debug('The Connect services token is invalid')
                     raise Exception('Invalid connect token')
             except Exception as error:
@@ -411,7 +415,7 @@ class Connection:
             )
             if req.status > 400:
                 _LOGGER.debug('API token request failed.')
-                raise Exception(f'API token request returned with status code {reg.status}')
+                raise Exception(f'API token request returned with status code {req.status}')
             else:
                 # Save tokens as "vwg", use theese for get/posts to VW Group API
                 self._session_tokens['vwg'] = await req.json()
@@ -425,7 +429,7 @@ class Connection:
                 if self._session_fulldebug:
                     for token in self._session_tokens.get('vwg', {}):
                         _LOGGER.debug(f'Got token {token}')
-                if not await self.verify_tokens(self._session_tokens['vwg'].get('access_token', ''), type='access_token', client='vwg'):
+                if not await self.verify_tokens(self._session_tokens['vwg'].get('access_token', ''), 'vwg'):
                     _LOGGER.warning('VW-Group API token could not be verified!')
                 else:
                     _LOGGER.debug('VW-Group API token verified OK.')
@@ -1247,7 +1251,7 @@ class Connection:
                 return False
         return True
 
-    async def verify_tokens(self, token, type, client='connect'):
+    async def verify_tokens(self, token, client='connect'):
         """Function to verify JWT against JWK(s)."""
         if client in ['connect', 'skoda', 'smartlink']:
             req = await self._session.get(url = 'https://identity.vwgroup.io/oidc/v1/keys')
@@ -1258,13 +1262,13 @@ class Connection:
                 'https://api.vas.eu.dp15.vwg-connect.com',
                 'https://api.vas.eu.wcardp.io'
             ]
-        else:
-            _LOGGER.debug('Not implemented')
-            return False
-        if type == 'vwg':
+        elif client == 'vwg':
             req = await self._session.get(url = 'https://mbboauth-1d.prd.ece.vwg-connect.com/mbbcoauth/public/jwk/v1')
             keys = await req.json()
             audience = 'mal.prd.ece.vwg-connect.com'
+        else:
+            _LOGGER.debug('Not implemented')
+            return False
         try:
             pubkeys = {}
             for jwk in keys['keys']:
@@ -1273,7 +1277,7 @@ class Connection:
                     pubkeys[kid] = jwt.algorithms.RSAAlgorithm.from_jwk(to_json(jwk))
 
             token_kid = jwt.get_unverified_header(token)['kid']
-            if type == 'vwg':
+            if client == 'vwg':
                 token_kid = 'VWGMBB01DELIV1.' + token_kid
 
             pubkey = pubkeys[token_kid]
@@ -1311,7 +1315,7 @@ class Connection:
             if sresponse.status == 200:
                 tokens = await sresponse.json()
                 # Verify Token
-                if not await self.verify_tokens(tokens['id_token'], 'id_token', 'skoda'):
+                if not await self.verify_tokens(tokens['id_token'], 'skoda'):
                     _LOGGER.warning('Token could not be verified!')
                 for token in tokens:
                     self._session_tokens['skoda'][token] = tokens[token]
@@ -1333,7 +1337,7 @@ class Connection:
             if cresponse.status == 200:
                 tokens = await cresponse.json()
                 # Verify Token
-                if not await self.verify_tokens(tokens['id_token'], 'id_token', 'connect'):
+                if not await self.verify_tokens(tokens['id_token'], 'connect'):
                     _LOGGER.warning('Token could not be verified!')
                 for token in tokens:
                     self._session_tokens['connect'][token] = tokens[token]
@@ -1356,7 +1360,7 @@ class Connection:
                 )
                 if response.status == 200:
                     tokens = await response.json()
-                    if not await self.verify_tokens(tokens['access_token'], 'access_token', 'vwg'):
+                    if not await self.verify_tokens(tokens['access_token'], 'vwg'):
                         _LOGGER.warning('Token could not be verified!')
                     for token in tokens:
                         self._session_tokens['vwg'][token] = tokens[token]
@@ -1380,7 +1384,7 @@ class Connection:
                 if slresponse.status == 200:
                     tokens = await slresponse.json()
                     # Verify Token
-                    if not await self.verify_tokens(tokens['id_token'], 'id_token', 'smartlink'):
+                    if not await self.verify_tokens(tokens['id_token'], 'smartlink'):
                         _LOGGER.warning('Token could not be verified!')
                     for token in tokens:
                         self._session_tokens['smartlink'][token] = tokens[token]
