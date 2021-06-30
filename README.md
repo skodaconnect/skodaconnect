@@ -2,10 +2,7 @@
 ![PyPi](https://img.shields.io/pypi/v/skodaconnect?label=latest%20pypi)
 ![Downloads PyPi](https://img.shields.io/pypi/dm/skodaconnect)
 
-# Skoda Connect v1.0.40-RC6
-**WARNING!**
-This is a BETA pre-release. Only install if you are having issues with latest stable release. Read release notes for more details.
-
+# Skoda Connect v1.0.41
 Fork of https://github.com/robinostlund/volkswagencarnet where it was modified to support also Skoda Connect.
 Changes made to utilize the same API calls as the MySkoda mobile app.
 
@@ -32,7 +29,7 @@ Heating is what it sounds like and ventilation is used to ventilate/cool the car
 
 ## Thanks to
 
-- [RobinostLund](https://github.com/robinostlund/volkswagencarnet) for initial project for Volkswagen Carnet I was able to fork
+- [RobinostLund](https://github.com/robinostlund/volkswagencarnet) for initial project for Volkswagen Carnet which this is based on initially
 - [Farfar](https://github.com/Farfar) for modifications related to electric engines
 - [tanelvakker](https://github.com/tanelvakker) for modifications related to correct SPIN handling for various actions and using correct URLs also for MY2021
 

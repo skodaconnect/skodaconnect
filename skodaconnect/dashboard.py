@@ -141,13 +141,13 @@ class BinarySensor(Instrument):
     @property
     def str_state(self):
         if self.device_class in ["door", "window"]:
-            return "Open" if self.state else "Closed"
+            return "Closed" if self.state else "Open"
         if self.device_class == "lock":
-            return "Unlocked" if self.state else "Locked"
+            return "Locked" if self.state else "Unlocked"
         if self.device_class == "safety":
             return "Warning!" if self.state else "OK"
         if self.device_class == "plug":
-            return "Charging" if self.state else "Plug removed"
+            return "Connected" if self.state else "Disconnected"
         if self.state is None:
             _LOGGER.error("Can not encode state %s:%s", self.attr, self.state)
             return "?"
@@ -918,101 +918,101 @@ def create_instruments():
             attr="door_locked",
             name="Doors locked",
             device_class="lock",
-            reverse_state=True
+            reverse_state=False
         ),
         BinarySensor(
             attr="door_closed_left_front",
             name="Door closed left front",
             device_class="door",
-            reverse_state=True,
+            reverse_state=False,
             icon="mdi:car-door"
         ),
         BinarySensor(
             attr="door_closed_right_front",
             name="Door closed right front",
             device_class="door",
-            reverse_state=True,
+            reverse_state=False,
             icon="mdi:car-door"
         ),
         BinarySensor(
             attr="door_closed_left_back",
             name="Door closed left back",
             device_class="door",
-            reverse_state=True,
+            reverse_state=False,
             icon="mdi:car-door"
         ),
         BinarySensor(
             attr="door_closed_right_back",
             name="Door closed right back",
             device_class="door",
-            reverse_state=True,
+            reverse_state=False,
             icon="mdi:car-door"
         ),
         BinarySensor(
             attr="trunk_locked",
             name="Trunk locked",
             device_class="lock",
-            reverse_state=True
+            reverse_state=False
         ),
         BinarySensor(
             attr="trunk_closed",
             name="Trunk closed",
             device_class="door",
-            reverse_state=True
+            reverse_state=False
         ),
         BinarySensor(
             attr="hood_closed",
             name="Hood closed",
             device_class="door",
-            reverse_state=True
+            reverse_state=False
         ),
         BinarySensor(
             attr="charging_cable_connected",
             name="Charging cable connected",
             device_class="plug",
-            reverse_state=True
+            reverse_state=False
         ),
         BinarySensor(
             attr="charging_cable_locked",
             name="Charging cable locked",
             device_class="lock",
-            reverse_state=True
+            reverse_state=False
         ),
         BinarySensor(
             attr="sunroof_closed",
             name="Sunroof closed",
             device_class="window",
-            reverse_state=True
+            reverse_state=False
         ),
         BinarySensor(
             attr="windows_closed",
             name="Windows closed",
             device_class="window",
-            reverse_state=True
+            reverse_state=False
         ),
         BinarySensor(
             attr="window_closed_left_front",
             name="Window closed left front",
             device_class="window",
-            reverse_state=True
+            reverse_state=False
         ),
         BinarySensor(
             attr="window_closed_left_back",
             name="Window closed left back",
             device_class="window",
-            reverse_state=True
+            reverse_state=False
         ),
         BinarySensor(
             attr="window_closed_right_front",
             name="Window closed right front",
             device_class="window",
-            reverse_state=True
+            reverse_state=False
         ),
         BinarySensor(
             attr="window_closed_right_back",
             name="Window closed right back",
             device_class="window",
-            reverse_state=True
+            reverse_state=False
         ),
         BinarySensor(
             attr="vehicle_moving",
