@@ -19,6 +19,18 @@ from bs4 import BeautifulSoup
 from base64 import b64decode, b64encode
 from skodaconnect.utilities import read_config, json_loads
 from skodaconnect.vehicle import Vehicle
+from skodaconnect.exceptions import (
+    SkodaConfigException,
+    SkodaAuthenticationException,
+    SkodaAccountLockedException,
+    SkodaTokenExpiredException,
+    SkodaException,
+    SkodaEULAException,
+    SkodaThrottledException,
+    SkodaLoginFailedException,
+    SkodaInvalidRequestException,
+    SkodaRequestInProgressException
+)
 
 from aiohttp import ClientSession, ClientTimeout
 from aiohttp.hdrs import METH_GET, METH_POST
@@ -86,17 +98,21 @@ class Connection:
         self._session_auth_headers = HEADERS_AUTH.copy()
 
         # Try login against connect services
-        _LOGGER.info('Connecting to Skoda native API')
-        if not await self._login('skoda'):
-            _LOGGER.info('Something failed')
-            self._session_logged_in = False
-            return False
-        # Successful login to Skoda API, try VW-Group connect
-        else:
-            if not await self._login('connect'):
+        try:
+            _LOGGER.info('Connecting to Skoda native API')
+            if not await self._login('skoda'):
                 _LOGGER.info('Something failed')
                 self._session_logged_in = False
                 return False
+            # Successful login to Skoda API, try VW-Group connect
+            else:
+                if not await self._login('connect'):
+                    _LOGGER.info('Something failed')
+                    self._session_logged_in = False
+                    return False
+        except:
+            raise
+
 
         # Get list of vehicles from Skoda native API
         await self.set_token('skoda')
@@ -111,7 +127,6 @@ class Connection:
             for vehicle in skoda_vehicles:
                 vin = vehicle.get('vin', '')
                 specs = vehicle.get('specification', '')
-                # Check which type of services are available, Connect, Smartlink
                 connectivity = []
                 for service in vehicle.get('connectivities', []):
                     connectivity.append(service.get('type', ''))
@@ -229,7 +244,7 @@ class Connection:
                             _LOGGER.info(f'Unable to login, {error_description}')
                         else:
                             _LOGGER.info(f'Unable to login.')
-                        raise Exception(error)
+                        raise SkodaException(error)
                     else:
                         if self._session_fulldebug:
                             _LOGGER.debug(f'Got redirect to "{ref}"')
@@ -240,12 +255,14 @@ class Connection:
                         )
                 else:
                     _LOGGER.warning(f'Unable to fetch authorization endpoint.')
-                    raise Exception('Missing "location" header')
+                    raise SkodaException('Missing "location" header')
+            except (SkodaException):
+                raise
             except Exception as error:
                 _LOGGER.warning('Failed to get authorization endpoint.')
-                raise error
+                raise SkodaException(error)
             if req.status != 200:
-                raise Exception('Fetching authorization endpoint failed')
+                raise SkodaException('Fetching authorization endpoint failed')
             else:
                 _LOGGER.debug('Got authorization endpoint')
             try:
@@ -259,7 +276,7 @@ class Connection:
                 pe_url = authissuer+responseSoup.find('form', id='emailPasswordForm').get('action')
             except Exception as e:
                 _LOGGER.error('Failed to extract user login form.')
-                raise e
+                raise SkodaException(e)
 
             # POST email
             # https://identity.vwgroup.io/signin-service/v1/{CLIENT_ID}/login/identifier
@@ -271,7 +288,7 @@ class Connection:
                 data = mailform
             )
             if req.status != 200:
-                raise Exception('POST password request failed')
+                raise SkodaException('POST password request failed')
             try:
                 response_data = await req.text()
                 responseSoup = BeautifulSoup(response_data, 'html.parser')
@@ -283,7 +300,7 @@ class Connection:
                 pw_url = authissuer+responseSoup.find('form', id='credentialsForm').get('action')
             except Exception as e:
                 _LOGGER.error('Failed to extract password login form.')
-                raise e
+                raise SkodaException(e)
 
             # POST password
             # https://identity.vwgroup.io/signin-service/v1/{CLIENT_ID}/login/authenticate
@@ -303,6 +320,21 @@ class Connection:
             try:
                 maxDepth = 10
                 ref = req.headers['Location']
+                if 'error' in ref:
+                    error = parse_qs(urlparse(ref).query).get('error', '')[0]
+                    if error == 'login.error.throttled':
+                        timeout = parse_qs(urlparse(ref).query).get('enableNextButtonAfterSeconds', '')[0]
+                        _LOGGER.warning(f'Login failed, login is disabled for another {timeout} seconds')
+                        raise SkodaAccountLockedException(f'Account is locked for another {timeout} seconds')
+                    elif error == 'login.errors.password_invalid':
+                        _LOGGER.warning(f'Login failed, invalid password')
+                        raise SkodaAuthenticationException('Invalid credentials')
+                    else:
+                        _LOGGER.warning(f'Login failed: {error}')
+                    raise SkodaLoginFailedException(error)
+                if 'terms-and-conditions' in ref:
+                    _LOGGER.warning('You need to login to Skoda Connect online and accept the terms and conditions.')
+                    raise SkodaEULAException('The terms and conditions must be accepted first at "https://www.skoda-connect.com/"')
                 while not ref.startswith(APP_URI):
                     if self._session_fulldebug:
                         _LOGGER.debug(f'Following redirect to "{ref}"')
@@ -312,35 +344,22 @@ class Connection:
                         allow_redirects=False
                     )
                     if not response.headers.get('Location', False):
-                        _LOGGER.info(f'Login failed, does this account have any vehicle with connect services enabled?')
-                        raise Exception('User appears unauthorized')
+                        raise SkodaAuthenticationException('User appears unauthorized')
                     ref = response.headers['Location']
                     # Set a max limit on requests to prevent forever loop
                     maxDepth -= 1
                     if maxDepth == 0:
-                        _LOGGER.warning('Should have gotten a token by now.')
-                        raise Exception('Too many redirects')
+                        raise SkodaException('Too many redirects')
+            except (SkodaException, SkodaEULAException, SkodaAuthenticationException, SkodaAccountLockedException, SkodaLoginFailedException):
+                raise
             except Exception as e:
-                # If we get excepted it should be because we can't redirect to the APP_URI URL
-                if 'error' in ref:
-                    error = parse_qs(urlparse(ref).query).get('error', '')[0]
-                    if error == 'login.error.throttled':
-                        timeout = parse_qs(urlparse(ref).query).get('enableNextButtonAfterSeconds', '')[0]
-                        _LOGGER.warning(f'Login failed, login is disabled for another {timeout} seconds')
-                    elif error == 'login.errors.password_invalid':
-                        _LOGGER.warning(f'Login failed, invalid password')
-                    else:
-                        _LOGGER.warning(f'Login failed: {error}')
-                    raise error
-                if 'terms-and-conditions' in ref:
-                    _LOGGER.warning('You need to login to Skoda Connect online and accept the terms and conditions.')
-                    raise Exception('the terms and conditions must be accepted')
+                # If we get an unhandled exception it should be because we can't redirect to the APP_URI URL and thus we have our auth code
                 if 'code' in ref:
                     _LOGGER.debug('Got code: %s' % ref)
                     pass
                 else:
                     _LOGGER.debug(f'Exception occured while logging in.')
-                    raise e
+                    raise SkodaLoginFailedException(e)
             _LOGGER.debug('Login successful, received authorization code.')
 
             # Extract code and tokens
@@ -361,16 +380,16 @@ class Connection:
                 allow_redirects=False
             )
             if req.status != 200:
-                raise Exception('Token exchange failed')
+                raise SkodaException('Token exchange failed')
             # Save tokens as "identity", theese are tokens representing the user
             self._session_tokens[client] = await req.json()
             if 'error' in self._session_tokens[client]:
                 error = self._session_tokens[client].get('error', '')
                 if 'error_description' in self._session_tokens[client]:
                     error_description = self._session_tokens[client].get('error_description', '')
-                    raise Exception(f'{error} - {error_description}')
+                    raise SkodaException(f'{error} - {error_description}')
                 else:
-                    raise Exception(error)
+                    raise SkodaException(error)
             if self._session_fulldebug:
                 for token in self._session_tokens.get(client, {}):
                     _LOGGER.debug(f'Got token {token} for client "{client}"')
@@ -378,6 +397,22 @@ class Connection:
                 _LOGGER.warning(f'Token for {client} could not be verified!')
             else:
                 _LOGGER.debug(f'Token for {client} verified OK.')
+        except (SkodaEULAException):
+            _LOGGER.info('Login failed, the terms and conditions might have been updated and need to be accepted. Login to https://www.skoda-connect.com and accept the new terms before trying again')
+            self._session_logged_in = False
+            raise
+        except (SkodaAccountLockedException):
+            _LOGGER.info('Your account is locked, probably because of too many incorrect login attempts. Make sure that your account is not in use somewhere with incorrect password')
+            self._session_logged_in = False
+            raise
+        except (SkodaAuthenticationException):
+            _LOGGER.info('Invalid credentials or invalid configuration. Make sure you have entered the correct credentials')
+            self._session_logged_in = False
+            raise
+        except (SkodaException):
+            _LOGGER.error('An API error was encountered during login, try again later')
+            self._session_logged_in = False
+            raise
         except Exception as error:
             _LOGGER.error(f'Login failed for {BRAND} account, {error}')
             self._session_logged_in = False
@@ -391,9 +426,9 @@ class Connection:
             try:
                 if not await self.verify_tokens(self._session_tokens['connect'].get('id_token'), 'connect'):
                     _LOGGER.debug('The Connect services token is invalid')
-                    raise Exception('Invalid connect token')
+                    raise SkodaException('Invalid connect token')
             except Exception as error:
-                raise error
+                raise SkodaException(error)
 
             # https://mbboauth-1d.prd.ece.vwg-connect.com/mbbcoauth/mobile/oauth2/v1/token
             tokenBody2 =  {
@@ -415,7 +450,7 @@ class Connection:
             )
             if req.status > 400:
                 _LOGGER.debug('API token request failed.')
-                raise Exception(f'API token request returned with status code {req.status}')
+                raise SkodaException(f'API token request returned with status code {req.status}')
             else:
                 # Save tokens as "vwg", use theese for get/posts to VW Group API
                 self._session_tokens['vwg'] = await req.json()
@@ -423,9 +458,9 @@ class Connection:
                     error = self._session_tokens['vwg'].get('error', '')
                     if 'error_description' in self._session_tokens['vwg']:
                         error_description = self._session_tokens['vwg'].get('error_description', '')
-                        raise Exception(f'{error} - {error_description}')
+                        raise SkodaException(f'{error} - {error_description}')
                     else:
-                        raise Exception(error)
+                        raise SkodaException(error)
                 if self._session_fulldebug:
                     for token in self._session_tokens.get('vwg', {}):
                         _LOGGER.debug(f'Got token {token}')
@@ -570,7 +605,7 @@ class Connection:
                 _LOGGER.info(f'Session expired. Initiating new login for {BRAND} account.')
                 if not await self.doLogin():
                     _LOGGER.warning(f'Login for {BRAND} account failed!')
-                    raise Exception(f'Login for {BRAND} account failed')
+                    raise SkodaLoginFailedException(f'Login for {BRAND} account failed')
 
             _LOGGER.debug('Going to call vehicle updates')
             # Get all Vehicle objects and update in parallell
@@ -851,13 +886,13 @@ class Connection:
         if self.logged_in == False:
             if not await self.doLogin():
                 _LOGGER.warning(f'Login for {BRAND} account failed!')
-                raise Exception(f'Login for {BRAND} account failed')
+                raise SkodaLoginFailedException(f'Login for {BRAND} account failed')
         try:
             if not await self.validate_tokens:
                 _LOGGER.info(f'Session expired. Initiating new login for {BRAND} account.')
                 if not await self.doLogin():
                     _LOGGER.warning(f'Login for {BRAND} account failed!')
-                    raise Exception(f'Login for {BRAND} account failed')
+                    raise SkodaLoginFailedException(f'Login for {BRAND} account failed')
             await self.set_token('vwg')
             if sectionId == 'climatisation':
                 url = f'fs-car/bs/$sectionId/v1/{BRAND}/{COUNTRY}/vehicles/$vin/climater/actions/$requestId'
@@ -895,7 +930,7 @@ class Connection:
             return status
         except Exception as error:
             _LOGGER.warning(f'Failure during get request status: {error}')
-            raise Exception(f'Failure during get request status: {error}')
+            raise SkodaException(f'Failure during get request status: {error}')
 
     async def get_sec_token(self, vin, spin, action):
         """Get a security token, required for certain set functions."""
@@ -907,10 +942,10 @@ class Connection:
             'rclima':  '/api/rolesrights/authorization/v2/vehicles/$vin/services/rclima_v1/operations/P_START_CLIMA_AU/security-pin-auth-requested'
         }
         if not spin:
-            raise Exception('SPIN is required')
+            raise SkodaConfigException('SPIN is required')
         try:
             if not urls.get(action, False):
-                raise Exception(f'Security token for "{action}" is not implemented')
+                raise SkodaException(f'Security token for "{action}" is not implemented')
             response = await self.get(self._make_url(urls.get(action), vin = vin))
             secToken = response['securityPinAuthInfo']['securityToken']
             challenge = response['securityPinAuthInfo']['securityPinTransmission']['challenge']
@@ -931,7 +966,7 @@ class Connection:
                 return response['securityToken']
             else:
                 _LOGGER.warning('Did not receive a valid security token')
-                raise Exception('Did not receive a valid security token')
+                raise SkodaException('Did not receive a valid security token')
         except Exception as error:
             _LOGGER.error(f'Could not generate security token (maybe wrong SPIN?), error: {error}')
             raise
@@ -942,13 +977,13 @@ class Connection:
         if self.logged_in == False:
             if not await self.doLogin():
                 _LOGGER.warning(f'Login for {BRAND} account failed!')
-                raise Exception(f'Login for {BRAND} account failed')
+                raise SkodaLoginFailedException(f'Login for {BRAND} account failed')
         try:
             if not await self.validate_tokens:
                 _LOGGER.info(f'Session expired. Initiating new login for {BRAND} account.')
                 if not await self.doLogin():
                     _LOGGER.warning(f'Login for {BRAND} account failed!')
-                    raise Exception(f'Login for {BRAND} account failed')
+                    raise SkodaLoginFailedException(f'Login for {BRAND} account failed')
             response = await self.post(query, vin=vin, **data)
             _LOGGER.debug(f'Data call returned: {response}')
             return response
@@ -978,9 +1013,10 @@ class Connection:
             await self.set_token('vwg')
             response = await self.dataCall(f'fs-car/bs/vsr/v1/{BRAND}/{COUNTRY}/vehicles/$vin/requests', vin, data=None)
             if not response:
-                raise Exception('Invalid or no response')
+                raise SkodaException('Invalid or no response')
             elif response == 429:
                 return dict({'id': None, 'state': 'Throttled', 'rate_limit_remaining': 0})
+                raise SkodaThrottledException('Action rate limit reached. Start the car to reset the action limit')
             else:
                 request_id = response.get('CurrentVehicleDataResponse', {}).get('requestId', 0)
                 request_state = response.get('CurrentVehicleDataResponse', {}).get('requestState', 'queued')
@@ -997,7 +1033,7 @@ class Connection:
             await self.set_token('vwg')
             response = await self.dataCall(f'fs-car/bs/batterycharge/v1/{BRAND}/{COUNTRY}/vehicles/$vin/charger/actions', vin, json = data)
             if not response:
-                raise Exception('Invalid or no response')
+                raise SkodaException('Invalid or no response')
             elif response == 429:
                 return dict({'id': None, 'state': 'Throttled', 'rate_limit_remaining': 0})
             else:
@@ -1061,7 +1097,7 @@ class Connection:
                     action = 'notProgrammed'
                 timers[timerid]['timerProgrammedStatus'] = action
             else:
-                raise Exception('Unknown action for departure timer')
+                raise SkodaException('Unknown action for departure timer')
 
             # Construct Profiles data
             profiles = [{},{},{}]
@@ -1099,7 +1135,7 @@ class Connection:
             response = await self.dataCall(f'fs-car/bs/departuretimer/v1/{BRAND}/{COUNTRY}/vehicles/$vin/timer/actions', vin, json = body)
             self._session_headers.pop('X-securityToken', None)
             if not response:
-                raise Exception('Invalid or no response')
+                raise SkodaException('Invalid or no response')
             elif response == 429:
                 return dict({'id': None, 'state': 'Throttled', 'rate_limit_remaining': 0})
             else:
@@ -1123,7 +1159,7 @@ class Connection:
             response = await self.dataCall(f'fs-car/bs/climatisation/v1/{BRAND}/{COUNTRY}/vehicles/$vin/climater/actions', vin, json = data)
             self._session_headers.pop('X-securityToken', None)
             if not response:
-                raise Exception('Invalid or no response')
+                raise SkodaException('Invalid or no response')
             elif response == 429:
                 return dict({'id': None, 'state': 'Throttled', 'rate_limit_remaining': 0})
             else:
@@ -1155,7 +1191,7 @@ class Connection:
             if contType: self._session_headers['Content-Type'] = contType
 
             if not response:
-                raise Exception('Invalid or no response')
+                raise SkodaException('Invalid or no response')
             elif response == 429:
                 return dict({'id': None, 'state': 'Throttled', 'rate_limit_remaining': 0})
             else:
@@ -1190,7 +1226,7 @@ class Connection:
             self._session_headers.pop('Content-Type', None)
             if contType: self._session_headers['Content-Type'] = contType
             if not response:
-                raise Exception('Invalid or no response')
+                raise SkodaException('Invalid or no response')
             elif response == 429:
                 return dict({'id': None, 'state': 'Throttled', 'rate_limit_remaining': 0})
             else:

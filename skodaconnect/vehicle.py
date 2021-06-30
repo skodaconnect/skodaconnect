@@ -11,6 +11,18 @@ from datetime import datetime, timedelta, timezone
 from json import dumps as to_json
 from collections import OrderedDict
 from skodaconnect.utilities import find_path, is_valid_path
+from skodaconnect.exceptions import (
+    SkodaConfigException,
+    SkodaAuthenticationException,
+    SkodaAccountLockedException,
+    SkodaTokenExpiredException,
+    SkodaException,
+    SkodaEULAException,
+    SkodaThrottledException,
+    SkodaLoginFailedException,
+    SkodaInvalidRequestException,
+    SkodaRequestInProgressException
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -286,17 +298,17 @@ class Vehicle:
                 data = {'action': {'settings': {'maxChargeCurrent': int(value)}, 'type': 'setSettings'}}
             else:
                 _LOGGER.error(f'Set charger maximum current to {value} is not supported.')
-                raise Exception(f'Set charger maximum current to {value} is not supported.')
+                raise SkodaInvalidRequestException(f'Set charger maximum current to {value} is not supported.')
             return await self.set_charger(data)
         else:
             _LOGGER.error('No charger support.')
-            raise Exception('No charger support.')
+            raise SkodaInvalidRequestException('No charger support.')
 
     async def set_charger(self, action):
         """Charging actions."""
         if not self._services.get('rbatterycharge_v1', False):
             _LOGGER.info('Remote start/stop of charger is not supported.')
-            raise Exception('Remote start/stop of charger is not supported.')
+            raise SkodaInvalidRequestException('Remote start/stop of charger is not supported.')
         if self._requests['batterycharge'].get('id', False):
             timestamp = self._requests.get('batterycharge', {}).get('timestamp', datetime.now())
             expired = datetime.now() - timedelta(minutes=3)
@@ -311,14 +323,14 @@ class Vehicle:
             data = action
         else:
             _LOGGER.error(f'Invalid charger action: {action}. Must be either start or stop')
-            raise Exception(f'Invalid charger action: {action}. Must be either start or stop')
+            raise SkodaInvalidRequestException(f'Invalid charger action: {action}. Must be either start or stop')
         try:
             self._requests['latest'] = 'Charger'
             response = await self._connection.setCharger(self.vin, data)
             if not response:
                 self._requests['batterycharge'] = {'status': 'Failed'}
                 _LOGGER.error(f'Failed to {action} charging')
-                raise Exception(f'Failed to {action} charging')
+                raise SkodaException(f'Failed to {action} charging')
             else:
                 self._requests['remaining'] = response.get('rate_limit_remaining', -1)
                 self._requests['batterycharge'] = {
@@ -332,10 +344,12 @@ class Vehicle:
                     status = await self.wait_for_request('batterycharge', response.get('id', 0))
                 self._requests['batterycharge'] = {'status': status}
                 return True
+        except (SkodaInvalidRequestException, SkodaException):
+            raise
         except Exception as error:
             _LOGGER.warning(f'Failed to {action} charging - {error}')
             self._requests['batterycharge'] = {'status': 'Exception'}
-            raise Exception(f'Failed to {action} charging - {error}')
+            raise SkodaException(f'Failed to {action} charging - {error}')
 
    # Departure timers
     async def set_charge_limit(self, limit=50):
@@ -347,12 +361,12 @@ class Vehicle:
                     data['limit'] = limit
                     data['action'] = 'chargelimit'
                 else:
-                    raise Exception(f'Charge limit must be one of 0, 10, 20, 30, 40 or 50.')
+                    raise SkodaInvalidRequestException(f'Charge limit must be one of 0, 10, 20, 30, 40 or 50.')
             else:
-                raise Exception(f'Charge limit "{limit}" is not supported.')
+                raise SkodaInvalidRequestException(f'Charge limit "{limit}" is not supported.')
             return await self._set_timers(data)
         else:
-            raise Exception('Departure timers are note supported.')
+            raise SkodaInvalidRequestException('Departure timers are not supported.')
 
     async def set_timer_active(self, id=1, action='off'):
         """ Activate/deactivate departure timers. """
@@ -360,14 +374,14 @@ class Vehicle:
             if id in {1, 2, 3}:
                 data['id'] = id
             else:
-                raise Exception(f'Timer id "{id}" is not supported.')
+                raise SkodaInvalidRequestException(f'Timer id "{id}" is not supported.')
             if action in ['on', 'off']:
                 data['action'] = action
             else:
-                raise Exception(f'Timer action "{action}" is not supported.')
+                raise SkodaInvalidRequestException(f'Timer action "{action}" is not supported.')
             return await self._set_timers(data)
         else:
-            raise Exception('Departure timers are note supported.')
+            raise SkodaInvalidRequestException('Departure timers are not supported.')
 
     async def set_timer_schedule(self, id=1, schedule={}):
         """ Set departure schedules. """
@@ -377,36 +391,36 @@ class Vehicle:
             if id in {1, 2, 3}:
                 data['id'] = id
             else:
-                raise Exception(f'Timer id "{id}" is not supported.')
+                raise SkodaInvalidRequestException(f'Timer id "{id}" is not supported.')
             if not schedule:
-                raise Exception('A schedule must be set.')
+                raise SkodaInvalidRequestException('A schedule must be set.')
             else:
                 if not isinstance(schedule.get('enabled', ''), bool):
-                    raise Exception('The enabled variable must be set to True or False.')
+                    raise SkodaInvalidRequestException('The enabled variable must be set to True or False.')
                 if not isinstance(schedule.get('recurring', ''), bool):
-                    raise Exception('The recurring variable must be set to True or False.')
+                    raise SkodaInvalidRequestException('The recurring variable must be set to True or False.')
                 # Sanity check for departure time
                 if not re.match('[0-9]{2}:[0-9]{2}', schedule.get('time', '')):
-                    raise Exception('The time for departure must be set in 24h format HH:MM.')
+                    raise SkodaInvalidRequestException('The time for departure must be set in 24h format HH:MM.')
                 # For recurring schedules, check required variables
                 if schedule.get('recurring'):
                     if not re.match('[yn]{7}', schedule.get('days', '')):
-                        raise Exception('For recurring schedules the days variable must be set to y/n mask (mon-sun with only wed enabled): nnynnnn.')
+                        raise SkodaInvalidRequestException('For recurring schedules the days variable must be set to y/n mask (mon-sun with only wed enabled): nnynnnn.')
                 # For single departure, check required variables
                 elif not schedule.get('recurring'):
                     if not re.match('[0-9]{4}-[0-9]{2}-[0-9]{2}', schedule.get('date', '')):
-                        raise Exception('For single departure schedule the date variable must be set to YYYY-mm-dd.')
+                        raise SkodaInvalidRequestException('For single departure schedule the date variable must be set to YYYY-mm-dd.')
             data['action'] = 'schedule'
             data['schedule'] = schedule
             return await self._set_timers(data)
         else:
             _LOGGER.info('Departure timers are not supported.')
-            raise Exception('Departure timers are not supported.')
+            raise SkodaInvalidRequestException('Departure timers are not supported.')
 
     async def _set_timers(self, data=None):
         """ Set departure timers. """
         if not self._services.get('timerprogramming_v1', False):
-            raise Exception('Departure timers are not supported.')
+            raise SkodaInvalidRequestException('Departure timers are not supported.')
         if self._requests['departuretimer'].get('id', False):
             timestamp = self._requests.get('departuretimer', {}).get('timestamp', datetime.now())
             expired = datetime.now() - timedelta(minutes=3)
@@ -438,7 +452,7 @@ class Vehicle:
             if not response:
                 self._requests['departuretimer'] = {'status': 'Failed'}
                 _LOGGER.error('Failed to execute departure timer request')
-                raise Exception('Failed to execute departure timer request')
+                raise SkodaException('Failed to execute departure timer request')
             else:
                 self._requests['remaining'] = response.get('rate_limit_remaining', -1)
                 self._requests['departuretimer'] = {
@@ -452,9 +466,12 @@ class Vehicle:
                     status = await self.wait_for_request('departuretimer', response.get('id', 0))
                 self._requests['departuretimer'] = {'status': status}
                 return True
+        except (SkodaInvalidRequestException, SkodaException):
+            raise
         except Exception as error:
+            _LOGGER.warning(f'Failed to execute departure timer request - {error}')
             self._requests['departuretimer'] = {'status': 'Exception'}
-            raise Exception(f'Failed to set departure timer schedule - {error}')
+        raise SkodaException('Failed to set departure timer schedule')
 
    # Climatisation electric/auxiliary/windows (CLIMATISATION)
     async def set_climatisation_temp(self, temperature=20):
@@ -465,11 +482,11 @@ class Vehicle:
                 data = {'action': {'settings': {'targetTemperature': temp}, 'type': 'setSettings'}}
             else:
                 _LOGGER.error(f'Set climatisation target temp to {temperature} is not supported.')
-                raise Exception(f'Set climatisation target temp to {temperature} is not supported.')
+                raise SkodaInvalidRequestException(f'Set climatisation target temp to {temperature} is not supported.')
             return await self._set_climater(data)
         else:
             _LOGGER.error('No climatisation support.')
-            raise Exception('No climatisation support.')
+            raise SkodaInvalidRequestException('No climatisation support.')
 
     async def set_window_heating(self, action = 'stop'):
         """Turn on/off window heater."""
@@ -478,11 +495,11 @@ class Vehicle:
                 data = {'action': {'type': action + 'WindowHeating'}}
             else:
                 _LOGGER.error(f'Window heater action "{action}" is not supported.')
-                raise Exception(f'Window heater action "{action}" is not supported.')
+                raise SkodaInvalidRequestException(f'Window heater action "{action}" is not supported.')
             return await self._set_climater(data)
         else:
             _LOGGER.error('No climatisation support.')
-            raise Exception('No climatisation support.')
+            raise SkodaInvalidRequestException('No climatisation support.')
 
     async def set_battery_climatisation(self, mode = False):
         """Turn on/off electric climatisation from battery."""
@@ -491,11 +508,11 @@ class Vehicle:
                 data = {'action': {'settings': {'climatisationWithoutHVpower': mode}, 'type': 'setSettings'}}
             else:
                 _LOGGER.error(f'Set climatisation without external power to "{mode}" is not supported.')
-                raise Exception(f'Set climatisation without external power to "{mode}" is not supported.')
+                raise SkodaInvalidRequestException(f'Set climatisation without external power to "{mode}" is not supported.')
             return await self._set_climater(data)
         else:
             _LOGGER.error('No climatisation support.')
-            raise Exception('No climatisation support.')
+            raise SkodaInvalidRequestException('No climatisation support.')
 
     async def set_climatisation(self, mode = 'off', spin = False):
         """Turn on/off climatisation with electric/auxiliary heater."""
@@ -517,17 +534,17 @@ class Vehicle:
                 data = {'action': {'type': 'stopClimatisation'}}
             else:
                 _LOGGER.error(f'Invalid climatisation type: {mode}')
-                raise Exception(f'Invalid climatisation type: {mode}')
+                raise SkodaInvalidRequestException(f'Invalid climatisation type: {mode}')
             return await self.set_climater(data, spin)
         else:
             _LOGGER.error('No climatisation support.')
-            raise Exception('No climatisation support.')
+            raise SkodaInvalidRequestException('No climatisation support.')
 
     async def _set_climater(self, data, spin = False):
         """Climater actions."""
         if not self._services.get('rclima_v1', False):
             _LOGGER.info('Remote control of climatisation functions is not supported.')
-            raise Exception('Remote control of climatisation functions is not supported.')
+            raise SkodaInvalidRequestException('Remote control of climatisation functions is not supported.')
         if self._requests['climatisation'].get('id', False):
             timestamp = self._requests.get('climatisation', {}).get('timestamp', datetime.now())
             expired = datetime.now() - timedelta(minutes=3)
@@ -542,7 +559,7 @@ class Vehicle:
             if not response:
                 self._requests['climatisation'] = {'status': 'Failed'}
                 _LOGGER.error('Failed to execute climatisation request')
-                raise Exception('Failed to execute climatisation request')
+                raise SkodaException('Failed to execute climatisation request')
             else:
                 self._requests['remaining'] = response.get('rate_limit_remaining', -1)
                 self._requests['climatisation'] = {
@@ -556,17 +573,19 @@ class Vehicle:
                     status = await self.wait_for_request('climatisation', response.get('id', 0))
                 self._requests['climatisation'] = {'status': status}
                 return True
+        except (SkodaInvalidRequestException, SkodaException):
+            raise
         except Exception as error:
             _LOGGER.warning(f'Failed to execute climatisation request - {error}')
             self._requests['climatisation'] = {'status': 'Exception'}
-        raise Exception('Climatisation action failed')
+        raise SkodaException('Climatisation action failed')
 
    # Parking heater heating/ventilation (RS)
     async def set_pheater(self, mode, spin):
         """Set the mode for the parking heater."""
         if not self.is_pheater_heating_supported:
             _LOGGER.error('No parking heater support.')
-            raise Exception('No parking heater support.')
+            raise SkodaInvalidRequestException('No parking heater support.')
         if self._requests['preheater'].get('id', False):
             timestamp = self._requests.get('preheater', {}).get('timestamp', datetime.now())
             expired = datetime.now() - timedelta(minutes=3)
@@ -577,7 +596,7 @@ class Vehicle:
                 return False
         if not mode in ['heating', 'ventilation', 'off']:
             _LOGGER.error(f'{mode} is an invalid action for parking heater')
-            raise Exception(f'{mode} is an invalid action for parking heater')
+            raise SkodaInvalidRequestException(f'{mode} is an invalid action for parking heater')
         if mode == 'off':
             data = {
                 'performAction': {
@@ -602,7 +621,7 @@ class Vehicle:
             if not response:
                 self._requests['preheater'] = {'status': 'Failed'}
                 _LOGGER.error(f'Failed to set parking heater to {mode}')
-                raise Exception(f'setPreHeater returned "{response}"')
+                raise SkodaException(f'setPreHeater returned "{response}"')
             else:
                 self._requests['remaining'] = response.get('rate_limit_remaining', -1)
                 self._requests['preheater'] = {
@@ -616,17 +635,19 @@ class Vehicle:
                     status = await self.wait_for_request('rs', response.get('id', 0))
                 self._requests['preheater'] = {'status': status}
                 return True
+        except (SkodaInvalidRequestException, SkodaException):
+            raise
         except Exception as error:
             _LOGGER.warning(f'Failed to set parking heater mode to {mode} - {error}')
             self._requests['preheater'] = {'status': 'Exception'}
-        raise Exception('Pre-heater action failed')
+        raise SkodaException('Pre-heater action failed')
 
    # Lock (RLU)
     async def set_lock(self, action, spin):
         """Remote lock and unlock actions."""
         if not self._services.get('rlu_v1', False):
             _LOGGER.info('Remote lock/unlock is not supported.')
-            raise Exception('Remote lock/unlock is not supported.')
+            raise SkodaInvalidRequestException('Remote lock/unlock is not supported.')
         if self._requests['lock'].get('id', False):
             timestamp = self._requests.get('lock', {}).get('timestamp', datetime.now() - timedelta(minutes=5))
             expired = datetime.now() - timedelta(minutes=3)
@@ -636,17 +657,17 @@ class Vehicle:
                 _LOGGER.debug('A lock action is already in progress')
                 return False
         if action in ['lock', 'unlock']:
-            data = '<rluAction xmlns="http://audi.de/connect/rlu"><action>' + action + '</action></rluAction>'
+            data = '<rluAction xmlns="http://audi.de/connect/rlu">\n<action>' + action + '</action>\n</rluAction>'
         else:
             _LOGGER.error(f'Invalid lock action: {action}')
-            raise Exception(f'Invalid lock action: {action}')
+            raise SkodaInvalidRequestException(f'Invalid lock action: {action}')
         try:
             self._requests['latest'] = 'Lock'
             response = await self._connection.setLock(self.vin, data, spin)
             if not response:
                 self._requests['lock'] = {'status': 'Failed'}
                 _LOGGER.error(f'Failed to {action} vehicle')
-                raise Exception(f'Failed to {action} vehicle')
+                raise SkodaException(f'Failed to {action} vehicle')
             else:
                 self._requests['remaining'] = response.get('rate_limit_remaining', -1)
                 self._requests['lock'] = {
@@ -660,17 +681,19 @@ class Vehicle:
                     status = await self.wait_for_request('rlu', response.get('id', 0))
                 self._requests['lock'] = {'status': status}
                 return True
+        except (SkodaInvalidRequestException, SkodaException):
+            raise
         except Exception as error:
             _LOGGER.warning(f'Failed to {action} vehicle - {error}')
             self._requests['lock'] = {'status': 'Exception'}
-        raise Exception('Lock action failed')
+        raise SkodaException('Lock action failed')
 
    # Refresh vehicle data (VSR)
     async def set_refresh(self):
         """Wake up vehicle and update status data."""
         if not self._services.get('statusreport_v1', {}).get('active', False):
            _LOGGER.info('Data refresh is not supported.')
-           raise Exception('Data refresh is not supported.')
+           raise SkodaInvalidRequestException('Data refresh is not supported.')
         if self._requests['refresh'].get('id', False):
             timestamp = self._requests.get('refresh', {}).get('timestamp', datetime.now() - timedelta(minutes=5))
             expired = datetime.now() - timedelta(minutes=3)
@@ -685,7 +708,7 @@ class Vehicle:
             if not response:
                 _LOGGER.error('Failed to request vehicle update')
                 self._requests['refresh'] = {'status': 'Failed'}
-                raise Exception('Failed to execute data refresh')
+                raise SkodaException('Failed to execute data refresh')
             else:
                 self._requests['remaining'] = response.get('rate_limit_remaining', -1)
                 self._requests['refresh'] = {
@@ -701,10 +724,12 @@ class Vehicle:
                     'status': status
                 }
                 return True
+        except(SkodaInvalidRequestException, SkodaException):
+            raise
         except Exception as error:
             _LOGGER.warning(f'Failed to execute data refresh - {error}')
             self._requests['refresh'] = {'status': 'Exception'}
-        raise Exception('Data refresh failed')
+        raise SkodaException('Data refresh failed')
 
  #### Vehicle class helpers ####
   # Vehicle info
@@ -1036,16 +1061,12 @@ class Vehicle:
     @property
     def charging_cable_locked(self):
         """Return plug locked state"""
+        response = ''
         if self.attrs.get('charger', False):
             response = self.attrs.get('charger')['status']['plugStatusData']['lockState'].get('content', 0)
-            if response == 'locked':
-                return True
         elif self.attrs.get('plug', False):
             response = self.attrs.get('plug', {}).get('lockState', 0)
-            if response == 'Locked':
-                return True
-        else:
-            return False
+        return True if response in ['Locked', 'locked'] else False
 
     @property
     def is_charging_cable_locked_supported(self):
@@ -1063,16 +1084,12 @@ class Vehicle:
     @property
     def charging_cable_connected(self):
         """Return plug locked state"""
+        response = ''
         if self.attrs.get('charger', False):
-            response = self.attrs.get('charger')['status']['plugStatusData']['plugState'].get('content', 0)
-            if response == 'connected':
-                return False
+            response = self.attrs.get('charger', {}).get('status', {}).get('plugStatusData').get('plugState', {}).get('content', 0)
         elif self.attrs.get('plug', False):
-            response = self.attrs.get('plug').get('connectionState', 0)
-            if response == 'Connected':
-                return False
-        else:
-            return True
+            response = self.attrs.get('plug', {}).get('connectionState', 0)
+        return True if response in ['Connected', 'connected'] else False
 
     @property
     def is_charging_cable_connected_supported(self):
@@ -1114,7 +1131,7 @@ class Vehicle:
         check = self.attrs.get('charger', {}).get('status', {}).get('chargingStatusData', {}).get('externalPowerSupplyState', {}).get('content', '')
         if check in ['stationConnected', 'available']:
             return True
-        if self.attrs.get('charging', {}).get('chargingType', 'Invalid') is not 'Invalid':
+        if self.attrs.get('charging', {}).get('chargingType', 'Invalid') != 'Invalid':
             return True
         else:
             return False
@@ -1456,11 +1473,11 @@ class Vehicle:
     @property
     def is_windows_closed_supported(self):
         """Return true if window state is supported"""
+        response = 0
         if self.attrs.get('StoredVehicleDataResponseParsed', False):
             if '0x0301050001' in self.attrs.get('StoredVehicleDataResponseParsed'):
-                return True
-            else:
-                return False
+                response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301050001'].get('value', 0))
+        return True if response != 0 else False
 
     @property
     def window_closed_left_front(self):
@@ -1473,11 +1490,11 @@ class Vehicle:
     @property
     def is_window_closed_left_front_supported(self):
         """Return true if window state is supported"""
+        response = 0
         if self.attrs.get('StoredVehicleDataResponseParsed', False):
             if '0x0301050001' in self.attrs.get('StoredVehicleDataResponseParsed'):
-                return True
-            else:
-                return False
+                response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301050001'].get('value', 0))
+        return True if response != 0 else False
 
     @property
     def window_closed_right_front(self):
@@ -1490,11 +1507,11 @@ class Vehicle:
     @property
     def is_window_closed_right_front_supported(self):
         """Return true if window state is supported"""
+        response = 0
         if self.attrs.get('StoredVehicleDataResponseParsed', False):
             if '0x0301050005' in self.attrs.get('StoredVehicleDataResponseParsed'):
-                return True
-            else:
-                return False
+                response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301050005'].get('value', 0))
+        return True if response != 0 else False
 
     @property
     def window_closed_left_back(self):
@@ -1507,11 +1524,11 @@ class Vehicle:
     @property
     def is_window_closed_left_back_supported(self):
         """Return true if window state is supported"""
+        response = 0
         if self.attrs.get('StoredVehicleDataResponseParsed', False):
             if '0x0301050003' in self.attrs.get('StoredVehicleDataResponseParsed'):
-                return True
-            else:
-                return False
+                response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301050003'].get('value', 0))
+        return True if response != 0 else False
 
     @property
     def window_closed_right_back(self):
@@ -1524,11 +1541,11 @@ class Vehicle:
     @property
     def is_window_closed_right_back_supported(self):
         """Return true if window state is supported"""
+        response = 0
         if self.attrs.get('StoredVehicleDataResponseParsed', False):
             if '0x0301050007' in self.attrs.get('StoredVehicleDataResponseParsed'):
-                return True
-            else:
-                return False
+                response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301050007'].get('value', 0))
+        return True if response != 0 else False
 
     @property
     def sunroof_closed(self):
@@ -1541,14 +1558,11 @@ class Vehicle:
     @property
     def is_sunroof_closed_supported(self):
         """Return true if sunroof state is supported"""
+        response = 0
         if self.attrs.get('StoredVehicleDataResponseParsed', False):
             if '0x030105000B' in self.attrs.get('StoredVehicleDataResponseParsed'):
-                if int(self.attrs.get('StoredVehicleDataResponseParsed')['0x030105000B'].get('value', 0)) == 0:
-                    return False
-                else:
-                    return True
-            else:
-                return False
+                response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x030105000B'].get('value', 0))
+        return True if response != 0 else False
 
   # Locks
     @property
@@ -1574,11 +1588,11 @@ class Vehicle:
 
     @property
     def is_door_locked_supported(self):
+        response = 0
         if self.attrs.get('StoredVehicleDataResponseParsed', False):
             if '0x0301040001' in self.attrs.get('StoredVehicleDataResponseParsed'):
-                return True
-            else:
-                return False
+                response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040001'].get('value', 0))
+        return True if response != 0 else False
 
     @property
     def trunk_locked(self):
@@ -1590,11 +1604,11 @@ class Vehicle:
 
     @property
     def is_trunk_locked_supported(self):
+        response = 0
         if self.attrs.get('StoredVehicleDataResponseParsed', False):
             if '0x030104000D' in self.attrs.get('StoredVehicleDataResponseParsed'):
-                return True
-            else:
-                return False
+                response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x030104000D'].get('value', 0))
+        return True if response != 0 else False
 
   # Doors, hood and trunk
     @property
@@ -1609,14 +1623,11 @@ class Vehicle:
     @property
     def is_hood_closed_supported(self):
         """Return true if hood state is supported"""
+        response = 0
         if self.attrs.get('StoredVehicleDataResponseParsed', False):
             if '0x0301040011' in self.attrs.get('StoredVehicleDataResponseParsed', {}):
-                if int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040011'].get('value', 0)) == 0:
-                    return False
-                else:
-                    return True
-            else:
-                return False
+                response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040011'].get('value', 0))
+        return True if response != 0 else False
 
     @property
     def door_closed_left_front(self):
@@ -1629,11 +1640,11 @@ class Vehicle:
     @property
     def is_door_closed_left_front_supported(self):
         """Return true if window state is supported"""
+        response = 0
         if self.attrs.get('StoredVehicleDataResponseParsed', False):
             if '0x0301040002' in self.attrs.get('StoredVehicleDataResponseParsed'):
-                return True
-            else:
-                return False
+                response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040002'].get('value', 0))
+        return True if response != 0 else False
 
     @property
     def door_closed_right_front(self):
@@ -1646,11 +1657,11 @@ class Vehicle:
     @property
     def is_door_closed_right_front_supported(self):
         """Return true if window state is supported"""
+        response = 0
         if self.attrs.get('StoredVehicleDataResponseParsed', False):
             if '0x0301040008' in self.attrs.get('StoredVehicleDataResponseParsed'):
-                return True
-            else:
-                return False
+                response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040008'].get('value', 0))
+        return True if response != 0 else False
 
     @property
     def door_closed_left_back(self):
@@ -1663,11 +1674,11 @@ class Vehicle:
     @property
     def is_door_closed_left_back_supported(self):
         """Return true if window state is supported"""
+        response = 0
         if self.attrs.get('StoredVehicleDataResponseParsed', False):
             if '0x0301040005' in self.attrs.get('StoredVehicleDataResponseParsed'):
-                return True
-            else:
-                return False
+                response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040005'].get('value', 0))
+        return True if response != 0 else False
 
     @property
     def door_closed_right_back(self):
@@ -1680,11 +1691,11 @@ class Vehicle:
     @property
     def is_door_closed_right_back_supported(self):
         """Return true if window state is supported"""
+        response = 0
         if self.attrs.get('StoredVehicleDataResponseParsed', False):
             if '0x030104000B' in self.attrs.get('StoredVehicleDataResponseParsed'):
-                return True
-            else:
-                return False
+                response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x030104000B'].get('value', 0))
+        return True if response != 0 else False
 
     @property
     def trunk_closed(self):
@@ -1697,11 +1708,11 @@ class Vehicle:
     @property
     def is_trunk_closed_supported(self):
         """Return true if window state is supported"""
+        response = 0
         if self.attrs.get('StoredVehicleDataResponseParsed', False):
             if '0x030104000E' in self.attrs.get('StoredVehicleDataResponseParsed'):
-                return True
-            else:
-                return False
+                response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x030104000E'].get('value', 0))
+        return True if response != 0 else False
 
   # Departure timers
    # Under development

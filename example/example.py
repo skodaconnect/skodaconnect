@@ -7,6 +7,7 @@ import time
 import sys
 import os
 from aiohttp import ClientSession
+from datetime import datetime
 
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
@@ -116,8 +117,10 @@ async def main():
         print(f"Initiating new session to Skoda Connect with {USERNAME} as username")
         connection = Connection(session, USERNAME, PASSWORD, PRINTRESPONSE)
         print("Attempting to login to the Skoda Connect service")
+        print(datetime.now())
         if await connection.doLogin():
             print('Login success!')
+            print(datetime.now())
 
             instruments = set()
             for vehicle in connection.vehicles:
@@ -167,15 +170,6 @@ async def main():
             print(f'\tstr_state: {instrument.str_state} - state: {instrument.state}')
             print(f'\tattributes: {instrument.attributes}')
             print("")
-
-#        if await vehicle.set_timer_schedule(id=1, \
-#            schedule = {
-#                "enabled": True,
-#                "recurring": True,
-#                "date": "2021-05-21",
-#                "time": "08:00",
-#                "days": "yyynnnn"
-#            }):
 
         # Sleep for a given ammount of time and update all vehicles
         print('')
