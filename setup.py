@@ -2,7 +2,7 @@ import setuptools
 
 # read the contents of your README file
 from os import path
-from skodaconnect.__version__ import __version__
+from skodaconnect.__version__ import __version__ as lib_version
 this_directory = path.abspath(path.dirname(__file__))
 with open(path.join(this_directory, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
@@ -12,7 +12,7 @@ def local_scheme(version):
 
 setuptools.setup(
     name='skodaconnect',
-    version=__version__,
+    version=lib_version,
     description='Communicate with Skoda Connect',
     author='lendy007',
     author_email='lendik@gmail.com',
