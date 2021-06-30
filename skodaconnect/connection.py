@@ -17,6 +17,7 @@ from json import dumps as to_json
 import aiohttp
 from bs4 import BeautifulSoup
 from base64 import b64decode, b64encode
+from skodaconnect.__version__ import __version__ as lib_version
 from skodaconnect.utilities import read_config, json_loads
 from skodaconnect.vehicle import Vehicle
 from skodaconnect.exceptions import (
@@ -80,6 +81,7 @@ class Connection:
         self._vin = ""
         self._vehicles = []
 
+        _LOGGER.info(f'Init Skoda Connect library, version {lib_version}')
         _LOGGER.debug(f'Using service {self._session_base}')
 
         self._jarCookie = ""
@@ -319,23 +321,25 @@ class Connection:
             # Follow all redirects until we get redirected back to "our app"
             try:
                 maxDepth = 10
-                ref = req.headers['Location']
-                if 'error' in ref:
-                    error = parse_qs(urlparse(ref).query).get('error', '')[0]
-                    if error == 'login.error.throttled':
-                        timeout = parse_qs(urlparse(ref).query).get('enableNextButtonAfterSeconds', '')[0]
-                        _LOGGER.warning(f'Login failed, login is disabled for another {timeout} seconds')
-                        raise SkodaAccountLockedException(f'Account is locked for another {timeout} seconds')
-                    elif error == 'login.errors.password_invalid':
-                        _LOGGER.warning(f'Login failed, invalid password')
-                        raise SkodaAuthenticationException('Invalid credentials')
-                    else:
-                        _LOGGER.warning(f'Login failed: {error}')
-                    raise SkodaLoginFailedException(error)
-                if 'terms-and-conditions' in ref:
-                    _LOGGER.warning('You need to login to Skoda Connect online and accept the terms and conditions.')
-                    raise SkodaEULAException('The terms and conditions must be accepted first at "https://www.skoda-connect.com/"')
+                ref = req.headers.get('Location', None)
                 while not ref.startswith(APP_URI):
+                    if ref is None:
+                        raise SkodaException('Login failed')
+                    if 'error' in ref:
+                        error = parse_qs(urlparse(ref).query).get('error', '')[0]
+                        if error == 'login.error.throttled':
+                            timeout = parse_qs(urlparse(ref).query).get('enableNextButtonAfterSeconds', '')[0]
+                            _LOGGER.warning(f'Login failed, login is disabled for another {timeout} seconds')
+                            raise SkodaAccountLockedException(f'Account is locked for another {timeout} seconds')
+                        elif error == 'login.errors.password_invalid':
+                            _LOGGER.warning(f'Login failed, invalid password')
+                            raise SkodaAuthenticationException('Invalid credentials')
+                        else:
+                            _LOGGER.warning(f'Login failed: {error}')
+                        raise SkodaLoginFailedException(error)
+                    if 'terms-and-conditions' in ref:
+                        _LOGGER.warning('You need to login to Skoda Connect online and accept the terms and conditions.')
+                        raise SkodaEULAException('The terms and conditions must be accepted first at "https://www.skoda-connect.com/"')
                     if self._session_fulldebug:
                         _LOGGER.debug(f'Following redirect to "{ref}"')
                     response = await self._session.get(
@@ -345,7 +349,7 @@ class Connection:
                     )
                     if not response.headers.get('Location', False):
                         raise SkodaAuthenticationException('User appears unauthorized')
-                    ref = response.headers['Location']
+                    ref = response.headers.get('Location', None)
                     # Set a max limit on requests to prevent forever loop
                     maxDepth -= 1
                     if maxDepth == 0:
@@ -413,8 +417,10 @@ class Connection:
             _LOGGER.error('An API error was encountered during login, try again later')
             self._session_logged_in = False
             raise
+        except (TypeError):
+            _LOGGER.warning(f'Login failed for {self._session_auth_username}. The server might be temporarily unavailable, try again later. If the problem persists, verify your account at https://www.skoda-connect.com')
         except Exception as error:
-            _LOGGER.error(f'Login failed for {BRAND} account, {error}')
+            _LOGGER.error(f'Login failed for {self._session_auth_username}, {error}')
             self._session_logged_in = False
             return False
         return True
