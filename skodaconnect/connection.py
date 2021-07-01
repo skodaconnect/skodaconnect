@@ -1054,6 +1054,7 @@ class Connection:
 
     async def setTimers(self, vin, data, spin):
         """Set departure timers."""
+        _LOGGER.debug(f"Set timers with data {data}")
         try:
             # First get most recent departuretimer settings from server
             departuretimers = await self.getTimers(vin)
@@ -1082,7 +1083,7 @@ class Connection:
                 timerid = int(data.get('id'))-1 if data.get('id', False) else 0
                 # Set timer programmed status if data contains action = on or off
                 if data.get('action', None) in ['on', 'off']:
-                    action = 'programmed' if data.get('action', False) else 'notProgrammed'
+                    action = 'programmed' if data.get('action', False) == 'on' else 'notProgrammed'
                 # Set departure schedule
                 elif data.get('action', None) == 'schedule':
                     action = 'programmed' if data.get('schedule', {}).get('enabled', False) else 'notProgrammed'

@@ -371,6 +371,7 @@ class Vehicle:
     async def set_timer_active(self, id=1, action='off'):
         """ Activate/deactivate departure timers. """
         if self._services.get('timerprogramming_v1', False):
+            data = {}
             if id in {1, 2, 3}:
                 data['id'] = id
             else:
