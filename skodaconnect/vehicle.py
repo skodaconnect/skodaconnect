@@ -536,7 +536,7 @@ class Vehicle:
             else:
                 _LOGGER.error(f'Invalid climatisation type: {mode}')
                 raise SkodaInvalidRequestException(f'Invalid climatisation type: {mode}')
-            return await self.set_climater(data, spin)
+            return await self._set_climater(data, spin)
         else:
             _LOGGER.error('No climatisation support.')
             raise SkodaInvalidRequestException('No climatisation support.')
