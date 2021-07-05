@@ -404,18 +404,22 @@ class Connection:
         except (SkodaEULAException):
             _LOGGER.info('Login failed, the terms and conditions might have been updated and need to be accepted. Login to https://www.skoda-connect.com and accept the new terms before trying again')
             self._session_logged_in = False
+            return False
             raise
         except (SkodaAccountLockedException):
             _LOGGER.info('Your account is locked, probably because of too many incorrect login attempts. Make sure that your account is not in use somewhere with incorrect password')
             self._session_logged_in = False
+            return False
             raise
         except (SkodaAuthenticationException):
             _LOGGER.info('Invalid credentials or invalid configuration. Make sure you have entered the correct credentials')
             self._session_logged_in = False
+            return False
             raise
         except (SkodaException):
             _LOGGER.error('An API error was encountered during login, try again later')
             self._session_logged_in = False
+            return False
             raise
         except (TypeError):
             _LOGGER.warning(f'Login failed for {self._session_auth_username}. The server might be temporarily unavailable, try again later. If the problem persists, verify your account at https://www.skoda-connect.com')
