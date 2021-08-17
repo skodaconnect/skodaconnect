@@ -306,50 +306,18 @@ class Vehicle:
 
     async def set_charger(self, action):
         """Charging actions."""
-        if not self._services.get('rbatterycharge_v1', False):
-            _LOGGER.info('Remote start/stop of charger is not supported.')
-            raise SkodaInvalidRequestException('Remote start/stop of charger is not supported.')
-        if self._requests['batterycharge'].get('id', False):
-            timestamp = self._requests.get('batterycharge', {}).get('timestamp', datetime.now())
-            expired = datetime.now() - timedelta(minutes=3)
-            if expired > timestamp:
-                self._requests.get('batterycharge', {}).pop('id')
-            else:
-                _LOGGER.debug('Charging action already in progress')
-                return False
-        if action in ['start', 'stop']:
-            data = {'action': {'type': action}}
+        if action in ['Start', 'Stop']:
+            data = {'type': action}
         elif action.get('action', {}).get('type', '') == 'setSettings':
             data = action
         else:
-            _LOGGER.error(f'Invalid charger action: {action}. Must be either start or stop')
-            raise SkodaInvalidRequestException(f'Invalid charger action: {action}. Must be either start or stop')
+            _LOGGER.error(f'Invalid charger action: {action}. Must be either Start or Stop')
+            raise SkodaInvalidRequestException(f'Invalid charger action: {action}. Must be either Start or Stop')
         try:
             self._requests['latest'] = 'Charger'
             response = await self._connection.setCharger(self.vin, data)
-            if not response:
-                self._requests['batterycharge'] = {'status': 'Failed'}
-                _LOGGER.error(f'Failed to {action} charging')
-                raise SkodaException(f'Failed to {action} charging')
-            else:
-                self._requests['remaining'] = response.get('rate_limit_remaining', -1)
-                self._requests['batterycharge'] = {
-                    'timestamp': datetime.now(),
-                    'status': response.get('state', 'Unknown'),
-                    'id': response.get('id', 0)
-                }
-                if response.get('state', None) == 'Throttled':
-                    status = 'Throttled'
-                else:
-                    status = await self.wait_for_request('batterycharge', response.get('id', 0))
-                self._requests['batterycharge'] = {'status': status}
-                return True
-        except (SkodaInvalidRequestException, SkodaException):
+        except:
             raise
-        except Exception as error:
-            _LOGGER.warning(f'Failed to {action} charging - {error}')
-            self._requests['batterycharge'] = {'status': 'Exception'}
-            raise SkodaException(f'Failed to {action} charging - {error}')
 
    # Departure timers
     async def set_charge_limit(self, limit=50):

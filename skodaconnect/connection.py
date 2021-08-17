@@ -1036,18 +1036,15 @@ class Connection:
     async def setCharger(self, vin, data):
         """Start/Stop charger."""
         try:
-            await self.set_token('vwg')
-            response = await self.dataCall(f'fs-car/bs/batterycharge/v1/{BRAND}/{COUNTRY}/vehicles/$vin/charger/actions', vin, json = data)
+            await self.set_token('connect')
+            response = await self.dataCall(f'https://api.connect.skoda-auto.cz/api/v1/charging/operation-requests?vin={vin}', json = data)
             if not response:
                 raise SkodaException('Invalid or no response')
-            elif response == 429:
-                return dict({'id': None, 'state': 'Throttled', 'rate_limit_remaining': 0})
             else:
-                request_id = response.get('action', {}).get('actionId', 0)
-                request_state = response.get('action', {}).get('actionState', 'unknown')
-                remaining = response.get('rate_limit_remaining', -1)
-                _LOGGER.debug(f'Request for charger action returned with state "{request_state}", request id: {request_id}, remaining requests: {remaining}')
-                return dict({'id': str(request_id), 'state': request_state, 'rate_limit_remaining': remaining})
+                status = response["status"]
+                request_id = response["id"]
+                _LOGGER.debug(f'Request for charger action returned with state "{status}", request id: {request_id}')
+                return dict({'id': str(request_id), 'status': status})
         except:
             raise
         return False
