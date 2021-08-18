@@ -889,7 +889,7 @@ class Connection:
 
     async def get_request_status(self, vin, sectionId, requestId):
         """Return status of a request ID for a given section ID."""
-        if self.logged_in == False:
+        if not self.logged_in:
             if not await self.doLogin():
                 _LOGGER.warning(f'Login for {BRAND} account failed!')
                 raise SkodaLoginFailedException(f'Login for {BRAND} account failed')
@@ -899,7 +899,6 @@ class Connection:
                 if not await self.doLogin():
                     _LOGGER.warning(f'Login for {BRAND} account failed!')
                     raise SkodaLoginFailedException(f'Login for {BRAND} account failed')
-            await self.set_token('vwg')
             if sectionId == 'climatisation':
                 url = f'fs-car/bs/$sectionId/v1/{BRAND}/{COUNTRY}/vehicles/$vin/climater/actions/$requestId'
             elif sectionId == 'batterycharge':
@@ -910,12 +909,16 @@ class Connection:
                 url = f'fs-car/bs/$sectionId/v1/{BRAND}/{COUNTRY}/vehicles/$vin/requests/$requestId/jobstatus'
             # Requests for Skoda Native API
             elif sectionId == 'charging':
-                await self.set_token('connect')
                 url = 'https://api.connect.skoda-auto.cz/api/v1/$sectionId/operation-requests/$requestId'
             else:
                 url = f'fs-car/bs/$sectionId/v1/{BRAND}/{COUNTRY}/vehicles/$vin/requests/$requestId/status'
             url = re.sub('\$sectionId', sectionId, url)
             url = re.sub('\$requestId', requestId, url)
+
+            if sectionId in ['charging']:
+                await self.set_token('connect')
+            else:
+                await self.set_token('vwg')
 
             response = await self.get(url, vin)
             # Pre-heater, ???
@@ -932,11 +935,13 @@ class Connection:
             # Translate status messages to meaningful info
             if result in ['request_in_progress', 'queued', 'fetched', 'InProgress', 'Waiting']:
                 status = 'In progress'
-            elif result in  ['request_fail', 'failed', 'FailPlugDisconnected']:
+            elif result in ['request_fail', 'failed']:
                 status = 'Failed'
             elif result in ['unfetched', 'PollingTimeout']:
                 status = 'No response'
-            elif result in ['request_successful', 'succeeded']:
+            elif result in [ "FailPlugDisconnected", "FailTimerChargingActive" ]:
+                status = "Unavailable"
+            elif result in ['request_successful', 'succeeded', "Successful"]:
                 status = 'Success'
             else:
                 status = result
