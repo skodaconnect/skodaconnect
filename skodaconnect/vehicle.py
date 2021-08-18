@@ -318,7 +318,7 @@ class Vehicle:
                 _LOGGER.debug('Charging action already in progress')
                 return False
         if self._services.get('rbatterycharge_v1', False):
-            if action.lower() in ['start', 'stop']:
+            if action in ['start', 'stop']:
                 data = {'action': {'type': action.lower()}}
             elif action.get('action', {}).get('type', '') == 'setSettings':
                 data = action
@@ -326,7 +326,7 @@ class Vehicle:
                 _LOGGER.error(f'Invalid charger action: {action}. Must be either start, stop or setSettings')
                 raise SkodaInvalidRequestException(f'Invalid charger action: {action}. Must be either start, stop or setSettings')
         if self._services.get('CHARGING', False):
-            if action.lower() in ['start', 'stop']:
+            if action in ['start', 'stop']:
                 data = {'type': action.capitalize()}
             else:
                 _LOGGER.error(f'Invalid charger action: {action}. Must be either start or stop')
@@ -1057,15 +1057,16 @@ class Vehicle:
     @property
     def charge_max_ampere(self):
         """Return charger max ampere setting."""
-        value = int(self.attrs.get('charger').get('settings').get('maxChargeCurrent').get('content'))
-        if value == 254:
-            return "Maximum"
-        if value == 252:
-            return "Reduced"
-        if value == 0:
-            return "Unknown"
-        else:
-            return value
+        #value = int(self.attrs.get('charger').get('settings').get('maxChargeCurrent').get('content'))
+        #if value == 254:
+        #    return "Maximum"
+        #if value == 252:
+        #    return "Reduced"
+        #if value == 0:
+        #    return "Unknown"
+        #else:
+        #    return value
+        return int(self.attrs.get('charger', {}).get('settings', {}).get('maxChargeCurrent', {}).get('content', 0))
 
     @property
     def is_charge_max_ampere_supported(self):
