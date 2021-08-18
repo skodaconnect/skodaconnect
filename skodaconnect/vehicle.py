@@ -1156,12 +1156,9 @@ class Vehicle:
     @property
     def is_charging_power_supported(self):
         """Return true if charging power is supported."""
-        _LOGGER.debug(f"Charging power: {self.attrs.get('charging', {}).get('chargingPowerInWatts', -1)}")
         if self.attrs.get('charging', False):
             if self.attrs.get('charging', {}).get('chargingPowerInWatts', False) is not False:
-                _LOGGER.debug("Got power in watts")
                 return True
-            _LOGGER.debug("Failed to get power in watts?")
         return False
 
     @property
@@ -1175,12 +1172,9 @@ class Vehicle:
     @property
     def is_charge_rate_supported(self):
         """Return true if charge rate is supported."""
-        _LOGGER.debug(f"Charging rate: {self.attrs.get('charging', {}).get('chargingRateInKilometersPerHour', -1)}")
         if self.attrs.get('charging', False):
             if self.attrs.get('charging', {}).get('chargingRateInKilometersPerHour', False) is not False:
-                _LOGGER.debug("Got charge rate")
                 return True
-            _LOGGER.debug("Failed to get charge rate?")
         return False
 
     @property
@@ -1428,7 +1422,7 @@ class Vehicle:
         """Return status of auxiliary climatisation."""
         climatisation_type = self.attrs.get('climater', {}).get('settings', {}).get('heaterSource', {}).get('content', '')
         status = self.attrs.get('climater', {}).get('status', {}).get('climatisationStatusData', {}).get('climatisationState', {}).get('content', '')
-        if status in ['heating', 'heatingAuxiliary', 'on'] and climatisation_type == 'auxiliary':
+        if status in ['heating', 'cooling', 'heatingAuxiliary', 'on'] and climatisation_type == 'auxiliary':
             return True
         elif status in ['heatingAuxiliary'] and climatisation_type == 'electric':
             return True
