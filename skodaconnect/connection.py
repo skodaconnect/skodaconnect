@@ -385,7 +385,7 @@ class Connection:
             )
             if req.status != 200:
                 raise SkodaException('Token exchange failed')
-            # Save tokens as "identity", theese are tokens representing the user
+            # Save tokens according to requested client
             self._session_tokens[client] = await req.json()
             if 'error' in self._session_tokens[client]:
                 error = self._session_tokens[client].get('error', '')
@@ -908,6 +908,10 @@ class Connection:
                 url = f'fs-car/bs/$sectionId/v1/{BRAND}/{COUNTRY}/vehicles/$vin/timer/actions/$requestId'
             elif sectionId == 'vsr':
                 url = f'fs-car/bs/$sectionId/v1/{BRAND}/{COUNTRY}/vehicles/$vin/requests/$requestId/jobstatus'
+            # Requests for Skoda Native API
+            elif sectionId == 'charging':
+                await self.set_token('connect')
+                url = 'https://api.connect.skoda-auto.cz/api/v1/$sectionId/operation-requests/$requestId'
             else:
                 url = f'fs-car/bs/$sectionId/v1/{BRAND}/{COUNTRY}/vehicles/$vin/requests/$requestId/status'
             url = re.sub('\$sectionId', sectionId, url)
@@ -920,16 +924,19 @@ class Connection:
             # For electric charging, climatisation and departure timers
             elif response.get('action', {}).get('actionState', False):
                 result = response.get('action', {}).get('actionState', False)
+            # For Skoda native API
+            elif response.get('status', False):
+                result = response.get('status', False)
             else:
                 result = 'Unknown'
             # Translate status messages to meaningful info
-            if result == 'request_in_progress' or result == 'queued' or result == 'fetched':
+            if result in ['request_in_progress', 'queued', 'fetched', 'InProgress', 'Waiting']:
                 status = 'In progress'
-            elif result == 'request_fail' or result == 'failed':
+            elif result in  ['request_fail', 'failed', 'FailPlugDisconnected']:
                 status = 'Failed'
-            elif result == 'unfetched':
+            elif result in ['unfetched', 'PollingTimeout']:
                 status = 'No response'
-            elif result == 'request_successful' or result == 'succeeded':
+            elif result in ['request_successful', 'succeeded']:
                 status = 'Success'
             else:
                 status = result
@@ -1037,7 +1044,7 @@ class Connection:
         """Start/Stop charger."""
         try:
             await self.set_token('vwg')
-            response = await self.dataCall(f'fs-car/bs/batterycharge/v1/{BRAND}/{COUNTRY}/vehicles/$vin/charger/actions', vin, json = data)
+            response = await self.dataCall(f'fs-car/bs/batterycharge/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/charger/actions', vin, json = data)
             if not response:
                 raise SkodaException('Invalid or no response')
             elif response == 429:
@@ -1048,6 +1055,22 @@ class Connection:
                 remaining = response.get('rate_limit_remaining', -1)
                 _LOGGER.debug(f'Request for charger action returned with state "{request_state}", request id: {request_id}, remaining requests: {remaining}')
                 return dict({'id': str(request_id), 'state': request_state, 'rate_limit_remaining': remaining})
+        except:
+            raise
+        return False
+
+    async def setCharging(self, vin, data):
+        """Start/Stop charger, Skoda native API."""
+        try:
+            await self.set_token('connect')
+            response = await self.dataCall(f'https://api.connect.skoda-auto.cz/api/v1/charging/operation-requests?vin={vin}', vin, json = data)
+            if not response:
+                raise SkodaException('Invalid or no response')
+            else:
+                request_id = response.get('id', 0)
+                request_state = response.get('status', 'unknown')
+                _LOGGER.debug(f'Request for charging action returned with state "{request_state}", request id: {request_id}')
+                return dict({'id': str(request_id), 'state': request_state})
         except:
             raise
         return False

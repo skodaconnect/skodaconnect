@@ -785,6 +785,18 @@ def create_instruments():
             unit="h",
         ),
         Sensor(
+            attr="charging_power",
+            name="Charging power",
+            icon="mdi:flash",
+            unit="W"
+        ),
+        Sensor(
+            attr="charge_rate",
+            name="Charging rate",
+            icon="mdi:battery-heart",
+            unit="km/h"
+        ),
+        Sensor(
             attr="electric_range",
             name="Electric range",
             icon="mdi:car-electric",

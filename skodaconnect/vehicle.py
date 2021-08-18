@@ -306,7 +306,7 @@ class Vehicle:
 
     async def set_charger(self, action):
         """Charging actions."""
-        if not self._services.get('rbatterycharge_v1', False):
+        if not self._services.get('rbatterycharge_v1', False) and not self._services.get('CHARGING', False):
             _LOGGER.info('Remote start/stop of charger is not supported.')
             raise SkodaInvalidRequestException('Remote start/stop of charger is not supported.')
         if self._requests['batterycharge'].get('id', False):
@@ -317,16 +317,26 @@ class Vehicle:
             else:
                 _LOGGER.debug('Charging action already in progress')
                 return False
-        if action in ['start', 'stop']:
-            data = {'action': {'type': action}}
-        elif action.get('action', {}).get('type', '') == 'setSettings':
-            data = action
-        else:
-            _LOGGER.error(f'Invalid charger action: {action}. Must be either start or stop')
-            raise SkodaInvalidRequestException(f'Invalid charger action: {action}. Must be either start or stop')
+        if self._services.get('rbatterycharge_v1', False):
+            if action.lower() in ['start', 'stop']:
+                data = {'action': {'type': action.lower()}}
+            elif action.get('action', {}).get('type', '') == 'setSettings':
+                data = action
+            else:
+                _LOGGER.error(f'Invalid charger action: {action}. Must be either start, stop or setSettings')
+                raise SkodaInvalidRequestException(f'Invalid charger action: {action}. Must be either start, stop or setSettings')
+        if self._services.get('CHARGING', False):
+            if action.lower() in ['start', 'stop']:
+                data = {'type': action.capitalize()}
+            else:
+                _LOGGER.error(f'Invalid charger action: {action}. Must be either start or stop')
+                raise SkodaInvalidRequestException(f'Invalid charger action: {action}. Must be either start or stop')
         try:
             self._requests['latest'] = 'Charger'
-            response = await self._connection.setCharger(self.vin, data)
+            if self._services.get('rbatterycharge_v1', False):
+                response = await self._connection.setCharger(self.vin, data)
+            elif self._services.get('CHARGING', False):
+                response = await self._connection.setCharging(self.vin, data)
             if not response:
                 self._requests['batterycharge'] = {'status': 'Failed'}
                 _LOGGER.error(f'Failed to {action} charging')
@@ -341,7 +351,10 @@ class Vehicle:
                 if response.get('state', None) == 'Throttled':
                     status = 'Throttled'
                 else:
-                    status = await self.wait_for_request('batterycharge', response.get('id', 0))
+                    if self._services.get('rbatterycharge_v1', False):
+                        status = await self.wait_for_request('batterycharge', response.get('id', 0))
+                    elif self._services.get('CHARGING', False):
+                        status = await self.wait_for_request('charging', response.get('id', 0))
                 self._requests['batterycharge'] = {'status': status}
                 return True
         except (SkodaInvalidRequestException, SkodaException):
@@ -411,6 +424,11 @@ class Vehicle:
                 elif not schedule.get('recurring'):
                     if not re.match('[0-9]{4}-[0-9]{2}-[0-9]{2}', schedule.get('date', '')):
                         raise SkodaInvalidRequestException('For single departure schedule the date variable must be set to YYYY-mm-dd.')
+                # Check charge current, if set
+                if schedule.get('charge_current'):
+                    if not schedule.get('charge_current', 0) in ['Maximum', 'maximum', 'Minimum', 'minimum', 'Max', 'max', 'Min', 'min']:
+                        if not 0 <= int(schedule.get('charge_current')) <= 255:
+                            raise SkodaInvalidRequestException('Charger current not set to correct value')
             data['action'] = 'schedule'
             data['schedule'] = schedule
             return await self._set_timers(data)
@@ -536,7 +554,7 @@ class Vehicle:
             else:
                 _LOGGER.error(f'Invalid climatisation type: {mode}')
                 raise SkodaInvalidRequestException(f'Invalid climatisation type: {mode}')
-            return await self.set_climater(data, spin)
+            return await self._set_climater(data, spin)
         else:
             _LOGGER.error('No climatisation support.')
             raise SkodaInvalidRequestException('No climatisation support.')
@@ -1125,6 +1143,44 @@ class Vehicle:
     def is_charging_time_left_supported(self):
         """Return true if charging is supported"""
         return self.is_charging_supported
+
+    @property
+    def charging_power(self):
+        """Return charging power in watts."""
+        if self.attrs.get('charging', False):
+            return int(self.attrs.get('charging', {}).get('chargingPowerInWatts', 0))
+        else:
+            return 0
+
+    @property
+    def is_charging_power_supported(self):
+        """Return true if charging power is supported."""
+        _LOGGER.debug(f"Charging power: {self.attrs.get('charging', {}).get('chargingPowerInWatts', -1)}")
+        if self.attrs.get('charging', False):
+            if self.attrs.get('charging', {}).get('chargingPowerInWatts', False) is not False:
+                _LOGGER.debug("Got power in watts")
+                return True
+            _LOGGER.debug("Failed to get power in watts?")
+        return False
+
+    @property
+    def charge_rate(self):
+        """Return charge rate in km per h."""
+        if self.attrs.get('charging', False):
+            return int(self.attrs.get('charging', {}).get('chargingRateInKilometersPerHour', 0))
+        else:
+            return 0
+
+    @property
+    def is_charge_rate_supported(self):
+        """Return true if charge rate is supported."""
+        _LOGGER.debug(f"Charging rate: {self.attrs.get('charging', {}).get('chargingRateInKilometersPerHour', -1)}")
+        if self.attrs.get('charging', False):
+            if self.attrs.get('charging', {}).get('chargingRateInKilometersPerHour', False) is not False:
+                _LOGGER.debug("Got charge rate")
+                return True
+            _LOGGER.debug("Failed to get charge rate?")
+        return False
 
     @property
     def external_power(self):
