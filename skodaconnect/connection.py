@@ -851,17 +851,31 @@ class Connection:
             return False
         try:
             await self.set_token('connect')
-            response = await self.get(
-                'https://api.connect.skoda-auto.cz/api/v1/charging/$vin/status',
-                vin = vin
-            )
-            if response.get('battery', {}):
-                _LOGGER.debug(f'Got vehicle data {response}')
+            status = self.get('https://api.connect.skoda-auto.cz/api/v1/charging/$vin/status', vin = vin)
+            settings = self.get('https://api.connect.skoda-auto.cz/api/v1/charging/$vin/settings', vin = vin)
+            await asyncio.gather(status, settings)
+
+            if status.get('battery', {}) or settings.get('maxChargeCurrentAc', {}):
+                _LOGGER.debug(f'Got vehicle charging data')
+                response = status
+                response['chargerSettings'] = settings
                 return response
-            elif response.get('status_code', {}):
+            elif status.get('status_code', {}):
                 _LOGGER.warning(f'Could not fetch charging, HTTP status code: {response.get("status_code")}')
             else:
                 _LOGGER.info('Unhandled error while trying to fetch charging data')
+
+            #response = await self.get(
+            #    'https://api.connect.skoda-auto.cz/api/v1/charging/$vin/status',
+            #    vin = vin
+            #)
+            #if response.get('battery', {}):
+            #    _LOGGER.debug(f'Got vehicle data {response}')
+            #    return response
+            #elif response.get('status_code', {}):
+            #    _LOGGER.warning(f'Could not fetch charging, HTTP status code: {response.get("status_code")}')
+            #else:
+            #    _LOGGER.info('Unhandled error while trying to fetch charging data')
         except Exception as error:
             _LOGGER.warning(f'Could not fetch charging, error: {error}')
         return False
@@ -899,7 +913,11 @@ class Connection:
                 if not await self.doLogin():
                     _LOGGER.warning(f'Login for {BRAND} account failed!')
                     raise SkodaLoginFailedException(f'Login for {BRAND} account failed')
-            if sectionId == 'climatisation':
+            # Requests for Skoda Native API
+            if sectionId == 'charging':
+                url = 'https://api.connect.skoda-auto.cz/api/v1/$sectionId/operation-requests/$requestId'
+            # Requests for VW-Group API
+            elif sectionId == 'climatisation':
                 url = f'fs-car/bs/$sectionId/v1/{BRAND}/{COUNTRY}/vehicles/$vin/climater/actions/$requestId'
             elif sectionId == 'batterycharge':
                 url = f'fs-car/bs/$sectionId/v1/{BRAND}/{COUNTRY}/vehicles/$vin/charger/actions/$requestId'
@@ -907,27 +925,25 @@ class Connection:
                 url = f'fs-car/bs/$sectionId/v1/{BRAND}/{COUNTRY}/vehicles/$vin/timer/actions/$requestId'
             elif sectionId == 'vsr':
                 url = f'fs-car/bs/$sectionId/v1/{BRAND}/{COUNTRY}/vehicles/$vin/requests/$requestId/jobstatus'
-            # Requests for Skoda Native API
-            elif sectionId == 'charging':
-                url = 'https://api.connect.skoda-auto.cz/api/v1/$sectionId/operation-requests/$requestId'
             else:
                 url = f'fs-car/bs/$sectionId/v1/{BRAND}/{COUNTRY}/vehicles/$vin/requests/$requestId/status'
             url = re.sub('\$sectionId', sectionId, url)
             url = re.sub('\$requestId', requestId, url)
 
+            # Set token according to API origin
             if sectionId in ['charging']:
                 await self.set_token('connect')
             else:
                 await self.set_token('vwg')
 
             response = await self.get(url, vin)
-            # Pre-heater, ???
+            # Pre-heater on older cars
             if response.get('requestStatusResponse', {}).get('status', False):
                 result = response.get('requestStatusResponse', {}).get('status', False)
-            # For electric charging, climatisation and departure timers
+            # Electric charging, climatisation and departure timers
             elif response.get('action', {}).get('actionState', False):
                 result = response.get('action', {}).get('actionState', False)
-            # For Skoda native API
+            # Skoda native API requests
             elif response.get('status', False):
                 result = response.get('status', False)
             else:
@@ -992,7 +1008,7 @@ class Connection:
  #### Data set functions ####
     async def dataCall(self, query, vin='', **data):
         """Function to execute actions through VW-Group API."""
-        if self.logged_in == False:
+        if not self.logged_in:
             if not await self.doLogin():
                 _LOGGER.warning(f'Login for {BRAND} account failed!')
                 raise SkodaLoginFailedException(f'Login for {BRAND} account failed')

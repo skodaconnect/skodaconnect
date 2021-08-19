@@ -132,12 +132,13 @@ class Vehicle:
                         pass
             else:
                 _LOGGER.warning(f'Could not determine available API endpoints for {self.vin}')
-        # For Skoda native API:
+        # For Skoda native API
         elif 'REMOTE' in self._connectivities:
             for service in self._services:
                 for capability in self._capabilities:
                     if capability == service:
                         self._services[service]['active'] = True
+        # For SmartLink
         elif 'INCAR' in self._connectivities:
             self._services = {'vehicle_status': {'active': True}}
         else:
@@ -295,7 +296,31 @@ class Vehicle:
         """Set charger current"""
         if self.is_charging_supported:
             if 1 <= int(value) <= 255:
-                data = {'action': {'settings': {'maxChargeCurrent': int(value)}, 'type': 'setSettings'}}
+                # VW-Group API charger current request
+                if self._services.get('rbatterycharge_v1', False) is not False:
+                    data = {'action': {'settings': {'maxChargeCurrent': int(value)}, 'type': 'setSettings'}}
+                # Skoda Native API charger current request
+                elif self._services.get('CHARGING', False) is not False:
+                    data = {'chargingSettings': {
+                                'autoUnlockPlugWhenCharged': 'Off',
+                                'maxChargeCurrentAc': value,
+                                'targetStateOfChargeInPercent': 100},
+                            'type': 'UpdateSettings'
+                    }
+            elif value in ['Maximum', 'maximum', 'Max', 'max', 'Minimum', 'minimum', 'Min', 'min']:
+                # VW-Group API charger current request
+                if self._services.get('rbatterycharge_v1', False) is not False:
+                    value = 254 if value in ['Maximum', 'maximum', 'Max', 'max'] else 252
+                    data = {'action': {'settings': {'maxChargeCurrent': int(value)}, 'type': 'setSettings'}}
+                # Skoda Native API charger current request
+                elif self._services.get('CHARGING', False) is not False:
+                    value = 'Maximum' if value in ['Maximum', 'maximum', 'Max', 'max'] else 'Minimum'
+                    data = {'chargingSettings': {
+                                'autoUnlockPlugWhenCharged': 'Off',
+                                'maxChargeCurrentAc': value,
+                                'targetStateOfChargeInPercent': 100},
+                            'type': 'UpdateSettings'
+                    }
             else:
                 _LOGGER.error(f'Set charger maximum current to {value} is not supported.')
                 raise SkodaInvalidRequestException(f'Set charger maximum current to {value} is not supported.')
@@ -317,6 +342,7 @@ class Vehicle:
             else:
                 _LOGGER.debug('Charging action already in progress')
                 return False
+        # VW-Group API requests
         if self._services.get('rbatterycharge_v1', False):
             if action in ['start', 'stop']:
                 data = {'action': {'type': action.lower()}}
@@ -325,12 +351,20 @@ class Vehicle:
             else:
                 _LOGGER.error(f'Invalid charger action: {action}. Must be either start, stop or setSettings')
                 raise SkodaInvalidRequestException(f'Invalid charger action: {action}. Must be either start, stop or setSettings')
+        # Skoda Native API requests
         if self._services.get('CHARGING', False):
             if action in ['start', 'stop']:
                 data = {'type': action.capitalize()}
+            elif action.get('action', {}) == 'chargelimit':
+                data = {'chargingSettings': {
+                            'autoUnlockPlugWhenCharged': 'Off',
+                            'maxChargeCurrentAc': self.charge_max_ampere,
+                            'targetStateOfChargeInPercent': action.get('limit', 50},
+                        'type': 'UpdateSettings'
+                }
             else:
-                _LOGGER.error(f'Invalid charger action: {action}. Must be either start or stop')
-                raise SkodaInvalidRequestException(f'Invalid charger action: {action}. Must be either start or stop')
+                _LOGGER.error(f'Invalid charger action: {action}. Must be one of start, stop or data for set chargelimit')
+                raise SkodaInvalidRequestException(f'Invalid charger action: {action}. Must be one of start, stop or data for set chargelimit')
         try:
             self._requests['latest'] = 'Charger'
             if self._services.get('rbatterycharge_v1', False):
@@ -366,11 +400,15 @@ class Vehicle:
 
    # Departure timers
     async def set_charge_limit(self, limit=50):
-        """ Activate/deactivate departure timers. """
-        if self._services.get('timerprogramming_v1', False):
-            data = {}
+        """ Set charging limit. """
+        if not self._services.get('timerprogramming_v1', False) and not self._services.get('CHARGING', False):
+            _LOGGER.info('Set charging limit is not supported.')
+            raise SkodaInvalidRequestException('Set charging limit is not supported.')
+        data = {}
+        # VW-Group API charging
+        if self._services.get('timerprogramming_v1', False) is not False:
             if isinstance(limit, int):
-                if limit in [0,10,20,30,40,50]:
+                if limit in [0, 10, 20, 30, 40, 50]:
                     data['limit'] = limit
                     data['action'] = 'chargelimit'
                 else:
@@ -378,8 +416,17 @@ class Vehicle:
             else:
                 raise SkodaInvalidRequestException(f'Charge limit "{limit}" is not supported.')
             return await self._set_timers(data)
-        else:
-            raise SkodaInvalidRequestException('Departure timers are not supported.')
+        # Skoda Native API charging
+        elif self._services.get('charging', False) is not False:
+            if isinstance(limit, int):
+                if limit in [50, 60, 70, 80, 90, 100]:
+                    data['limit'] = limit
+                    data['action'] = 'chargelimit'
+                else:
+                    raise SkodaInvalidRequestException(f'Charge limit must be one of 50, 60, 70, 80, 90 or 100.')
+            else:
+                raise SkodaInvalidRequestException(f'Charge limit "{limit}" is not supported.')
+            return await self.set_charger(data)
 
     async def set_timer_active(self, id=1, action='off'):
         """ Activate/deactivate departure timers. """
@@ -424,11 +471,18 @@ class Vehicle:
                 elif not schedule.get('recurring'):
                     if not re.match('[0-9]{4}-[0-9]{2}-[0-9]{2}', schedule.get('date', '')):
                         raise SkodaInvalidRequestException('For single departure schedule the date variable must be set to YYYY-mm-dd.')
-                # Check charge current, if set
-                if schedule.get('charge_current'):
-                    if not schedule.get('charge_current', 0) in ['Maximum', 'maximum', 'Minimum', 'minimum', 'Max', 'max', 'Min', 'min']:
-                        if not 0 <= int(schedule.get('charge_current')) <= 255:
-                            raise SkodaInvalidRequestException('Charger current not set to correct value')
+                # Sanity check for off-peak hours
+                if schedule.get('nightRateActive'):
+                    if not re.match('[0-9]{2}:[0-9]{2}', schedule.get('nightRateStart', '')):
+                        raise SkodaInvalidRequestException('The start time for off-peak hours must be set in 24h format HH:MM.')
+                    if not re.match('[0-9]{2}:[0-9]{2}', schedule.get('nightRateEnd', '')):
+                        raise SkodaInvalidRequestException('The start time for off-peak hours must be set in 24h format HH:MM.')
+                # Validate charge target and current
+                if 0 <= int(schedule.get("targetChargeLevel", 0)) <= 100:
+                    raise SkodaInvalidRequestException('Target charge level must be 0 to 100')
+                if 1 <= int(schedule.get("chargeMaxCurrent", 254)) < 255:
+                    raise SkodaInvalidRequestException('Charge current must be set from 1 to 254')
+
             data['action'] = 'schedule'
             data['schedule'] = schedule
             return await self._set_timers(data)
@@ -1057,16 +1111,19 @@ class Vehicle:
     @property
     def charge_max_ampere(self):
         """Return charger max ampere setting."""
-        #value = int(self.attrs.get('charger').get('settings').get('maxChargeCurrent').get('content'))
-        #if value == 254:
-        #    return "Maximum"
-        #if value == 252:
-        #    return "Reduced"
-        #if value == 0:
-        #    return "Unknown"
-        #else:
-        #    return value
-        return int(self.attrs.get('charger', {}).get('settings', {}).get('maxChargeCurrent', {}).get('content', 0))
+        if self.attrs.get('charger', False):
+            value = int(self.attrs.get('charger').get('settings').get('maxChargeCurrent').get('content'))
+            if value == 254:
+                return "Maximum"
+            if value == 252:
+                return "Reduced"
+            if value == 0:
+                return "Unknown"
+            else:
+                return value
+        elif self.attrs.get('chargerSettings', False):
+            value = self.attrs.get('chargerSettings', {}).get('maxChargeCurrentAc', 'Unknown')
+            return value
 
     @property
     def is_charge_max_ampere_supported(self):
@@ -1075,8 +1132,10 @@ class Vehicle:
             if 'settings' in self.attrs.get('charger', {}):
                 if 'maxChargeCurrent' in self.attrs.get('charger', {})['settings']:
                     return True
-            else:
-                return False
+        elif self.attrs.get('chargerSettings', False):
+            if self.attrs.get('chargerSettings', {}).get('maxChargeCurrentAc', False)
+                return True
+        return False
 
     @property
     def charging_cable_locked(self):
@@ -1980,7 +2039,7 @@ class Vehicle:
 
     @property
     def request_in_progress(self):
-        """Request in progress is always supported."""
+        """Returns the current, or latest, request in progress."""
         try:
             for section in self._requests:
                 if self._requests[section].get('id', False):
