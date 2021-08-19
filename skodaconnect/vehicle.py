@@ -295,11 +295,12 @@ class Vehicle:
     async def set_charger_current(self, value):
         """Set charger current"""
         if self.is_charging_supported:
+            # Set charger max ampere to integer value
             if 1 <= int(value) <= 255:
                 # VW-Group API charger current request
                 if self._services.get('rbatterycharge_v1', False) is not False:
                     data = {'action': {'settings': {'maxChargeCurrent': int(value)}, 'type': 'setSettings'}}
-                # Skoda Native API charger current request
+                # Skoda Native API charger current request, does this work?
                 elif self._services.get('CHARGING', False) is not False:
                     data = {'chargingSettings': {
                                 'autoUnlockPlugWhenCharged': 'Off',
@@ -307,14 +308,15 @@ class Vehicle:
                                 'targetStateOfChargeInPercent': 100},
                             'type': 'UpdateSettings'
                     }
-            elif value in ['Maximum', 'maximum', 'Max', 'max', 'Minimum', 'minimum', 'Min', 'min']:
+            # Mimick app and set charger max ampere to Maximum/Reduced
+            elif value in ['Maximum', 'maximum', 'Max', 'max', 'Minimum', 'minimum', 'Min', 'min', 'Reduced', 'reduced']:
                 # VW-Group API charger current request
                 if self._services.get('rbatterycharge_v1', False) is not False:
                     value = 254 if value in ['Maximum', 'maximum', 'Max', 'max'] else 252
                     data = {'action': {'settings': {'maxChargeCurrent': int(value)}, 'type': 'setSettings'}}
                 # Skoda Native API charger current request
                 elif self._services.get('CHARGING', False) is not False:
-                    value = 'Maximum' if value in ['Maximum', 'maximum', 'Max', 'max'] else 'Minimum'
+                    value = 'Maximum' if value in ['Maximum', 'maximum', 'Max', 'max'] else 'Reduced'
                     data = {'chargingSettings': {
                                 'autoUnlockPlugWhenCharged': 'Off',
                                 'maxChargeCurrentAc': value,
