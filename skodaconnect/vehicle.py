@@ -364,6 +364,8 @@ class Vehicle:
                             'targetStateOfChargeInPercent': action.get('limit', 50)},
                         'type': 'UpdateSettings'
                 }
+            elif action.get('type', {}) == 'UpdateSettings':
+                pass
             else:
                 _LOGGER.error(f'Invalid charger action: {action}. Must be one of start, stop or data for set chargelimit')
                 raise SkodaInvalidRequestException(f'Invalid charger action: {action}. Must be one of start, stop or data for set chargelimit')

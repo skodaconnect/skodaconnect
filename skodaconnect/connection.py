@@ -865,18 +865,6 @@ class Connection:
                 _LOGGER.warning(f'Could not fetch charging, HTTP status code: {chargerStatus.get("status_code")}')
             else:
                 _LOGGER.info('Unhandled error while trying to fetch charging data')
-
-            #response = await self.get(
-            #    'https://api.connect.skoda-auto.cz/api/v1/charging/$vin/status',
-            #    vin = vin
-            #)
-            #if response.get('battery', {}):
-            #    _LOGGER.debug(f'Got vehicle data {response}')
-            #    return response
-            #elif response.get('status_code', {}):
-            #    _LOGGER.warning(f'Could not fetch charging, HTTP status code: {response.get("status_code")}')
-            #else:
-            #    _LOGGER.info('Unhandled error while trying to fetch charging data')
         except Exception as error:
             _LOGGER.warning(f'Could not fetch charging, error: {error}')
         return False
