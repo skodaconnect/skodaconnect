@@ -83,3 +83,6 @@ conn.logout()                                                           # Logout
 conn.terminate()                                                        # Terminate session, calls logout()
 conn.validate_tokens()                                                  # Checks if tokens are OK, trys a refresh if expired
 ```
+
+## Further help or contributions
+For questions, further help or contributions you can join the Discord server at https://discord.gg/826X9jEtCh
