@@ -591,12 +591,20 @@ class Vehicle:
             _LOGGER.error('No climatisation support.')
             raise SkodaInvalidRequestException('No climatisation support.')
 
-    async def set_climatisation(self, mode = 'off', spin = False):
+    async def set_climatisation(self, mode = 'off', temp = None, hvpower = None, spin = None):
         """Turn on/off climatisation with electric/auxiliary heater."""
         if self.is_electric_climatisation_supported:
             if mode in ['electric', 'auxiliary']:
-                targetTemp = int((self.climatisation_target_temperature + 273) * 10)
-                withoutHVPower = self.climatisation_without_external_power
+                if mode == 'auxiliary' and spin is None:
+                    raise SkodaInvalidRequestException("Starting auxiliary heater requires provided S-PIN")
+                if 16 <= temp <= 30:
+                    targetTemp = int((temp + 273) * 10)
+                else:
+                    targetTemp = int((self.climatisation_target_temperature + 273) * 10)
+                if hvpower is not None:
+                    withoutHVPower = hvpower
+                else:
+                    withoutHVPower = self.climatisation_without_external_power
                 data = {
                     'action':{
                         'settings':{

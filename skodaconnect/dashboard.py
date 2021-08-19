@@ -408,11 +408,11 @@ class ElectricClimatisation(Switch):
         return self.vehicle.electric_climatisation
 
     async def turn_on(self):
-        await self.vehicle.set_climatisation('electric')
+        await self.vehicle.set_climatisation(mode = 'electric')
         await self.vehicle.update()
 
     async def turn_off(self):
-        await self.vehicle.set_climatisation('off')
+        await self.vehicle.set_climatisation(mode = 'off')
         await self.vehicle.update()
 
     @property
@@ -436,11 +436,11 @@ class AuxiliaryClimatisation(Switch):
         return self.vehicle.auxiliary_climatisation
 
     async def turn_on(self):
-        await self.vehicle.set_climatisation('auxiliary', self.spin)
+        await self.vehicle.set_climatisation(mode = 'auxiliary', spin = self.spin)
         await self.vehicle.update()
 
     async def turn_off(self):
-        await self.vehicle.set_climatisation('off')
+        await self.vehicle.set_climatisation(mode = 'off')
         await self.vehicle.update()
 
     @property
