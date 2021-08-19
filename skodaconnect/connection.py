@@ -851,17 +851,18 @@ class Connection:
             return False
         try:
             await self.set_token('connect')
-            status = self.get('https://api.connect.skoda-auto.cz/api/v1/charging/$vin/status', vin = vin)
-            settings = self.get('https://api.connect.skoda-auto.cz/api/v1/charging/$vin/settings', vin = vin)
-            await asyncio.gather(status, settings)
+            chargerStatus = self.get('https://api.connect.skoda-auto.cz/api/v1/charging/$vin/status', vin = vin)
+            chargerSettings = self.get('https://api.connect.skoda-auto.cz/api/v1/charging/$vin/settings', vin = vin)
+            chargingData = await asyncio.gather(chargerStatus, chargerSettings)
 
-            if status.get('battery', {}) or settings.get('maxChargeCurrentAc', {}):
+            if chargingData[0].get('battery', {}) or chargingData[1].get('maxChargeCurrentAc', {}):
                 _LOGGER.debug(f'Got vehicle charging data')
-                response = status
-                response['chargerSettings'] = settings
+                response = chargingData[0]
+                response['chargerSettings'] = chargingData[1]
+                _LOGGER.info(f"Returning with data {response}")
                 return response
-            elif status.get('status_code', {}):
-                _LOGGER.warning(f'Could not fetch charging, HTTP status code: {response.get("status_code")}')
+            elif chargerStatus.get('status_code', {}):
+                _LOGGER.warning(f'Could not fetch charging, HTTP status code: {chargerStatus.get("status_code")}')
             else:
                 _LOGGER.info('Unhandled error while trying to fetch charging data')
 
