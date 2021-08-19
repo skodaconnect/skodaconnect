@@ -417,7 +417,7 @@ class Vehicle:
                 raise SkodaInvalidRequestException(f'Charge limit "{limit}" is not supported.')
             return await self._set_timers(data)
         # Skoda Native API charging
-        elif self._services.get('charging', False) is not False:
+        elif self._services.get('CHARGING', False) is not False:
             if isinstance(limit, int):
                 if limit in [50, 60, 70, 80, 90, 100]:
                     data['limit'] = limit
