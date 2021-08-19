@@ -361,7 +361,7 @@ class Vehicle:
                 data = {'chargingSettings': {
                             'autoUnlockPlugWhenCharged': 'Off',
                             'maxChargeCurrentAc': self.charge_max_ampere,
-                            'targetStateOfChargeInPercent': action.get('limit', 50},
+                            'targetStateOfChargeInPercent': action.get('limit', 50)},
                         'type': 'UpdateSettings'
                 }
             else:
@@ -1135,7 +1135,7 @@ class Vehicle:
                 if 'maxChargeCurrent' in self.attrs.get('charger', {})['settings']:
                     return True
         elif self.attrs.get('chargerSettings', False):
-            if self.attrs.get('chargerSettings', {}).get('maxChargeCurrentAc', False)
+            if self.attrs.get('chargerSettings', {}).get('maxChargeCurrentAc', False):
                 return True
         return False
 
