@@ -1478,7 +1478,7 @@ class Vehicle:
         """Return status of climatisation."""
         climatisation_type = self.attrs.get('climater', {}).get('settings', {}).get('heaterSource', {}).get('content', '')
         status = self.attrs.get('climater', {}).get('status', {}).get('climatisationStatusData', {}).get('climatisationState', {}).get('content', '')
-        if status in ['heating', 'on'] and climatisation_type == 'electric':
+        if status in ['heating', 'cooling', 'on'] and climatisation_type == 'electric':
             return True
         else:
             return False
