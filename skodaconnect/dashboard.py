@@ -1041,7 +1041,6 @@ def create_instruments():
 
 class Dashboard:
     def __init__(self, vehicle, **config):
-        _LOGGER.debug("Setting up dashboard with config :%s", config)
         self.instruments = [
             instrument
             for instrument in create_instruments()

@@ -465,11 +465,11 @@ class Vehicle:
                 if not isinstance(schedule.get('recurring', ''), bool):
                     raise SkodaInvalidRequestException('The recurring variable must be set to True or False.')
                 # Sanity check for departure time
-                if not re.match('[0-9]{2}:[0-9]{2}', schedule.get('time', '')):
+                if not re.match('^[0-9]{2}:[0-9]{2}$', schedule.get('time', '')):
                     raise SkodaInvalidRequestException('The time for departure must be set in 24h format HH:MM.')
                 # For recurring schedules, check required variables
                 if schedule.get('recurring'):
-                    if not re.match('[yn]{7}', schedule.get('days', '')):
+                    if not re.match('^[yn]{7}$', schedule.get('days', '')):
                         raise SkodaInvalidRequestException('For recurring schedules the days variable must be set to y/n mask (mon-sun with only wed enabled): nnynnnn.')
                 # For single departure, check required variables
                 elif not schedule.get('recurring'):
@@ -482,8 +482,9 @@ class Vehicle:
                     if not re.match('[0-9]{2}:[0-9]{2}', schedule.get('nightRateEnd', '')):
                         raise SkodaInvalidRequestException('The start time for off-peak hours must be set in 24h format HH:MM.')
                 # Validate charge target and current
-                if 0 <= int(schedule.get("targetChargeLevel", 0)) <= 100:
-                    raise SkodaInvalidRequestException('Target charge level must be 0 to 100')
+                if not 0 <= int(schedule.get("targetChargeLevel", None)) <= 100:
+                    if schedule.get("targetChargeLevel", None) not in ['Maximum', 'maximum', 'Max', 'max', 'Minimum', 'minimum', 'Min', 'min', 'Reduced', 'reduced']:
+                        raise SkodaInvalidRequestException('Target charge level must be 0 to 100 or one of Maximum/Minimum/Reduced')
                 if 1 <= int(schedule.get("chargeMaxCurrent", 254)) < 255:
                     raise SkodaInvalidRequestException('Charge current must be set from 1 to 254')
 
