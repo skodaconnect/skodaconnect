@@ -58,7 +58,7 @@ _LOGGER = logging.getLogger(__name__)
 TIMEOUT = timedelta(seconds=30)
 
 class Connection:
-    """ Connection to VW-Group Connect services """
+    """ Connection to Connect services """
   # Init connection class
     def __init__(self, session, username, password, fulldebug=False, interval=timedelta(minutes=5)):
         """ Initialize """
@@ -942,7 +942,7 @@ class Connection:
                 status = 'In progress'
             elif result in ['request_fail', 'failed']:
                 status = 'Failed'
-            elif result in ['unfetched', 'PollingTimeout']:
+            elif result in ['unfetched', 'delayed', 'PollingTimeout']:
                 status = 'No response'
             elif result in [ "FailPlugDisconnected", "FailTimerChargingActive" ]:
                 status = "Unavailable"
@@ -972,7 +972,7 @@ class Connection:
             response = await self.get(self._make_url(urls.get(action), vin = vin))
             secToken = response['securityPinAuthInfo']['securityToken']
             challenge = response['securityPinAuthInfo']['securityPinTransmission']['challenge']
-            spinHash = self.hash_spin(challenge, spin)
+            spinHash = self.hash_spin(challenge, str(spin))
             body = {
                 'securityPinAuthentication': {
                     'securityPin': {
