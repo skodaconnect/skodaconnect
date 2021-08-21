@@ -504,9 +504,14 @@ class Vehicle:
                     if not 0 <= int(schedule.get("targetChargeLevel", None)) <= 100:
                         raise SkodaInvalidRequestException('Target charge level must be 0 to 100')
                 if schedule.get("chargeMaxCurrent", None) is not None:
-                    if not 1 <= int(schedule.get("chargeMaxCurrent", 254)) < 255:
+                    if isinstance(schedule.get('chargeMaxCurrent', None), str):
                         if not schedule.get("chargeMaxCurrent", None) in ['Maximum', 'maximum', 'Max', 'max', 'Minimum', 'minimum', 'Min', 'min', 'Reduced', 'reduced']:
-                            raise SkodaInvalidRequestException('Charge current must be set from 1 to 254 or one of Maximum/Minimum/Reduced')
+                            raise SkodaInvalidRequestException('Charge current must be one of Maximum/Minimum/Reduced')
+                    elif isinstance(schedule.get('chargeMaxCurrent', None), int):
+                        if not 1 <= int(schedule.get("chargeMaxCurrent", 254)) < 255:
+                            raise SkodaInvalidRequestException('Charge current must be set from 1 to 254')
+                    else
+                        raise SkodaInvalidRequestException('Invalid type for charge max current variable')
 
             data['action'] = 'schedule'
             data['schedule'] = schedule
