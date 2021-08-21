@@ -483,10 +483,10 @@ class Vehicle:
                         raise SkodaInvalidRequestException('The start time for off-peak hours must be set in 24h format HH:MM.')
                 # Validate charge target and current
                 if not 0 <= int(schedule.get("targetChargeLevel", None)) <= 100:
-                    if schedule.get("targetChargeLevel", None) not in ['Maximum', 'maximum', 'Max', 'max', 'Minimum', 'minimum', 'Min', 'min', 'Reduced', 'reduced']:
-                        raise SkodaInvalidRequestException('Target charge level must be 0 to 100 or one of Maximum/Minimum/Reduced')
+                        raise SkodaInvalidRequestException('Target charge level must be 0 to 100')
                 if 1 <= int(schedule.get("chargeMaxCurrent", 254)) < 255:
-                    raise SkodaInvalidRequestException('Charge current must be set from 1 to 254')
+                    if schedule.get("targetChargeLevel", None) not in ['Maximum', 'maximum', 'Max', 'max', 'Minimum', 'minimum', 'Min', 'min', 'Reduced', 'reduced']:
+                        raise SkodaInvalidRequestException('Charge current must be set from 1 to 254 or one of Maximum/Minimum/Reduced')
 
             data['action'] = 'schedule'
             data['schedule'] = schedule
