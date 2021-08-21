@@ -475,18 +475,38 @@ class Vehicle:
                 elif not schedule.get('recurring'):
                     if not re.match('[0-9]{4}-[0-9]{2}-[0-9]{2}', schedule.get('date', '')):
                         raise SkodaInvalidRequestException('For single departure schedule the date variable must be set to YYYY-mm-dd.')
+
                 # Sanity check for off-peak hours
-                if schedule.get('nightRateActive'):
+                if not isinstance(schedule.get('nightRateActive', False), bool):
+                    raise SkodaInvalidRequestException('The off-peak active variable must be set to True or False')
+                if schedule.get('nightRateStart', None) is not None:
                     if not re.match('[0-9]{2}:[0-9]{2}', schedule.get('nightRateStart', '')):
                         raise SkodaInvalidRequestException('The start time for off-peak hours must be set in 24h format HH:MM.')
+                if schedule.get('nightRateEnd', None) is not None:
                     if not re.match('[0-9]{2}:[0-9]{2}', schedule.get('nightRateEnd', '')):
                         raise SkodaInvalidRequestException('The start time for off-peak hours must be set in 24h format HH:MM.')
+
+                # Check if charging/climatisation is set and correct
+                if not isinstance(schedule.get('operationClimatisation', False), bool):
+                    raise SkodaInvalidRequestException('The climatisation enable variable must be set to True or False')
+                if not isinstance(schedule.get('operationCharging', False), bool):
+                    raise SkodaInvalidRequestException('The charging variable must be set to True or False')
+
+                # Validate temp setting, if set
+                if schedule.get("targetTemp", None) is not None:
+                    if not 16 <= int(schedule.get("targetTemp", None)) <= 30:
+                        raise SkodaInvalidRequestException('Target temp must be integer value from 16 to 30')
+                    else:
+                        data['temp'] = schedule.get('targetTemp')
+
                 # Validate charge target and current
-                if not 0 <= int(schedule.get("targetChargeLevel", None)) <= 100:
+                if schedule.get("targetChargeLevel", None) is not None:
+                    if not 0 <= int(schedule.get("targetChargeLevel", None)) <= 100:
                         raise SkodaInvalidRequestException('Target charge level must be 0 to 100')
-                if 1 <= int(schedule.get("chargeMaxCurrent", 254)) < 255:
-                    if not schedule.get("chargeMaxCurrent", None) in ['Maximum', 'maximum', 'Max', 'max', 'Minimum', 'minimum', 'Min', 'min', 'Reduced', 'reduced']:
-                        raise SkodaInvalidRequestException('Charge current must be set from 1 to 254 or one of Maximum/Minimum/Reduced')
+                if schedule.get("chargeMaxCurrent", None) is not None:
+                    if not 1 <= int(schedule.get("chargeMaxCurrent", 254)) < 255:
+                        if not schedule.get("chargeMaxCurrent", None) in ['Maximum', 'maximum', 'Max', 'max', 'Minimum', 'minimum', 'Min', 'min', 'Reduced', 'reduced']:
+                            raise SkodaInvalidRequestException('Charge current must be set from 1 to 254 or one of Maximum/Minimum/Reduced')
 
             data['action'] = 'schedule'
             data['schedule'] = schedule
