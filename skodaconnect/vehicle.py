@@ -303,9 +303,9 @@ class Vehicle:
                     # Skoda Native API charger current request, does this work?
                     elif self._services.get('CHARGING', False) is not False:
                         data = {'chargingSettings': {
-                                'autoUnlockPlugWhenCharged': 'Off',
+                                'autoUnlockPlugWhenCharged': self.attrs.get('charger', {}).get('settings', {}).get('autoUnlockPlugWhenCharged', 'Off'),
                                 'maxChargeCurrentAc': value,
-                                'targetStateOfChargeInPercent': 100},
+                                'targetStateOfChargeInPercent': self.attrs.get('charger', {}).get('settings', {}).get('targetStateOfChargeInPercent', 100)},
                             'type': 'UpdateSettings'
                         }
                 else:
@@ -322,9 +322,9 @@ class Vehicle:
                     elif self._services.get('CHARGING', False) is not False:
                         value = 'Maximum' if value in ['Maximum', 'maximum', 'Max', 'max'] else 'Reduced'
                         data = {'chargingSettings': {
-                                'autoUnlockPlugWhenCharged': 'Off',
+                                'autoUnlockPlugWhenCharged': self.attrs.get('charger', {}).get('settings', {}).get('autoUnlockPlugWhenCharged', 'Off'),
                                 'maxChargeCurrentAc': value,
-                                'targetStateOfChargeInPercent': 100},
+                                'targetStateOfChargeInPercent': self.attrs.get('charger', {}).get('settings', {}).get('targetStateOfChargeInPercent', 100)},
                             'type': 'UpdateSettings'
                         }
                 else:
@@ -366,7 +366,7 @@ class Vehicle:
                 data = {'type': action.capitalize()}
             elif action.get('action', {}) == 'chargelimit':
                 data = {'chargingSettings': {
-                            'autoUnlockPlugWhenCharged': 'Off',
+                            'autoUnlockPlugWhenCharged': self.attrs.get('charger', {}).get('settings', {}).get('autoUnlockPlugWhenCharged', 'Off'),
                             'maxChargeCurrentAc': self.charge_max_ampere,
                             'targetStateOfChargeInPercent': action.get('limit', 50)},
                         'type': 'UpdateSettings'
