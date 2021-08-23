@@ -12,7 +12,7 @@ def local_scheme(version):
 
 setuptools.setup(
     name='skodaconnect',
-    version=lib_version,
+    version="1.0.43", #lib_version,
     description='Communicate with Skoda Connect',
     author='lendy007',
     author_email='lendik@gmail.com',

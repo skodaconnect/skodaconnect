@@ -510,7 +510,7 @@ class Vehicle:
                     elif isinstance(schedule.get('chargeMaxCurrent', None), int):
                         if not 1 <= int(schedule.get("chargeMaxCurrent", 254)) < 255:
                             raise SkodaInvalidRequestException('Charge current must be set from 1 to 254')
-                    else
+                    else:
                         raise SkodaInvalidRequestException('Invalid type for charge max current variable')
 
             data['action'] = 'schedule'
