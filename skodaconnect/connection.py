@@ -618,7 +618,7 @@ class Connection:
             # Get all Vehicle objects and update in parallell
             updatelist = []
             for vehicle in self.vehicles:
-		if vehicle.vin not in updatelist:
+                if vehicle.vin not in updatelist:
                     _LOGGER.debug(f'Adding {vehicle.vin} for data refresh')
                     updatelist.append(vehicle.update())
                 else:
