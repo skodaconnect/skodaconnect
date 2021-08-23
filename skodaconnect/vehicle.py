@@ -313,7 +313,7 @@ class Vehicle:
                     _LOGGER.error(f'Set charger maximum current to {value} is not supported.')
                     raise SkodaInvalidRequestException(f'Set charger maximum current to {value} is not supported.')
             # Mimick app and set charger max ampere to Maximum/Reduced
-            elif isinstance(value), str):
+            elif isinstance(value, str):
                 if value in ['Maximum', 'maximum', 'Max', 'max', 'Minimum', 'minimum', 'Min', 'min', 'Reduced', 'reduced']:
                     # VW-Group API charger current request
                     if self._services.get('rbatterycharge_v1', False) is not False:
