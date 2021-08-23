@@ -96,6 +96,7 @@ class Connection:
         _LOGGER.debug('Initiating new login')
         # Remove cookies and re-init headers as we are doing a new login
         self._clear_cookies()
+        self._vehicles.clear()
         self._session_headers = HEADERS_SESSION.copy()
         self._session_auth_headers = HEADERS_AUTH.copy()
 
@@ -617,8 +618,11 @@ class Connection:
             # Get all Vehicle objects and update in parallell
             updatelist = []
             for vehicle in self.vehicles:
-                _LOGGER.debug(f'Adding {vehicle.vin} for data refresh')
-                updatelist.append(vehicle.update())
+		if vehicle.vin not in updatelist:
+                    _LOGGER.debug(f'Adding {vehicle.vin} for data refresh')
+                    updatelist.append(vehicle.update())
+                else:
+                    _LOGGER.debug(f'VIN {vehicle.vin} is already queued for data refresh')
             # Wait for all data updates to complete
             _LOGGER.debug('Calling update function for all vehicles')
             await asyncio.gather(*updatelist)
