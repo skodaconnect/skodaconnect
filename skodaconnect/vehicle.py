@@ -26,7 +26,6 @@ from skodaconnect.exceptions import (
 
 _LOGGER = logging.getLogger(__name__)
 
-
 class Vehicle:
     def __init__(self, conn, data):
         _LOGGER.debug(f'Creating Vehicle class object with data {data}')
