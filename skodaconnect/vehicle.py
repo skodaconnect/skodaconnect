@@ -296,36 +296,44 @@ class Vehicle:
         """Set charger current"""
         if self.is_charging_supported:
             # Set charger max ampere to integer value
-            if 1 <= int(value) <= 255:
-                # VW-Group API charger current request
-                if self._services.get('rbatterycharge_v1', False) is not False:
-                    data = {'action': {'settings': {'maxChargeCurrent': int(value)}, 'type': 'setSettings'}}
-                # Skoda Native API charger current request, does this work?
-                elif self._services.get('CHARGING', False) is not False:
-                    data = {'chargingSettings': {
+            if isinstance(schedule.get('chargeMaxCurrent', None), int):
+                if 1 <= int(value) <= 255:
+                    # VW-Group API charger current request
+                    if self._services.get('rbatterycharge_v1', False) is not False:
+                        data = {'action': {'settings': {'maxChargeCurrent': int(value)}, 'type': 'setSettings'}}
+                    # Skoda Native API charger current request, does this work?
+                    elif self._services.get('CHARGING', False) is not False:
+                        data = {'chargingSettings': {
                                 'autoUnlockPlugWhenCharged': 'Off',
                                 'maxChargeCurrentAc': value,
                                 'targetStateOfChargeInPercent': 100},
                             'type': 'UpdateSettings'
-                    }
+                        }
+                else:
+                    _LOGGER.error(f'Set charger maximum current to {value} is not supported.')
+                    raise SkodaInvalidRequestException(f'Set charger maximum current to {value} is not supported.')
             # Mimick app and set charger max ampere to Maximum/Reduced
-            elif value in ['Maximum', 'maximum', 'Max', 'max', 'Minimum', 'minimum', 'Min', 'min', 'Reduced', 'reduced']:
-                # VW-Group API charger current request
-                if self._services.get('rbatterycharge_v1', False) is not False:
-                    value = 254 if value in ['Maximum', 'maximum', 'Max', 'max'] else 252
-                    data = {'action': {'settings': {'maxChargeCurrent': int(value)}, 'type': 'setSettings'}}
-                # Skoda Native API charger current request
-                elif self._services.get('CHARGING', False) is not False:
-                    value = 'Maximum' if value in ['Maximum', 'maximum', 'Max', 'max'] else 'Reduced'
-                    data = {'chargingSettings': {
+            elif isinstance(value), str):
+                if value in ['Maximum', 'maximum', 'Max', 'max', 'Minimum', 'minimum', 'Min', 'min', 'Reduced', 'reduced']:
+                    # VW-Group API charger current request
+                    if self._services.get('rbatterycharge_v1', False) is not False:
+                        value = 254 if value in ['Maximum', 'maximum', 'Max', 'max'] else 252
+                        data = {'action': {'settings': {'maxChargeCurrent': int(value)}, 'type': 'setSettings'}}
+                    # Skoda Native API charger current request
+                    elif self._services.get('CHARGING', False) is not False:
+                        value = 'Maximum' if value in ['Maximum', 'maximum', 'Max', 'max'] else 'Reduced'
+                        data = {'chargingSettings': {
                                 'autoUnlockPlugWhenCharged': 'Off',
                                 'maxChargeCurrentAc': value,
                                 'targetStateOfChargeInPercent': 100},
                             'type': 'UpdateSettings'
-                    }
+                        }
+                else:
+                    _LOGGER.error(f'Set charger maximum current to {value} is not supported.')
+                    raise SkodaInvalidRequestException(f'Set charger maximum current to {value} is not supported.')
             else:
-                _LOGGER.error(f'Set charger maximum current to {value} is not supported.')
-                raise SkodaInvalidRequestException(f'Set charger maximum current to {value} is not supported.')
+                _LOGGER.error(f'Data type passed is invalid.')
+                raise SkodaInvalidRequestException(f'Invalid data type.')
             return await self.set_charger(data)
         else:
             _LOGGER.error('No charger support.')
@@ -365,6 +373,7 @@ class Vehicle:
                         'type': 'UpdateSettings'
                 }
             elif action.get('type', {}) == 'UpdateSettings':
+                data = action
                 pass
             else:
                 _LOGGER.error(f'Invalid charger action: {action}. Must be one of start, stop or data for set chargelimit')
@@ -400,7 +409,7 @@ class Vehicle:
         except Exception as error:
             _LOGGER.warning(f'Failed to {action} charging - {error}')
             self._requests['batterycharge'] = {'status': 'Exception'}
-            raise SkodaException(f'Failed to {action} charging - {error}')
+            raise SkodaException(f'Failed to execute set charger - {error}')
 
    # Departure timers
     async def set_charge_limit(self, limit=50):
