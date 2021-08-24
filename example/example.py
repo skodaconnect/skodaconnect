@@ -102,7 +102,8 @@ RESOURCES = [
 		"window_closed_right_back",
 		"window_closed_right_front",
 		"window_heater",
-		"windows_closed"
+		"windows_closed",
+                "seat_heating"
 ]
 
 def is_enabled(attr):
@@ -243,7 +244,8 @@ async def main():
             # Examples for using set functions:
             #vehicle.set_refresh()                                          # Takes no arguments, will trigger forced update
             #vehicle.set_charger(action = "start")                          # action = "start" or "stop"
-            #vehicle.set_charger_current(value)                             # value = 1 <=> 255 (PHEV: 252 for reduced and 254 for max)
+            #vehicle.set_charger_current(value)                             # value = 1-255/Maximum/Reduced (PHEV: 252 for reduced and 254 for max, EV: Maximum/Reduced)
+            #vehicle.set_charge_limit(limit = 50)                           # limit = PHEV: 0/10/20/30/40/50, EV: 50/60/70/80/90/100
             #vehicle.set_battery_climatisation(mode = False)                # mode = False or True
             #vehicle.set_climatisation(mode = "auxilliary", spin="1234")    # mode = "auxilliary", "electric" or "off". spin is S-PIN and only needed for aux heating
             #vehicle.set_climatisation_temp(temperature = 22)               # temperature = integer from 16 to 30
@@ -254,11 +256,17 @@ async def main():
             #vehicle.set_timer_active(id = 1, action = "on"}                # id = 1, 2, 3, action = "on" or "off".
             #vehicle.set_timer_schedule(id = 1,                             # id = 1, 2, 3
             #    schedule = {                                               # Set the departure time, date and periodicity
-            #        "enabled": True,                                       # Set the timer active or not, True or False
-            #        "recurring": True,                                     # True or False for recurring
-            #        "date": "2021-05-21",                                  # Date for departure, not needed for recurring
-            #        "time": "08:00",                                       # Time for departure, always needed
-            #        "days": "nyynnnn"                                      # Days (mon-sun) for recurring schedule, n=disable, y=enable
+            #        "enabled": True,                                       # Set the timer active or not, True or False, required
+            #        "recurring": True,                                     # True or False for recurring, required
+            #        "date": "2021-05-21",                                  # Date for departure, required if recurring=False
+            #        "time": "08:00",                                       # Time for departure, required
+            #        "days": "nyynnnn",                                     # Days (mon-sun) for recurring schedule (n=disable, y=enable), required if recurring=True
+            #        "nightRateActive": True,                               # True or False Off-peak hours, optional
+            #        "nightRateStart": "00:00",                             # Off-peak hours start (HH:mm), optional
+            #        "nightRateEnd": "06:00",                               # Off-peak hours end (HH:mm), optional
+            #        "operationCharging": True,                             # True or False for charging, optional
+            #        "operationClimatisation": True,                        # True or False fro climatisation, optional
+            #        "targetTemp": 22,                                      # Target temperature for climatisation, optional
             #    })
 
             # Example using a set function
