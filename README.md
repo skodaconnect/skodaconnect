@@ -2,7 +2,7 @@
 ![PyPi](https://img.shields.io/pypi/v/skodaconnect?label=latest%20pypi)
 ![Downloads PyPi](https://img.shields.io/pypi/dm/skodaconnect)
 
-# Skoda Connect v1.0.45
+# Skoda Connect v1.0.46
 Fork of https://github.com/robinostlund/volkswagencarnet where it was modified to support also Skoda Connect.
 Changes made to utilize the same API calls as the MySkoda mobile app.
 
@@ -60,7 +60,8 @@ This will print all available methods, variables and properties as well as a lis
 Vehicle, in the following example the car object is an object of Vehicle class:
 ```
 car.set_charger(action = "start")                          # action = "start" or "stop"
-car.set_charger_current(value=<int>)                       # value = integer between 1 and 255. Unknown what values to use other than 252 (reduced) and 254 (max) for PHEV
+car.set_charger_current(value=<int/str>                    # value = integer 1-255 or Maximum/Reduced (For PHEV: 252=Reduced and 254=Maximum)
+car.set_charge_limit(value=<int>)                          # value = integer 0-100 in 10 increments. Valid values is PHEV: 0-50, EV: 50-100.
 car.set_battery_climatisation(mode = False)                # mode = False or True
 car.set_climatisation(mode = "auxilliary", spin="1234")    # mode = "auxilliary", "electric" or "off". spin is S-PIN and only needed for aux heating
 car.set_climatisation_temp(temperature = 22)               # temperature = integer from 16 to 30

@@ -5,3 +5,4 @@ dist/
 skodaconnect.egg-info/
 __pycache__/
 skoda.conf
+example/example.py
