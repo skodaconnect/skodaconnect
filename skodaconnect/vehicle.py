@@ -44,6 +44,7 @@ class Vehicle:
             'departuretimer': {'status': '', 'timestamp': datetime.now()},
             'batterycharge': {'status': '', 'timestamp': datetime.now()},
             'climatisation': {'status': '', 'timestamp': datetime.now()},
+            'air-conditioning': {'status': '', 'timestamp': datetime.now()},
             'refresh': {'status': '', 'timestamp': datetime.now()},
             'lock': {'status': '', 'timestamp': datetime.now()},
             'preheater': {'status': '', 'timestamp': datetime.now()},
@@ -76,7 +77,8 @@ class Vehicle:
         # New API connectivity is enabled
         elif 'REMOTE' in self._connectivities:
             self._services.update({
-                'CHARGING': {'active': False}
+                'CHARGING': {'active': False},
+                'AIR_CONDITIONING': {'active': False},
             })
         else:
             self._services = {}
@@ -191,7 +193,17 @@ class Vehicle:
                     self._states.update(data)
                 else:
                     _LOGGER.debug('Could not fetch climater data')
+            self._requests.pop('air-conditioning', None)
+        elif self._services.get('AIR_CONDITIONING', {}).get('active', False):
+            data = await self._connection.getAirConditioning(self.vin)
+            if data:
+                self._states.update(data)
+            else:
+                _LOGGER.debug('Could not fetch air conditioning data')
+            self._requests.pop('climatisation', None)
+        # If not supported, remove from "requests" dict
         else:
+            self._requests.pop('air-conditioning', None)
             self._requests.pop('climatisation', None)
 
     async def get_trip_statistic(self):
@@ -261,11 +273,17 @@ class Vehicle:
         """Fetch timer data if function is enabled."""
         if self._services.get('timerprogramming_v1', {}).get('active', False):
             if not await self.expired('timerprogramming_v1'):
-                data = await self._connection.getTimers(self.vin)
+                data = await self._connection.getDeparturetimer(self.vin)
                 if data:
                     self._states.update(data)
                 else:
                     _LOGGER.debug('Could not fetch timers')
+        elif self._services.get('AIR_CONDITIONING', {}).get('active', False):
+            data = await self._connection.getTimers(self.vin)
+            if data:
+                self._states.update(data)
+            else:
+                _LOGGER.debug('Could not fetch timers')
         else:
             self._requests.pop('departuretimer', None)
 
@@ -295,7 +313,7 @@ class Vehicle:
         """Set charger current"""
         if self.is_charging_supported:
             # Set charger max ampere to integer value
-            if isinstance(schedule.get('chargeMaxCurrent', None), int):
+            if isinstance(value, int):
                 if 1 <= int(value) <= 255:
                     # VW-Group API charger current request
                     if self._services.get('rbatterycharge_v1', False) is not False:
@@ -442,88 +460,145 @@ class Vehicle:
 
     async def set_timer_active(self, id=1, action='off'):
         """ Activate/deactivate departure timers. """
+        data = {}
+        supported = 'is_departure' + str(id) + "_supported"
+        if getattr(self, supported) is not True:
+            raise SkodaConfigException(f'This vehicle does not support timer id "{id}".')
+        # VW-Group API
         if self._services.get('timerprogramming_v1', False):
-            data = {}
-            if id in {1, 2, 3}:
-                data['id'] = id
-            else:
-                raise SkodaInvalidRequestException(f'Timer id "{id}" is not supported.')
+            data['id'] = id
             if action in ['on', 'off']:
                 data['action'] = action
             else:
                 raise SkodaInvalidRequestException(f'Timer action "{action}" is not supported.')
             return await self._set_timers(data)
+        # Skoda native API
+        elif self._services.get('AIR_CONDITIONING', False):
+            if action in ['on', 'off']:
+                try:
+                    # First get most recent departuretimer settings from server
+                    timers = await self._connection.getTimers(self.vin)
+                    # Prepare data for request method
+                    data = {'type': 'UpdateTimers', 'timersSettings': {'timers': []}}
+                    if timers:
+                        data['timersSettings']['timers'] = timers.get('timers', [])
+                    else:
+                        raise SkodaException("Failed to fetch current timer settings")
+                    for timer in data['timersSettings']['timers']:
+                        _LOGGER.debug(f"Matching id {id} to {timer}")
+                        if timer.get('id', None) == id:
+                            index = data['timersSettings']['timers'].index(timer)
+                            data['timersSettings']['timers'][index]['enabled'] = True if action == 'on' else False
+                            return await self._set_aircon(data)
+                except Exception as e:
+                    _LOGGER.debug(f"Exception: {e}")
+                    pass
+                raise SkodaInvalidRequestException(f'Timer action "{action}" failed. ')
+            else:
+                raise SkodaInvalidRequestException(f'Timer action "{action}" is not supported.')
         else:
             raise SkodaInvalidRequestException('Departure timers are not supported.')
 
     async def set_timer_schedule(self, id=1, schedule={}):
         """ Set departure schedules. """
+        data = {}
+        # Validate required user inputs
+        supported = 'is_departure' + str(id) + "_supported"
+        if getattr(self, supported) is not True:
+            raise SkodaConfigException(f'Timer id "{id}" is not supported for this vehicle.')
+        if not schedule:
+            raise SkodaInvalidRequestException('A schedule must be set.')
+        if not isinstance(schedule.get('enabled', ''), bool):
+            raise SkodaInvalidRequestException('The enabled variable must be set to True or False.')
+        if not isinstance(schedule.get('recurring', ''), bool):
+            raise SkodaInvalidRequestException('The recurring variable must be set to True or False.')
+        if not re.match('^[0-9]{2}:[0-9]{2}$', schedule.get('time', '')):
+            raise SkodaInvalidRequestException('The time for departure must be set in 24h format HH:MM.')
+
+        # Validate optional inputs
+        if schedule.get('recurring', False):
+            if not re.match('^[yn]{7}$', schedule.get('days', '')):
+                raise SkodaInvalidRequestException('For recurring schedules the days variable must be set to y/n mask (mon-sun with only wed enabled): nnynnnn.')
+        elif not schedule.get('recurring'):
+            if not re.match('^[0-9]{4}-[0-9]{2}-[0-9]{2}$', schedule.get('date', '')):
+                raise SkodaInvalidRequestException('For single departure schedule the date variable must be set to YYYY-mm-dd.')
+
+        # VW-Group API
         if self._services.get('timerprogramming_v1', False):
-            # Verify input
-            data = {}
-            if id in {1, 2, 3}:
-                data['id'] = id
-            else:
-                raise SkodaInvalidRequestException(f'Timer id "{id}" is not supported.')
-            if not schedule:
-                raise SkodaInvalidRequestException('A schedule must be set.')
-            else:
-                if not isinstance(schedule.get('enabled', ''), bool):
-                    raise SkodaInvalidRequestException('The enabled variable must be set to True or False.')
-                if not isinstance(schedule.get('recurring', ''), bool):
-                    raise SkodaInvalidRequestException('The recurring variable must be set to True or False.')
-                # Sanity check for departure time
-                if not re.match('^[0-9]{2}:[0-9]{2}$', schedule.get('time', '')):
-                    raise SkodaInvalidRequestException('The time for departure must be set in 24h format HH:MM.')
-                # For recurring schedules, check required variables
-                if schedule.get('recurring'):
-                    if not re.match('^[yn]{7}$', schedule.get('days', '')):
-                        raise SkodaInvalidRequestException('For recurring schedules the days variable must be set to y/n mask (mon-sun with only wed enabled): nnynnnn.')
-                # For single departure, check required variables
-                elif not schedule.get('recurring'):
-                    if not re.match('[0-9]{4}-[0-9]{2}-[0-9]{2}', schedule.get('date', '')):
-                        raise SkodaInvalidRequestException('For single departure schedule the date variable must be set to YYYY-mm-dd.')
+            # Validate options only available for VW-Group API
+            # Sanity check for off-peak hours
+            if not isinstance(schedule.get('nightRateActive', False), bool):
+                raise SkodaInvalidRequestException('The off-peak active variable must be set to True or False')
+            if schedule.get('nightRateStart', None) is not None:
+                if not re.match('^[0-9]{2}:[0-9]{2}$', schedule.get('nightRateStart', '')):
+                    raise SkodaInvalidRequestException('The start time for off-peak hours must be set in 24h format HH:MM.')
+            if schedule.get('nightRateEnd', None) is not None:
+                if not re.match('^[0-9]{2}:[0-9]{2}$', schedule.get('nightRateEnd', '')):
+                    raise SkodaInvalidRequestException('The start time for off-peak hours must be set in 24h format HH:MM.')
 
-                # Sanity check for off-peak hours
-                if not isinstance(schedule.get('nightRateActive', False), bool):
-                    raise SkodaInvalidRequestException('The off-peak active variable must be set to True or False')
-                if schedule.get('nightRateStart', None) is not None:
-                    if not re.match('[0-9]{2}:[0-9]{2}', schedule.get('nightRateStart', '')):
-                        raise SkodaInvalidRequestException('The start time for off-peak hours must be set in 24h format HH:MM.')
-                if schedule.get('nightRateEnd', None) is not None:
-                    if not re.match('[0-9]{2}:[0-9]{2}', schedule.get('nightRateEnd', '')):
-                        raise SkodaInvalidRequestException('The start time for off-peak hours must be set in 24h format HH:MM.')
+            # Check if charging/climatisation is set and correct
+            if not isinstance(schedule.get('operationClimatisation', False), bool):
+                raise SkodaInvalidRequestException('The climatisation enable variable must be set to True or False')
+            if not isinstance(schedule.get('operationCharging', False), bool):
+                raise SkodaInvalidRequestException('The charging variable must be set to True or False')
 
-                # Check if charging/climatisation is set and correct
-                if not isinstance(schedule.get('operationClimatisation', False), bool):
-                    raise SkodaInvalidRequestException('The climatisation enable variable must be set to True or False')
-                if not isinstance(schedule.get('operationCharging', False), bool):
-                    raise SkodaInvalidRequestException('The charging variable must be set to True or False')
+            # Validate temp setting, if set
+            if schedule.get("targetTemp", None) is not None:
+                if not 16 <= int(schedule.get("targetTemp", None)) <= 30:
+                    raise SkodaInvalidRequestException('Target temp must be integer value from 16 to 30')
+                else:
+                    data['temp'] = schedule.get('targetTemp')
 
-                # Validate temp setting, if set
-                if schedule.get("targetTemp", None) is not None:
-                    if not 16 <= int(schedule.get("targetTemp", None)) <= 30:
-                        raise SkodaInvalidRequestException('Target temp must be integer value from 16 to 30')
-                    else:
-                        data['temp'] = schedule.get('targetTemp')
-
-                # Validate charge target and current
-                if schedule.get("targetChargeLevel", None) is not None:
-                    if not 0 <= int(schedule.get("targetChargeLevel", None)) <= 100:
-                        raise SkodaInvalidRequestException('Target charge level must be 0 to 100')
-                if schedule.get("chargeMaxCurrent", None) is not None:
-                    if isinstance(schedule.get('chargeMaxCurrent', None), str):
-                        if not schedule.get("chargeMaxCurrent", None) in ['Maximum', 'maximum', 'Max', 'max', 'Minimum', 'minimum', 'Min', 'min', 'Reduced', 'reduced']:
-                            raise SkodaInvalidRequestException('Charge current must be one of Maximum/Minimum/Reduced')
-                    elif isinstance(schedule.get('chargeMaxCurrent', None), int):
-                        if not 1 <= int(schedule.get("chargeMaxCurrent", 254)) < 255:
-                            raise SkodaInvalidRequestException('Charge current must be set from 1 to 254')
-                    else:
-                        raise SkodaInvalidRequestException('Invalid type for charge max current variable')
-
+            # Validate charge target and current
+            if schedule.get("targetChargeLevel", None) is not None:
+                if not 0 <= int(schedule.get("targetChargeLevel", None)) <= 100:
+                    raise SkodaInvalidRequestException('Target charge level must be 0 to 100')
+            if schedule.get("chargeMaxCurrent", None) is not None:
+                if isinstance(schedule.get('chargeMaxCurrent', None), str):
+                    if not schedule.get("chargeMaxCurrent", None) in ['Maximum', 'maximum', 'Max', 'max', 'Minimum', 'minimum', 'Min', 'min', 'Reduced', 'reduced']:
+                        raise SkodaInvalidRequestException('Charge current must be one of Maximum/Minimum/Reduced')
+                elif isinstance(schedule.get('chargeMaxCurrent', None), int):
+                    if not 1 <= int(schedule.get("chargeMaxCurrent", 254)) < 255:
+                        raise SkodaInvalidRequestException('Charge current must be set from 1 to 254')
+                else:
+                    raise SkodaInvalidRequestException('Invalid type for charge max current variable')
+            # Prepare data and execute
             data['action'] = 'schedule'
             data['schedule'] = schedule
             return await self._set_timers(data)
+
+        # Skoda native API
+        elif self._services.get('AIR_CONDITIONING', False):
+            try:
+                # First get most recent departuretimer settings from server
+                timers = await self._connection.getTimers(self.vin)
+                # Prepare data for request method
+                data = {'type': 'UpdateTimers', 'timersSettings': {'timers': []}}
+                weekdays = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY']
+                if timers.get('timers', False):
+                    data['timersSettings']['timers'] = timers.get('timers', [])
+                else:
+                    raise SkodaException("Failed to fetch current timer settings")
+                for timer in data['timersSettings']['timers']:
+                    if timer.get('id', None) == id:
+                        index = data['timersSettings']['timers'].index(timer)
+                        data['timersSettings']['timers'][index]['enabled'] = schedule.get('enabled')
+                        data['timersSettings']['timers'][index]['time'] = schedule.get('time')
+                        if schedule.get('recurring'):
+                            data['timersSettings']['timers'][index]['type'] = 'RECURRING'
+                            data['timersSettings']['timers'][index]['recurringOn'] = []
+                            days = schedule.get('days', 'nnnnnnn')
+                            for num in range(0, 7):
+                                if days[num] == y:
+                                    data['timersSettings']['timers'][index]['recurringOn'].append(days[num])
+                        else:
+                            data['timersSettings']['timers'][index]['type'] = 'ONE_OFF'
+                            data['timersSettings']['timers'][index]['date'] = schedule.get('date')
+                        return await self._set_aircon(data)
+            except Exception as e:
+                _LOGGER.debug(f"Exception: {e}")
+                pass
+            raise SkodaInvalidRequestException(f'Timer action failed. ')
         else:
             _LOGGER.info('Departure timers are not supported.')
             raise SkodaInvalidRequestException('Departure timers are not supported.')
@@ -559,7 +634,7 @@ class Vehicle:
 
         try:
             self._requests['latest'] = 'Departuretimer'
-            response = await self._connection.setTimers(self.vin, data, spin=False)
+            response = await self._connection.setDeparturetimer(self.vin, data, spin=False)
             if not response:
                 self._requests['departuretimer'] = {'status': 'Failed'}
                 _LOGGER.error('Failed to execute departure timer request')
@@ -627,37 +702,64 @@ class Vehicle:
 
     async def set_climatisation(self, mode = 'off', temp = None, hvpower = None, spin = None):
         """Turn on/off climatisation with electric/auxiliary heater."""
+        # Validate user input
+        if mode not in ['electric', 'auxiliary', 'Start', 'Stop', 'on', 'off']:
+            raise SkodaInvalidRequestException(f"Invalid mode for set_climatisation: {mode}")
+        elif mode == 'auxiliary' and spin is None:
+            raise SkodaInvalidRequestException("Starting auxiliary heater requires provided S-PIN")
+        if temp is not None:
+            if not isinstance(temp, int):
+                raise SkodaInvalidRequestException(f"Invalid type for temp")
+            elif not 16 <= int(temp) <=30:
+                raise SkodaInvalidRequestException(f"Invalid value for temp")
+        if hvpower is not None:
+            if not isinstance(hvpower, bool):
+                raise SkodaInvalidRequestException(f"Invalid type for hvpower")
         if self.is_electric_climatisation_supported:
-            if mode in ['electric', 'auxiliary']:
-                if mode == 'auxiliary' and spin is None:
-                    raise SkodaInvalidRequestException("Starting auxiliary heater requires provided S-PIN")
-                if 16 <= temp <= 30:
-                    targetTemp = int((temp + 273) * 10)
-                else:
-                    targetTemp = int((self.climatisation_target_temperature + 273) * 10)
-                if hvpower is not None:
-                    withoutHVPower = hvpower
-                else:
-                    withoutHVPower = self.climatisation_without_external_power
-                data = {
-                    'action':{
-                        'settings':{
-                            'climatisationWithoutHVpower': withoutHVPower,
-                            'targetTemperature': targetTemp,
-                            'heaterSource': mode
-                        },
-                        'type': 'startClimatisation'
+            if self._services.get('rclima_v1', False):
+                if mode in ['Start', 'start', 'On', 'on']:
+                    mode = 'electric'
+                if mode in ['electric', 'auxiliary']:
+                    if 16 <= temp <= 30:
+                        targetTemp = int((temp + 273) * 10)
+                    else:
+                        targetTemp = int((self.climatisation_target_temperature + 273) * 10)
+                    if hvpower is not None:
+                        withoutHVPower = hvpower
+                    else:
+                        withoutHVPower = self.climatisation_without_external_power
+                    data = {
+                        'action':{
+                            'settings':{
+                                'climatisationWithoutHVpower': withoutHVPower,
+                                'targetTemperature': targetTemp,
+                                'heaterSource': mode
+                            },
+                            'type': 'startClimatisation'
+                        }
                     }
-                }
-            elif mode == 'off':
-                data = {'action': {'type': 'stopClimatisation'}}
-            else:
-                _LOGGER.error(f'Invalid climatisation type: {mode}')
-                raise SkodaInvalidRequestException(f'Invalid climatisation type: {mode}')
-            return await self._set_climater(data, spin)
+                else:
+                    data = {'action': {'type': 'stopClimatisation'}}
+                return await self._set_climater(data, spin)
+            elif self._services.get('AIR_CONDITIONING', False):
+                if mode == 'auxiliary':
+                    raise SkodaInvalidRequestException('No auxiliary climatisation support.')
+                if mode in ['Start', 'start', 'On', 'on', 'electric']:
+                    # Fetch current settings
+                    airconData = await self._connection.getAirConditioning(self.vin)
+                    if airconData:
+                        data = airconData.get('airConditioningSettings', False)
+                    else:
+                        raise SkodaException("Failed to fetch current air-conditioning settings")
+                    data['type'] = 'Start'
+                    if temp is not None:
+                        data['airConditioningSettings'] = temp + 273.15
+                else:
+                    data = {'type': 'Stop'}
+                return await self._set_aircon(data)
         else:
             _LOGGER.error('No climatisation support.')
-            raise SkodaInvalidRequestException('No climatisation support.')
+        raise SkodaInvalidRequestException('No climatisation support.')
 
     async def _set_climater(self, data, spin = False):
         """Climater actions."""
@@ -698,6 +800,53 @@ class Vehicle:
             _LOGGER.warning(f'Failed to execute climatisation request - {error}')
             self._requests['climatisation'] = {'status': 'Exception'}
         raise SkodaException('Climatisation action failed')
+
+    async def _set_aircon(self, data, spin = False):
+        """Air conditioning actions."""
+        if not self._services.get('AIR_CONDITIONING', False):
+            _LOGGER.info('Remote control of air conditioning functions is not supported.')
+            raise SkodaInvalidRequestException('Remote control of air conditioning functions is not supported.')
+        if self._requests['air-conditioning'].get('id', False):
+            timestamp = self._requests.get('air-conditioning', {}).get('timestamp', datetime.now())
+            expired = datetime.now() - timedelta(minutes=3)
+            if expired > timestamp:
+                self._requests.get('air-conditioning', {}).pop('id')
+            else:
+                _LOGGER.debug('Air conditioning action is already in progress')
+                return False
+        try:
+            if 'UpdateTimers' in data['type']:
+                self._requests['latest'] = 'Timers'
+            elif 'UpdateSettings' in data['type']:
+                self._requests['latest'] = 'Climatisation settings'
+            elif 'Start' in data['type'] or 'Stop' in data['type']:
+                self._requests['latest'] = 'Climatisation'
+            else:
+                self._requests['latest'] = 'Air conditioning'
+            response = await self._connection.setAirConditioning(self.vin, data)
+            if not response:
+                self._requests['air-conditioning'] = {'status': 'Failed'}
+                _LOGGER.error('Failed to execute air conditioning request')
+                raise SkodaException('Failed to execute air conditioning request')
+            else:
+                #self._requests['remaining'] = response.get('rate_limit_remaining', -1)
+                self._requests['air-conditioning'] = {
+                    'timestamp': datetime.now(),
+                    'status': response.get('state', 'Unknown'),
+                    'id': response.get('id', 0),
+                }
+                if response.get('state', None) == 'Throttled':
+                    status = 'Throttled'
+                else:
+                    status = await self.wait_for_request('air-conditioning', response.get('id', 0))
+                self._requests['air-conditioning'] = {'status': status}
+                return True
+        except (SkodaInvalidRequestException, SkodaException):
+            raise
+        except Exception as error:
+            _LOGGER.warning(f'Failed to execute air conditioning request - {error}')
+            self._requests['air-conditioning'] = {'status': 'Exception'}
+        raise SkodaException('Air conditioning action failed')
 
    # Parking heater heating/ventilation (RS)
     async def set_pheater(self, mode, spin):
@@ -862,6 +1011,7 @@ class Vehicle:
     def get_attr(self, attr):
         return find_path(self.attrs, attr)
 
+    # METHOD NOT IN USE, not implemented yet
     async def expired(self, service):
         """Check if access to service has expired."""
         try:
@@ -1231,7 +1381,7 @@ class Vehicle:
 
     @property
     def charging_time_left(self):
-        """Return minutes to charing complete"""
+        """Return minutes to charging complete"""
         if self.external_power:
             if self.attrs.get('charging', {}).get('remainingToCompleteInSeconds', False):
                 minutes = int(self.attrs.get('charging', {}).get('remainingToCompleteInSeconds', 0))/60
@@ -1454,10 +1604,12 @@ class Vehicle:
     @property
     def climatisation_target_temperature(self):
         """Return the target temperature from climater."""
-        value = self.attrs.get('climater').get('settings').get('targetTemperature').get('content')
+        if self.attrs.get('climater', False):
+            value = self.attrs.get('climater').get('settings', {}).get('targetTemperature', {}).get('content', 2730)
+        elif self.attrs.get('airConditioningSettings', False):
+            value = float(self.attrs.get('airConditioningSettings').get('targetTemperatureInKelvin', 273.15) * 10)
         if value:
             reply = float((value / 10) - 273)
-            self._climatisation_target_temperature = reply
             return reply
 
     @property
@@ -1467,8 +1619,30 @@ class Vehicle:
             if 'settings' in self.attrs.get('climater', {}):
                 if 'targetTemperature' in self.attrs.get('climater', {})['settings']:
                     return True
-            else:
-                return False
+        elif self.attrs.get('airConditioningSettings', False):
+            if 'targetTemperatureInKelvin' in self.attrs.get('airConditioningSettings', {}):
+                return True
+        return False
+
+    @property
+    def climatisation_time_left(self):
+        """Return time left for climatisation in hours:minutes."""
+        if self.attrs.get('airConditioning', {}).get('remainingTimeToReachTargetTemperatureInSeconds', False):
+            minutes = int(self.attrs.get('airConditioning', {}).get('remainingTimeToReachTargetTemperatureInSeconds', 0))/60
+            try:
+                if not 0 <= minutes <= 65535:
+                    return "00:00"
+                return "%02d:%02d" % divmod(minutes, 60)
+            except Exception:
+                pass
+        return "00:00"
+
+    @property
+    def is_climatisation_time_left_supported(self):
+        """Return true if remainingTimeToReachTargetTemperatureInSeconds is supported."""
+        if self.attrs.get('airConditioning', {}).get('remainingTimeToReachTargetTemperatureInSeconds', False):
+            return True
+        return False
 
     @property
     def climatisation_without_external_power(self):
@@ -1510,12 +1684,14 @@ class Vehicle:
     @property
     def electric_climatisation(self):
         """Return status of climatisation."""
-        climatisation_type = self.attrs.get('climater', {}).get('settings', {}).get('heaterSource', {}).get('content', '')
-        status = self.attrs.get('climater', {}).get('status', {}).get('climatisationStatusData', {}).get('climatisationState', {}).get('content', '')
-        if status in ['heating', 'cooling', 'on'] and climatisation_type == 'electric':
+        if self.attrs.get('climater', {}).get('status', {}).get('climatisationStatusData', {}).get('climatisationState', {}).get('content', False):
+            climatisation_type = self.attrs.get('climater', {}).get('settings', {}).get('heaterSource', {}).get('content', '')
+            status = self.attrs.get('climater', {}).get('status', {}).get('climatisationStatusData', {}).get('climatisationState', {}).get('content', '')
+            if status in ['heating', 'cooling', 'on'] and climatisation_type == 'electric':
+                return True
+        elif self.attrs.get('airConditioning', {}).get('state', False) in ['ON', 'On', 'on']:
             return True
-        else:
-            return False
+        return False
 
     @property
     def is_electric_climatisation_supported(self):
@@ -1548,31 +1724,57 @@ class Vehicle:
     @property
     def is_climatisation_supported(self):
         """Return true if climatisation has State."""
-        response = self.attrs.get('climater', {}).get('status', {}).get('climatisationStatusData', {}).get('climatisationState', {}).get('content', '')
-        if response != '':
+        if self.attrs.get('climater', {}).get('status', {}).get('climatisationStatusData', {}).get('climatisationState', {}).get('content', False):
             return True
+        elif self.attrs.get('airConditioning', {}).get('state', False):
+            return True
+        return False
 
     @property
     def window_heater(self):
         """Return status of window heater."""
-        ret = False
-        status_front = self.attrs.get('climater', {}).get('status', {}).get('windowHeatingStatusData', {}).get('windowHeatingStateFront', {}).get('content', '')
-        if status_front == 'on':
-            ret = True
-
-        status_rear = self.attrs.get('climater', {}).get('status', {}).get('windowHeatingStatusData', {}).get('windowHeatingStateRear', {}).get('content', '')
-        if status_rear == 'on':
-            ret = True
-        return ret
+        if self.attrs.get('climater', False):
+            status_front = self.attrs.get('climater', {}).get('status', {}).get('windowHeatingStatusData', {}).get('windowHeatingStateFront', {}).get('content', '')
+            if status_front == 'on':
+                return True
+            status_rear = self.attrs.get('climater', {}).get('status', {}).get('windowHeatingStatusData', {}).get('windowHeatingStateRear', {}).get('content', '')
+            if status_rear == 'on':
+                return True
+        elif self.attrs.get('airConditioning', {}).get('windowsHeatingStatuses', False):
+            for element in self.attrs.get('airConditioning', {}).get('windowsHeatingStatuses', []):
+                if element.get('state', 'Off') in ['ON', 'On', 'on']:
+                    return True
+        return False
 
     @property
     def is_window_heater_supported(self):
         """Return true if vehichle has heater."""
         if self.is_electric_climatisation_supported:
-            if self.attrs.get('climater', {}).get('status', {}).get('windowHeatingStatusData', {}).get('windowHeatingStateFront', {}).get('content', '') in ['on', 'off']:
-                return True
-            if self.attrs.get('climater', {}).get('status', {}).get('windowHeatingStatusData', {}).get('windowHeatingStateRear', {}).get('content', '') in ['on', 'off']:
-                return True
+            if self.attrs.get('climater', False):
+                if self.attrs.get('climater', {}).get('status', {}).get('windowHeatingStatusData', {}).get('windowHeatingStateFront', {}).get('content', '') in ['on', 'off']:
+                    return True
+                if self.attrs.get('climater', {}).get('status', {}).get('windowHeatingStatusData', {}).get('windowHeatingStateRear', {}).get('content', '') in ['on', 'off']:
+                    return True
+            elif self.attrs.get('airConditioning', {}).get('windowsHeatingStatuses', False):
+                if self.attrs.get('airConditioning', {}).get('windowsHeatingStatuses', []):
+                    return True
+        return False
+
+    @property
+    def seat_heating(self):
+        """Return status of seat heating."""
+        if self.attrs.get('airConditioning', {}).get('seatHeatingSupport', False):
+            for element in self.attrs.get('airConditioning', {}).get('seatHeatingSupport', {}):
+                if self.attrs.get('airConditioning', {}).get('seatHeatingSupport', {}).get(element, False):
+                    return True
+        return False
+
+    @property
+    def is_seat_heating_supported(self):
+        """Return true if vehichle has seat heating."""
+        if self.attrs.get('airConditioning', {}).get('seatHeatingSupport', False):
+            return True
+        return False
 
   # Parking heater, "legacy" auxiliary climatisation
     @property
@@ -1875,56 +2077,110 @@ class Vehicle:
    # Under development
     @property
     def departure1(self):
-        try:
-            response = self.attrs.get('timers', {}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', False)
-            timer = response[0]
-            timer.pop('timestamp', None)
-            timer.pop('timerID', None)
-            timer.pop('profileID', None)
-            return timer
-        except:
-            return None
+        """Return timer status and attributes."""
+        if self.attrs.get('departuretimers', False):
+            try:
+                response = self.attrs.get('departuretimers', {}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', False)
+                timer = response[0]
+                timer.pop('timestamp', None)
+                timer.pop('timerID', None)
+                timer.pop('profileID', None)
+                return timer
+            except:
+                pass
+        elif self.attrs.get('timers', False):
+            try:
+                response = self.attrs.get('timers', [])
+                if len(self.attrs.get('timers', [])) >= 1:
+                    timer = response[0]
+                    timer.pop('id', None)
+                else:
+                    timer = {}
+                return timer
+            except:
+                pass
+        return None
 
     @property
     def is_departure1_supported(self):
-        if self.attrs.get('timers', False):
+        """Return true if timer 1 is supported."""
+        if self.attrs.get('departuretimers', False):
             return True
+        elif self.attrs.get('timers', False):
+            if len(self.attrs.get('timers', [])) >= 1:
+                return True
         return False
 
     @property
     def departure2(self):
-        try:
-            response = self.attrs.get('timers', {}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', False)
-            timer = response[1]
-            timer.pop('timestamp', None)
-            timer.pop('timerID', None)
-            timer.pop('profileID', None)
-            return timer
-        except:
-            return None
+        """Return timer status and attributes."""
+        if self.attrs.get('departuretimers', False):
+            try:
+                response = self.attrs.get('departuretimers', {}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', False)
+                timer = response[1]
+                timer.pop('timestamp', None)
+                timer.pop('timerID', None)
+                timer.pop('profileID', None)
+                return timer
+            except:
+                pass
+        elif self.attrs.get('timers', False):
+            try:
+                response = self.attrs.get('timers', [])
+                if len(self.attrs.get('timers', [])) >= 2:
+                    timer = response[1]
+                    timer.pop('id', None)
+                else:
+                    timer = {}
+                return timer
+            except:
+                pass
+        return None
 
     @property
     def is_departure2_supported(self):
-        if self.attrs.get('timers', {}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', False):
+        """Return true if timer 2 is supported."""
+        if self.attrs.get('departuretimers', {}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', False):
             return True
+        elif self.attrs.get('timers', False):
+            if len(self.attrs.get('timers', [])) >= 2:
+                return True
         return False
 
     @property
     def departure3(self):
-        try:
-            response = self.attrs.get('timers', {}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', False)
-            timer = response[2]
-            timer.pop('timestamp', None)
-            timer.pop('timerID', None)
-            timer.pop('profileID', None)
-            return timer
-        except:
-            return None
+        """Return timer status and attributes."""
+        if self.attrs.get('departuretimers', False):
+            try:
+                response = self.attrs.get('departuretimers', {}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', False)
+                timer = response[2]
+                timer.pop('timestamp', None)
+                timer.pop('timerID', None)
+                timer.pop('profileID', None)
+                return timer
+            except:
+                pass
+        elif self.attrs.get('timers', False):
+            try:
+                response = self.attrs.get('timers', [])
+                if len(self.attrs.get('timers', [])) >= 3:
+                    timer = response[2]
+                    timer.pop('id', None)
+                else:
+                    timer = {}
+                return timer
+            except:
+                pass
+        return None
 
     @property
     def is_departure3_supported(self):
-        if self.attrs.get('timers', {}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', False):
+        """Return true if timer 3 is supported."""
+        if self.attrs.get('departuretimers', {}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', False):
             return True
+        elif self.attrs.get('timers', False):
+            if len(self.attrs.get('timers', [])) >= 3:
+                return True
         return False
 
   # Trip data

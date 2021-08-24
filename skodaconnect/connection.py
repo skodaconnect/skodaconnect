@@ -786,7 +786,7 @@ class Connection:
             _LOGGER.warning(f'Could not fetch position, error: {error}')
         return False
 
-    async def getTimers(self, vin):
+    async def getDeparturetimer(self, vin):
         """Get departure timers."""
         if not await self.validate_tokens:
             return False
@@ -797,12 +797,30 @@ class Connection:
                 vin = vin
             )
             if response.get('timer', {}):
-                data = {'timers': response.get('timer', {})}
+                data = {'departuretimer': response.get('timer', {})}
                 return data
             elif response.get('status_code', {}):
                 _LOGGER.warning(f'Could not fetch timers, HTTP status code: {response.get("status_code")}')
             else:
                 _LOGGER.info('Unknown error while trying to fetch data for departure timers')
+        except Exception as error:
+            _LOGGER.warning(f'Could not fetch timers, error: {error}')
+        return False
+
+    async def getTimers(self, vin):
+        """Get timers data (New Skoda API)."""
+        if not await self.validate_tokens:
+            return False
+        try:
+            await self.set_token('connect')
+            response = await self.get('https://api.connect.skoda-auto.cz/api/v1/air-conditioning/$vin/timers', vin = vin)
+            if response.get('timers', []):
+                data = {'timers': response.get('timers', [])}
+                return data
+            elif chargerStatus.get('status_code', {}):
+                _LOGGER.warning(f'Could not fetch timers, HTTP status code: {response.get("status_code")}')
+            else:
+                _LOGGER.info('Unhandled error while trying to fetch timers data')
         except Exception as error:
             _LOGGER.warning(f'Could not fetch timers, error: {error}')
         return False
@@ -826,6 +844,32 @@ class Connection:
                 _LOGGER.info('Unhandled error while trying to fetch climatisation data')
         except Exception as error:
             _LOGGER.warning(f'Could not fetch climatisation, error: {error}')
+        return False
+
+    async def getAirConditioning(self, vin):
+        """Get air-conditioning data (Skoda native API)."""
+        if not await self.validate_tokens:
+            return False
+        try:
+            await self.set_token('connect')
+            airconStatus = self.get('https://api.connect.skoda-auto.cz/api/v1/air-conditioning/$vin/status', vin = vin)
+            airconSettings = self.get('https://api.connect.skoda-auto.cz/api/v1/air-conditioning/$vin/settings', vin = vin)
+            airconData = await asyncio.gather(airconStatus, airconSettings)
+
+            if airconData[0].get('state', {}):
+                data = {'airConditioning': airconData[0]}
+                if len(airconData) >= 2:
+                    data['airConditioningSettings'] = airconData[1]
+                if len(airconData) >= 3:
+                    data['airConditioningTimers'] = airconData[2]
+                _LOGGER.info(f"Returning with data {data}")
+                return data
+            elif response.get('status_code', {}):
+                _LOGGER.warning(f'Could not fetch air-conditioning, HTTP status code: {response.get("status_code")}')
+            else:
+                _LOGGER.info('Unhandled error while trying to fetch air-conditioning data')
+        except Exception as error:
+            _LOGGER.warning(f'Could not fetch air-conditioning, error: {error}')
         return False
 
     async def getCharger(self, vin):
@@ -863,7 +907,6 @@ class Connection:
                 _LOGGER.debug(f'Got vehicle charging data')
                 response = chargingData[0]
                 response['chargerSettings'] = chargingData[1]
-                _LOGGER.info(f"Returning with data {response}")
                 return response
             elif chargerStatus.get('status_code', {}):
                 _LOGGER.warning(f'Could not fetch charging, HTTP status code: {chargerStatus.get("status_code")}')
@@ -907,7 +950,7 @@ class Connection:
                     _LOGGER.warning(f'Login for {BRAND} account failed!')
                     raise SkodaLoginFailedException(f'Login for {BRAND} account failed')
             # Requests for Skoda Native API
-            if sectionId == 'charging':
+            if sectionId in ['charging',  'air-conditioning']:
                 url = 'https://api.connect.skoda-auto.cz/api/v1/$sectionId/operation-requests/$requestId'
             # Requests for VW-Group API
             elif sectionId == 'climatisation':
@@ -924,7 +967,7 @@ class Connection:
             url = re.sub('\$requestId', requestId, url)
 
             # Set token according to API origin
-            if sectionId in ['charging']:
+            if sectionId in ['charging', 'air-conditioning']:
                 await self.set_token('connect')
             else:
                 await self.set_token('vwg')
@@ -1034,6 +1077,7 @@ class Connection:
             _LOGGER.error(f'Failure to execute: {error}')
         return False
 
+   # VW-Group API methods
     async def setRefresh(self, vin):
         """"Force vehicle data update."""
         try:
@@ -1073,31 +1117,15 @@ class Connection:
             raise
         return False
 
-    async def setCharging(self, vin, data):
-        """Start/Stop charger, Skoda native API."""
-        try:
-            await self.set_token('connect')
-            response = await self.dataCall(f'https://api.connect.skoda-auto.cz/api/v1/charging/operation-requests?vin={vin}', vin, json = data)
-            if not response:
-                raise SkodaException('Invalid or no response')
-            else:
-                request_id = response.get('id', 0)
-                request_state = response.get('status', 'unknown')
-                _LOGGER.debug(f'Request for charging action returned with state "{request_state}", request id: {request_id}')
-                return dict({'id': str(request_id), 'state': request_state})
-        except:
-            raise
-        return False
-
-    async def setTimers(self, vin, data, spin):
+    async def setDeparturetimer(self, vin, data, spin):
         """Set departure timers."""
         _LOGGER.debug(f"Set timers with data {data}")
         try:
             # First get most recent departuretimer settings from server
-            departuretimers = await self.getTimers(vin)
-            timer = departuretimers.get('timers', {}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', [])
-            profile = departuretimers.get('timers', {}).get('timersAndProfiles', {}).get('timerProfileList', {}).get('timerProfile', [])
-            setting = departuretimers.get('timers', {}).get('timersAndProfiles', {}).get('timerBasicSetting', [])
+            departuretimers = await self.getDeparturetimer(vin)
+            timer = departuretimers.get('departuretimers', {}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', [])
+            profile = departuretimers.get('departuretimers', {}).get('timersAndProfiles', {}).get('timerProfileList', {}).get('timerProfile', [])
+            setting = departuretimers.get('departuretimers', {}).get('timersAndProfiles', {}).get('timerBasicSetting', [])
 
             # Construct Timer data
             timers = [{},{},{}]
@@ -1285,6 +1313,37 @@ class Connection:
             if contType: self._session_headers['Content-Type'] = contType
             raise
         return False
+
+   # Skoda native API request methods
+    async def setSkodaAPI(self, endpoint, vin, data):
+        try:
+            url = f"https://api.connect.skoda-auto.cz/api/v1/{endpoint}/operation-requests?vin={vin}"
+            response = await self.dataCall(url, vin, json = data)
+            if not response:
+                raise SkodaException('Invalid or no response')
+            else:
+                request_id = response.get('id', 0)
+                request_state = response.get('status', 'unknown')
+                _LOGGER.debug(f'Request returned with state "{request_state}", request id: {request_id}')
+                return dict({'id': str(request_id), 'state': request_state})
+        except:
+            raise
+        return False
+
+    async def setAirConditioning(self, vin, data):
+        """Execute air conditioning actions."""
+        await self.set_token('connect')
+        return await self.setSkodaAPI('air-conditioning', vin, data)
+
+    async def setTimers(self, vin, data):
+        """Execute timer actions."""
+        await self.set_token('connect')
+        return await self.setSkodaAPI('air-conditioning', vin, data)
+
+    async def setCharging(self, vin, data):
+        """Execute charging actions."""
+        await self.set_token('connect')
+        return await self.setSkodaAPI('charging', vin, data)
 
  #### Token handling ####
     @property

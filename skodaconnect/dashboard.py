@@ -502,6 +502,33 @@ class WindowHeater(Switch):
         return dict(last_result = self.vehicle.climater_action_status)
 
 
+class SeatHeating(Switch):
+    def __init__(self):
+        super().__init__(attr="seat_heating", name="Seat Heating", icon="mdi:seat-recline-normal")
+
+    @property
+    def state(self):
+        return self.vehicle.seat_heating
+
+    async def turn_on(self):
+        #await self.vehicle.set_seat_heating('start')
+        #await self.vehicle.update()
+        pass
+
+    async def turn_off(self):
+        #await self.vehicle.set_seat_heating('stop')
+        #await self.vehicle.update()
+        pass
+
+    @property
+    def assumed_state(self):
+        return False
+
+    @property
+    def attributes(self):
+        return dict(last_result = self.vehicle.climater_action_status)
+
+
 class BatteryClimatisation(Switch):
     def __init__(self):
         super().__init__(attr="climatisation_without_external_power", name="Climatisation from battery", icon="mdi:power-plug")
@@ -706,6 +733,7 @@ def create_instruments():
         TrunkLock(),
         RequestUpdate(),
         WindowHeater(),
+        SeatHeating(),
         BatteryClimatisation(),
         ElectricClimatisation(),
         AuxiliaryClimatisation(),
@@ -825,6 +853,12 @@ def create_instruments():
             name="Climatisation target temperature",
             icon="mdi:thermometer",
             unit="°C",
+        ),
+        Sensor(
+            attr="climatisation_time_left",
+            name="Climatisation time left",
+            icon="mdi:clock",
+            unit="h",
         ),
         Sensor(
             attr="trip_last_average_speed",
