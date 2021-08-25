@@ -164,6 +164,8 @@ class Vehicle:
             )
         else:
             _LOGGER.info(f'Vehicle with VIN {self.vin} is deactivated.')
+            return False
+        return True
 
   # Data collection functions
     async def get_realcardata(self):
