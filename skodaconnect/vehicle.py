@@ -2068,9 +2068,9 @@ class Vehicle:
     @property
     def departure1(self):
         """Return timer status and attributes."""
-        if self.attrs.get('departuretimers', False):
+        if self.attrs.get('departuretimer', False):
             try:
-                response = self.attrs.get('departuretimers', {}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', False)
+                response = self.attrs.get('departuretimer', {}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', False)
                 timer = response[0]
                 timer.pop('timestamp', None)
                 timer.pop('timerID', None)
@@ -2094,7 +2094,7 @@ class Vehicle:
     @property
     def is_departure1_supported(self):
         """Return true if timer 1 is supported."""
-        if self.attrs.get('departuretimers', False):
+        if self.attrs.get('departuretimer', False):
             return True
         elif self.attrs.get('timers', False):
             if len(self.attrs.get('timers', [])) >= 1:
@@ -2104,9 +2104,9 @@ class Vehicle:
     @property
     def departure2(self):
         """Return timer status and attributes."""
-        if self.attrs.get('departuretimers', False):
+        if self.attrs.get('departuretimer', False):
             try:
-                response = self.attrs.get('departuretimers', {}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', False)
+                response = self.attrs.get('departuretimer', {}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', False)
                 timer = response[1]
                 timer.pop('timestamp', None)
                 timer.pop('timerID', None)
@@ -2130,7 +2130,7 @@ class Vehicle:
     @property
     def is_departure2_supported(self):
         """Return true if timer 2 is supported."""
-        if self.attrs.get('departuretimers', {}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', False):
+        if self.attrs.get('departuretimer', {}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', False):
             return True
         elif self.attrs.get('timers', False):
             if len(self.attrs.get('timers', [])) >= 2:
@@ -2140,9 +2140,9 @@ class Vehicle:
     @property
     def departure3(self):
         """Return timer status and attributes."""
-        if self.attrs.get('departuretimers', False):
+        if self.attrs.get('departuretimer', False):
             try:
-                response = self.attrs.get('departuretimers', {}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', False)
+                response = self.attrs.get('departuretimer', {}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', False)
                 timer = response[2]
                 timer.pop('timestamp', None)
                 timer.pop('timerID', None)
@@ -2166,7 +2166,7 @@ class Vehicle:
     @property
     def is_departure3_supported(self):
         """Return true if timer 3 is supported."""
-        if self.attrs.get('departuretimers', {}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', False):
+        if self.attrs.get('departuretimer', {}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', False):
             return True
         elif self.attrs.get('timers', False):
             if len(self.attrs.get('timers', [])) >= 3:
