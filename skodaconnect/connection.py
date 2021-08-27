@@ -291,19 +291,19 @@ class Connection:
                 data = mailform
             )
             if req.status != 200:
-                raise SkodaException('POST password request failed')
+                raise SkodaException('POST username request failed')
             try:
                 response_data = await req.text()
                 responseSoup = BeautifulSoup(response_data, 'html.parser')
                 for t in responseSoup.find('form', id='credentialsForm').find_all('input', type='hidden'):
                     _LOGGER.debug(f'Found item: {t["name"], t["value"]}')
                 pwform = dict([(t['name'],t['value']) for t in responseSoup.find('form', id='credentialsForm').find_all('input', type='hidden')])
-                #pwform = dict([(t['name'],t['value']) for t in responseSoup.find('form', id='credentialsForm').find_all('input', type='hidden')])
                 pwform['password'] = self._session_auth_password
                 pw_url = authissuer+responseSoup.find('form', id='credentialsForm').get('action')
             except Exception as e:
-                _LOGGER.error('Failed to extract password login form.')
-                raise SkodaException(e)
+                if responseSoup.find('form', id='credentialsForm') is None:
+                    raise SkodaAuthenticationException("Invalid username")
+                raise SkodaAuthenticationException("Invalid username or service unavailable")
 
             # POST password
             # https://identity.vwgroup.io/signin-service/v1/{CLIENT_ID}/login/authenticate

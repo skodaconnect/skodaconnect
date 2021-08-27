@@ -13,13 +13,9 @@ from collections import OrderedDict
 from skodaconnect.utilities import find_path, is_valid_path
 from skodaconnect.exceptions import (
     SkodaConfigException,
-    SkodaAuthenticationException,
-    SkodaAccountLockedException,
-    SkodaTokenExpiredException,
     SkodaException,
     SkodaEULAException,
     SkodaThrottledException,
-    SkodaLoginFailedException,
     SkodaInvalidRequestException,
     SkodaRequestInProgressException
 )
@@ -369,8 +365,7 @@ class Vehicle:
             if expired > timestamp:
                 self._requests.get('batterycharge', {}).pop('id')
             else:
-                _LOGGER.debug('Charging action already in progress')
-                return False
+                raise SkodaRequestInProgressException('Charging action already in progress')
         # VW-Group API requests
         if self._services.get('rbatterycharge_v1', False):
             if action in ['start', 'stop']:
@@ -615,8 +610,7 @@ class Vehicle:
             if expired > timestamp:
                 self._requests.get('departuretimer', {}).pop('id')
             else:
-                _LOGGER.debug('Scheduling of departure timer is already in progress')
-                return False
+                raise SkodaRequestInProgressException('Scheduling of departure timer is already in progress')
         # Verify temperature setting
         if data.get('temp', False):
             if data['temp'] in {16,16.5,17,17.5,18,18.5,19,19.5,20,20.5,21,21.5,22,22.5,23,23.5,24,24.5,25,25.5,26,26.5,27,27.5,28,28.5,29,29.5,30}:
@@ -773,8 +767,7 @@ class Vehicle:
             if expired > timestamp:
                 self._requests.get('climatisation', {}).pop('id')
             else:
-                _LOGGER.debug('A climatisation action is already in progress')
-                return False
+                raise SkodaRequestInProgressException('A climatisation action is already in progress')
         try:
             self._requests['latest'] = 'Climatisation'
             response = await self._connection.setClimater(self.vin, data, spin)
@@ -813,8 +806,7 @@ class Vehicle:
             if expired > timestamp:
                 self._requests.get('air-conditioning', {}).pop('id')
             else:
-                _LOGGER.debug('Air conditioning action is already in progress')
-                return False
+                raise SkodaRequestInProgressException('Air conditioning action is already in progress')
         try:
             if 'UpdateTimers' in data['type']:
                 self._requests['latest'] = 'Timers'
@@ -861,8 +853,7 @@ class Vehicle:
             if expired > timestamp:
                 self._requests.get('preheater', {}).pop('id')
             else:
-                _LOGGER.debug('A parking heater action is already in progress')
-                return False
+                raise SkodaRequestInProgressException('A parking heater action is already in progress')
         if not mode in ['heating', 'ventilation', 'off']:
             _LOGGER.error(f'{mode} is an invalid action for parking heater')
             raise SkodaInvalidRequestException(f'{mode} is an invalid action for parking heater')
@@ -923,8 +914,7 @@ class Vehicle:
             if expired > timestamp:
                 self._requests.get('lock', {}).pop('id')
             else:
-                _LOGGER.debug('A lock action is already in progress')
-                return False
+                raise SkodaRequestInProgressException('A lock action is already in progress')
         if action in ['lock', 'unlock']:
             data = '<rluAction xmlns="http://audi.de/connect/rlu">\n<action>' + action + '</action>\n</rluAction>'
         else:
@@ -969,8 +959,7 @@ class Vehicle:
             if expired > timestamp:
                 self._requests.get('refresh', {}).pop('id')
             else:
-                _LOGGER.debug('A data refresh request is already in progress')
-                return False
+                raise SkodaRequestInProgressException('A data refresh request is already in progress')
         try:
             self._requests['latest'] = 'Refresh'
             response = await self._connection.setRefresh(self.vin)
