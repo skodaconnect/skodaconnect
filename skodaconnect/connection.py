@@ -1170,11 +1170,11 @@ class Connection:
                     timers[i]['departureTimeOfDay'] = '00:00'
 
             # Set charger minimum limit if action is chargelimit
+            _LOGGER.debug('Preparing timer data')
             if data.get('action', None) == 'chargelimit' :
                 actiontype = 'setChargeMinLimit'
                 setting['chargeMinLimit'] = int(data.get('limit', 50))
             # Modify timers if action is on, off or schedule
-            _LOGGER.debug('Preparing timer data')
             elif data.get('action', None) in ['on', 'off', 'schedule']:
                 actiontype = 'setTimersAndProfiles'
                 timerid = int(data.get('id'))-1 if data.get('id', False) else 0
