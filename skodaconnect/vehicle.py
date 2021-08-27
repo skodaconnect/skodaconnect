@@ -714,6 +714,8 @@ class Vehicle:
                 raise SkodaInvalidRequestException(f"Invalid type for temp")
             elif not 16 <= int(temp) <=30:
                 raise SkodaInvalidRequestException(f"Invalid value for temp")
+        else:
+            temp = self.climatisation_target_temperature
         if hvpower is not None:
             if not isinstance(hvpower, bool):
                 raise SkodaInvalidRequestException(f"Invalid type for hvpower")
@@ -722,10 +724,7 @@ class Vehicle:
                 if mode in ['Start', 'start', 'On', 'on']:
                     mode = 'electric'
                 if mode in ['electric', 'auxiliary']:
-                    if 16 <= temp <= 30:
-                        targetTemp = int((temp + 273) * 10)
-                    else:
-                        targetTemp = int((self.climatisation_target_temperature + 273) * 10)
+                    targetTemp = int((temp + 273) * 10)
                     if hvpower is not None:
                         withoutHVPower = hvpower
                     else:
