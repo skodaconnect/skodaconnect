@@ -27,6 +27,7 @@ CLIENT = {
 
 
 XCLIENT_ID = '28cd30c6-dee7-4529-a0e6-b1e07ff90b79'
+#XCLIENT_ID = 'a83d7e44-c8b7-42b7-b8ca-e478270d2091'
 XAPPVERSION = '3.2.6'
 XAPPNAME = 'cz.skodaauto.connect'
 USER_AGENT = 'okhttp/3.14.7'

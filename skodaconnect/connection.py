@@ -119,25 +119,56 @@ class Connection:
 
         # Get list of vehicles from Skoda native API
         await self.set_token('skoda')
+        skoda_vehicles = []
         skoda_vehicles = await self.get(
             'https://api.connect.skoda-auto.cz/api/v2/garage/vehicles'
         )
+
+        # If Skoda API returns no cars, fallback to VW-Group API
         if not skoda_vehicles:
-            _LOGGER.debug('Skoda native API returned no cars')
+            _LOGGER.debug('Skoda native API returned no cars! Using fallback legacy discovery.')
+
+            # Get VW-Group API tokens
+            if not await self._getAPITokens():
+                self._session_logged_in = False
+                return False
+
+            await self.set_token('vwg')
+            self._session_headers.pop('Content-Type', None)
+            vwg_vehicles = await self.get(
+                url=f'https://msg.volkswagen.de/fs-car/usermanagement/users/v1/{BRAND}/{COUNTRY}/vehicles'
+            )
+
+            if vwg_vehicles.get('userVehicles', {}).get('vehicle', False):
+                _LOGGER.debug('Found vehicle(s) associated with account.')
+                for vehicle in vwg_vehicles.get('userVehicles').get('vehicle'):
+                    await self.set_token('skoda')
+                    response = await self.get(url=f'https://api.connect.skoda-auto.cz/api/v2/vehicles/{vehicle}')
+                    if response.get('vehicleSpecification', False):
+                        response['vin'] = vehicle
+                        skoda_vehicles.append(response)
+                    else:
+                        _LOGGER.warning(f"Failed to aquire information about vehicle with VIN {vehicle}")
+
+        if len(skoda_vehicles) == 0:
+            raise SkodaConfigException("No vehicles were found for given account!")
         else:
             # Fetch realCarData
             realCars = await self.getRealCarData()
             for vehicle in skoda_vehicles:
                 vin = vehicle.get('vin', '')
-                specs = vehicle.get('specification', '')
+                specs = vehicle.get('specification', vehicle.get('vehicleSpecification', ''))
                 connectivity = []
                 for service in vehicle.get('connectivities', []):
-                    connectivity.append(service.get('type', ''))
+                    if isinstance(service, str):
+                        connectivity.append(service)
+                    elif isinstance(service, dict):
+                        connectivity.append(service.get('type', ''))
 
                 if realCars is not False:
+                    nickname = deactivated = None
                     for item in realCars.get('realCars', {}):
                         if item.get('vehicleIdentificationNumber', '') == vin:
-                            _LOGGER.debug(f'Matched VIN with item: {item}')
                             if vehicle.get('name', False):
                                 nickname = vehicle.get('name', None)
                             else:
@@ -162,7 +193,7 @@ class Connection:
 
         # Check if any associated vehicle is serviced by VW-Group API
         if any('ONLINE' in car._connectivities for car in self._vehicles):
-            _LOGGER.info('Vehicle is enabled for VW-Group API, requesting VW-Group API tokens.')
+            _LOGGER.debug('Vehicle is hosted by VW-Group API, requesting VW-Group API tokens.')
             # Get VW-Group API tokens
             if not await self._getAPITokens():
                 self._session_logged_in = False
@@ -170,7 +201,7 @@ class Connection:
 
         # Check if any associated vehicle is a SmartLink vehicle
         if any('INCAR' in car._connectivities for car in self._vehicles):
-            _LOGGER.info('Vehicle has SmartLink enabled, requesting SmartLink tokens')
+            _LOGGER.debug('Vehicle has SmartLink enabled, requesting SmartLink tokens')
             # Get SmartLink tokens
             if not await self._login('smartlink'):
                 _LOGGER.info('Something failed')
@@ -295,8 +326,9 @@ class Connection:
             try:
                 response_data = await req.text()
                 responseSoup = BeautifulSoup(response_data, 'html.parser')
-                for t in responseSoup.find('form', id='credentialsForm').find_all('input', type='hidden'):
-                    _LOGGER.debug(f'Found item: {t["name"], t["value"]}')
+                if self._session_fulldebug:
+                    for t in responseSoup.find('form', id='credentialsForm').find_all('input', type='hidden'):
+                        _LOGGER.debug(f'Extracted form attribute: {t["name"], t["value"]}')
                 pwform = dict([(t['name'],t['value']) for t in responseSoup.find('form', id='credentialsForm').find_all('input', type='hidden')])
                 pwform['password'] = self._session_auth_password
                 pw_url = authissuer+responseSoup.find('form', id='credentialsForm').get('action')
@@ -330,16 +362,13 @@ class Connection:
                         error = parse_qs(urlparse(ref).query).get('error', '')[0]
                         if error == 'login.error.throttled':
                             timeout = parse_qs(urlparse(ref).query).get('enableNextButtonAfterSeconds', '')[0]
-                            _LOGGER.warning(f'Login failed, login is disabled for another {timeout} seconds')
                             raise SkodaAccountLockedException(f'Account is locked for another {timeout} seconds')
                         elif error == 'login.errors.password_invalid':
-                            _LOGGER.warning(f'Login failed, invalid password')
                             raise SkodaAuthenticationException('Invalid credentials')
                         else:
                             _LOGGER.warning(f'Login failed: {error}')
                         raise SkodaLoginFailedException(error)
                     if 'terms-and-conditions' in ref:
-                        _LOGGER.warning('You need to login to Skoda Connect online and accept the terms and conditions.')
                         raise SkodaEULAException('The terms and conditions must be accepted first at "https://www.skoda-connect.com/"')
                     if self._session_fulldebug:
                         _LOGGER.debug(f'Following redirect to "{ref}"')
@@ -360,7 +389,8 @@ class Connection:
             except Exception as e:
                 # If we get an unhandled exception it should be because we can't redirect to the APP_URI URL and thus we have our auth code
                 if 'code' in ref:
-                    _LOGGER.debug('Got code: %s' % ref)
+                    if self._session_fulldebug:
+                        _LOGGER.debug('Got code: %s' % ref)
                     pass
                 else:
                     _LOGGER.debug(f'Exception occured while logging in.')
@@ -396,22 +426,22 @@ class Connection:
                 else:
                     raise SkodaException(error)
             if self._session_fulldebug:
-                for token in self._session_tokens.get(client, {}):
-                    _LOGGER.debug(f'Got token {token} for client "{client}"')
+                for key in self._session_tokens.get(client, {}):
+                    _LOGGER.debug(f'Got {key} for client "{client}"')
             if not await self.verify_tokens(self._session_tokens[client].get('id_token', ''), client=client):
                 _LOGGER.warning(f'Token for {client} could not be verified!')
             else:
                 _LOGGER.debug(f'Token for {client} verified OK.')
         except (SkodaEULAException):
-            _LOGGER.info('Login failed, the terms and conditions might have been updated and need to be accepted. Login to https://www.skoda-connect.com and accept the new terms before trying again')
+            _LOGGER.warning('Login failed, the terms and conditions might have been updated and need to be accepted. Login to https://www.skoda-connect.com and accept the new terms before trying again')
             self._session_logged_in = False
             raise
         except (SkodaAccountLockedException):
-            _LOGGER.info('Your account is locked, probably because of too many incorrect login attempts. Make sure that your account is not in use somewhere with incorrect password')
+            _LOGGER.warning('Your account is locked, probably because of too many incorrect login attempts. Make sure that your account is not in use somewhere with incorrect password')
             self._session_logged_in = False
             raise
         except (SkodaAuthenticationException):
-            _LOGGER.info('Invalid credentials or invalid configuration. Make sure you have entered the correct credentials')
+            _LOGGER.warning('Invalid credentials or invalid configuration. Make sure you have entered the correct credentials')
             self._session_logged_in = False
             raise
         except (SkodaException):
@@ -1123,11 +1153,12 @@ class Connection:
         try:
             # First get most recent departuretimer settings from server
             departuretimers = await self.getDeparturetimer(vin)
-            timer = departuretimers.get('departuretimers', {}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', [])
-            profile = departuretimers.get('departuretimers', {}).get('timersAndProfiles', {}).get('timerProfileList', {}).get('timerProfile', [])
-            setting = departuretimers.get('departuretimers', {}).get('timersAndProfiles', {}).get('timerBasicSetting', [])
+            timer = departuretimers.get('departuretimer', {}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', [])
+            profile = departuretimers.get('departuretimer', {}).get('timersAndProfiles', {}).get('timerProfileList', {}).get('timerProfile', [])
+            setting = departuretimers.get('departuretimer', {}).get('timersAndProfiles', {}).get('timerBasicSetting', [])
 
             # Construct Timer data
+            _LOGGER.debug('Preparing timer data structure')
             timers = [{},{},{}]
             for i in range(0, 3):
                 timers[i]['currentCalendarProvider'] = {}
@@ -1143,6 +1174,7 @@ class Connection:
                 actiontype = 'setChargeMinLimit'
                 setting['chargeMinLimit'] = int(data.get('limit', 50))
             # Modify timers if action is on, off or schedule
+            _LOGGER.debug('Preparing timer data')
             elif data.get('action', None) in ['on', 'off', 'schedule']:
                 actiontype = 'setTimersAndProfiles'
                 timerid = int(data.get('id'))-1 if data.get('id', False) else 0
@@ -1172,6 +1204,7 @@ class Connection:
                 raise SkodaException('Unknown action for departure timer')
 
             # Construct Profiles data
+            _LOGGER.debug('Preparing profile data structure')
             profiles = [{},{},{}]
             for i in range(0, 3):
                 for key in profile[i]:
@@ -1180,6 +1213,7 @@ class Connection:
                         profiles[i][key] = profile[i][key]
 
             # Construct basic settings
+            _LOGGER.debug('Preparing profile data')
             settings = {
                 'chargeMinLimit': int(setting['chargeMinLimit']),
                 'heaterSource': 'electric',
@@ -1351,19 +1385,28 @@ class Connection:
         """Function to validate expiry of tokens."""
         now = datetime.now()
         later = now + self._session_refresh_interval
+        if self._session_fulldebug:
+            _LOGGER.debug(f'Verifying that tokens are valid now ({now}) and at least until next poll ({later})')
+
         # Prepare identity token
         idtoken = self._session_tokens['connect'].get('id_token', '')
         id_exp = jwt.decode(idtoken, verify=False).get('exp', None)
         id_dt = datetime.fromtimestamp(int(id_exp))
+        if self._session_fulldebug:
+            _LOGGER.debug(f'Identity token for "connect" client are valid until {id_dt}')
         # Prepare Skoda token
         stoken = self._session_tokens['skoda'].get('id_token', '')
         st_exp = jwt.decode(stoken, verify=False).get('exp', None)
         st_dt = datetime.fromtimestamp(int(st_exp))
+        if self._session_fulldebug:
+            _LOGGER.debug(f'Identity token for "skoda" client are valid until {id_dt}')
         # Prepare vwg acess token, if exists
         if self._session_tokens.get('vwg', False):
             atoken = self._session_tokens['vwg'].get('access_token', '')
             at_exp = jwt.decode(atoken, verify=False).get('exp', None)
             at_dt = datetime.fromtimestamp(int(at_exp))
+            if self._session_fulldebug:
+                _LOGGER.debug(f'Access token for "vwg" client are valid until {at_dt}')
         else:
             at_dt = later + self._session_refresh_interval
         # Prepare smartlink acess token, if exists
@@ -1371,6 +1414,8 @@ class Connection:
             sltoken = self._session_tokens['smartlink'].get('access_token', '')
             slt_exp = jwt.decode(sltoken, verify=False).get('exp', None)
             slt_dt = datetime.fromtimestamp(int(slt_exp))
+            if self._session_fulldebug:
+                _LOGGER.debug(f'Access token for "smartlink" client are valid until {slt_dt}')
         else:
             slt_dt = later + self._session_refresh_interval
 
@@ -1383,7 +1428,7 @@ class Connection:
                 return False
         # Check if tokens expires before next update
         elif later >= id_dt or later >= st_dt or later >= at_dt or later >= slt_dt:
-            _LOGGER.debug('Tokens about to expire. Try to fetch new tokens.')
+            _LOGGER.debug('Tokens will expire before next poll. Try to fetch new tokens.')
             if await self.refresh_tokens():
                 _LOGGER.debug('Successfully refreshed tokens')
             else:
@@ -1420,7 +1465,7 @@ class Connection:
                 token_kid = 'VWGMBB01DELIV1.' + token_kid
 
             pubkey = pubkeys[token_kid]
-            _LOGGER.debug(f'Attempting to verify token for client {client}. Token: {token}, pubkey: {pubkey}, audience: {audience}')
+            _LOGGER.debug(f'Attempting to verify token for client "{client}"". Token audience: {audience}')
             payload = jwt.decode(token, key=pubkey, algorithms=['RS256'], audience=audience)
             return True
         except Exception as error:
