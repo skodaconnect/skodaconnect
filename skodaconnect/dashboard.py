@@ -2,6 +2,7 @@
 # Thanks to molobrakos
 
 import logging
+from datetime import datetime
 from skodaconnect.utilities import camel2slug
 
 _LOGGER = logging.getLogger(__name__)
@@ -291,7 +292,7 @@ class Position(Instrument):
         return (
             state.get("lat", "?"),
             state.get("lng", "?"),
-            str(ts.astimezone(tz=None)) if ts else None,
+            str(datetime.strptime(ts,'%Y-%m-%dT%H:%M:%SZ').astimezone(tz=None)) if ts else None,
         )
 
 
