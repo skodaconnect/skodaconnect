@@ -496,13 +496,15 @@ class Vehicle:
         else:
             raise SkodaInvalidRequestException('Departure timers are not supported.')
 
-    async def set_timer_schedule(self, id=1, schedule={}):
+    async def set_timer_schedule(self, id, schedule={}):
         """ Set departure schedules. """
         data = {}
         # Validate required user inputs
         supported = 'is_departure' + str(id) + "_supported"
         if getattr(self, supported) is not True:
             raise SkodaConfigException(f'Timer id "{id}" is not supported for this vehicle.')
+        else:
+            _LOGGER.debug(f'Timer id {id} is supported')
         if not schedule:
             raise SkodaInvalidRequestException('A schedule must be set.')
         if not isinstance(schedule.get('enabled', ''), bool):
@@ -629,6 +631,7 @@ class Vehicle:
             data['temp'] = 2930
 
         try:
+            _LOGGER.debug(f'Set departure timer {data.get("schedule", {}).get("id", None)}')
             self._requests['latest'] = 'Departuretimer'
             response = await self._connection.setDeparturetimer(self.vin, data, spin=False)
             if not response:
@@ -2070,12 +2073,20 @@ class Vehicle:
         """Return timer status and attributes."""
         if self.attrs.get('departuretimer', False):
             try:
-                response = self.attrs.get('departuretimer', {}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', False)
-                timer = response[0]
+                data = {}
+                timerdata = self.attrs.get('departuretimer', {}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', [])
+                profiledata = self.attrs.get('departuretimer', {}).get('timersAndProfiles', {}).get('timerProfileList', {}).get('timerProfile', [])
+                timer = timerdata[0]
+                profile = profiledata[0]
                 timer.pop('timestamp', None)
                 timer.pop('timerID', None)
                 timer.pop('profileID', None)
-                return timer
+                profile.pop('timestamp', None)
+                profile.pop('profileName', None)
+                profile.pop('profileID', None)
+                data.update(timer)
+                data.update(profile)
+                return data
             except:
                 pass
         elif self.attrs.get('timers', False):
@@ -2106,12 +2117,20 @@ class Vehicle:
         """Return timer status and attributes."""
         if self.attrs.get('departuretimer', False):
             try:
-                response = self.attrs.get('departuretimer', {}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', False)
-                timer = response[1]
+                data = {}
+                timerdata = self.attrs.get('departuretimer', {}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', [])
+                profiledata = self.attrs.get('departuretimer', {}).get('timersAndProfiles', {}).get('timerProfileList', {}).get('timerProfile', [])
+                timer = timerdata[1]
+                profile = profiledata[1]
                 timer.pop('timestamp', None)
                 timer.pop('timerID', None)
                 timer.pop('profileID', None)
-                return timer
+                profile.pop('timestamp', None)
+                profile.pop('profileName', None)
+                profile.pop('profileID', None)
+                data.update(timer)
+                data.update(profile)
+                return data
             except:
                 pass
         elif self.attrs.get('timers', False):
@@ -2142,12 +2161,20 @@ class Vehicle:
         """Return timer status and attributes."""
         if self.attrs.get('departuretimer', False):
             try:
-                response = self.attrs.get('departuretimer', {}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', False)
-                timer = response[2]
+                data = {}
+                timerdata = self.attrs.get('departuretimer', {}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', [])
+                profiledata = self.attrs.get('departuretimer', {}).get('timersAndProfiles', {}).get('timerProfileList', {}).get('timerProfile', [])
+                timer = timerdata[2]
+                profile = profiledata[2]
                 timer.pop('timestamp', None)
                 timer.pop('timerID', None)
                 timer.pop('profileID', None)
-                return timer
+                profile.pop('timestamp', None)
+                profile.pop('profileName', None)
+                profile.pop('profileID', None)
+                data.update(timer)
+                data.update(profile)
+                return data
             except:
                 pass
         elif self.attrs.get('timers', False):

@@ -1149,7 +1149,6 @@ class Connection:
 
     async def setDeparturetimer(self, vin, data, spin):
         """Set departure timers."""
-        _LOGGER.debug(f"Set timers with data {data}")
         try:
             # First get most recent departuretimer settings from server
             departuretimers = await self.getDeparturetimer(vin)
@@ -1158,7 +1157,6 @@ class Connection:
             setting = departuretimers.get('departuretimer', {}).get('timersAndProfiles', {}).get('timerBasicSetting', [])
 
             # Construct Timer data
-            _LOGGER.debug('Preparing timer data structure')
             timers = [{},{},{}]
             for i in range(0, 3):
                 timers[i]['currentCalendarProvider'] = {}
@@ -1170,14 +1168,14 @@ class Connection:
                     timers[i]['departureTimeOfDay'] = '00:00'
 
             # Set charger minimum limit if action is chargelimit
-            _LOGGER.debug('Preparing timer data')
             if data.get('action', None) == 'chargelimit' :
                 actiontype = 'setChargeMinLimit'
                 setting['chargeMinLimit'] = int(data.get('limit', 50))
             # Modify timers if action is on, off or schedule
             elif data.get('action', None) in ['on', 'off', 'schedule']:
                 actiontype = 'setTimersAndProfiles'
-                timerid = int(data.get('id'))-1 if data.get('id', False) else 0
+                timerid = int(data.get('id', data.get('schedule', {}).get('id', 1)))-1
+
                 # Set timer programmed status if data contains action = on or off
                 if data.get('action', None) in ['on', 'off']:
                     action = 'programmed' if data.get('action', False) == 'on' else 'notProgrammed'
@@ -1204,7 +1202,6 @@ class Connection:
                 raise SkodaException('Unknown action for departure timer')
 
             # Construct Profiles data
-            _LOGGER.debug('Preparing profile data structure')
             profiles = [{},{},{}]
             for i in range(0, 3):
                 for key in profile[i]:
@@ -1213,7 +1210,6 @@ class Connection:
                         profiles[i][key] = profile[i][key]
 
             # Construct basic settings
-            _LOGGER.debug('Preparing profile data')
             settings = {
                 'chargeMinLimit': int(setting['chargeMinLimit']),
                 'heaterSource': 'electric',
@@ -1233,7 +1229,6 @@ class Connection:
                     'type': actiontype
                 }
             }
-            _LOGGER.debug(f'POSTing the following timer data: {body}')
             await self.set_token('vwg')
             # Only get security token if auxiliary heater is to be enabled
             #if data.get... == 'auxiliary':
