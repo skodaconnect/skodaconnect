@@ -297,7 +297,7 @@ class Vehicle:
             if status == 'In progress':
                 self._requests['state'] = 'In progress'
                 time.sleep(5)
-                return await self.wait_for_request(section, request)
+                return await self.wait_for_request(section, request, retryCount)
             else:
                 self._requests['state'] = status
                 return status
