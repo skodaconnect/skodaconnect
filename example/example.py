@@ -41,8 +41,8 @@ RESOURCES = [
 		"charge_max_ampere",
 		"charger_action_status",
 		"charging",
-                "charge_rate",
-                "charging_power",
+        "charge_rate",
+        "charging_power",
 		"charging_cable_connected",
 		"charging_cable_locked",
 		"charging_time_left",
@@ -51,9 +51,9 @@ RESOURCES = [
 		"climatisation_without_external_power",
 		"combined_range",
 		"combustion_range",
-                "departure1",
-                "departure2",
-                "departure3",
+        "departure1",
+        "departure2",
+        "departure3",
 		"distance",
 		"door_closed_left_back",
 		"door_closed_left_front",
@@ -103,7 +103,7 @@ RESOURCES = [
 		"window_closed_right_front",
 		"window_heater",
 		"windows_closed",
-                "seat_heating"
+        "seat_heating"
 ]
 
 def is_enabled(attr):
@@ -124,6 +124,8 @@ async def main():
         if await connection.doLogin():
             print('Login success!')
             print(datetime.now())
+            print('Fetching vehicles associated with account.')
+            await connection.get_vehicles()
 
             instruments = set()
             for vehicle in connection.vehicles:
@@ -168,23 +170,25 @@ async def main():
         print('########################################')
         print('#      Instruments from dashboard      #')
         print('########################################')
-        for instrument in instruments:
+        inst_list = sorted(instruments, key=lambda x: x.attr)
+        for instrument in inst_list:
             print(f'{instrument.full_name} - ({instrument.attr})')
             print(f'\tstr_state: {instrument.str_state} - state: {instrument.state}')
             print(f'\tattributes: {instrument.attributes}')
             print("")
 
-        # Sleep for a given ammount of time and update all vehicles
         print('')
         print(f"Sleeping for {INTERVAL} seconds")
         time.sleep(INTERVAL)
 
         print('')
+        print(datetime.now())
+        print('')
         print('########################################')
         print('#    Updating all values from Skoda    #')
         print('########################################')
         print("Updating ALL values from Skoda Connect...")
-        if await connection.update():
+        if await connection.update_all():
             print("Success!")
         else:
             print("Failed")
@@ -196,6 +200,8 @@ async def main():
 
         for vehicle in connection.vehicles:
             txt = vehicle.vin
+            print('')
+            print(datetime.now())
             print('')
             print('########################################')
             print('#          Update charger data         #')
