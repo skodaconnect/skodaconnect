@@ -26,16 +26,13 @@ class Vehicle:
     def __init__(self, conn, data):
         _LOGGER.debug(f'Creating Vehicle class object with data {data}')
         self._connection = conn
-        #self._url = url
         self._url = data.get('vin', '')
         self._connectivities = data.get('connectivities', '')
         self._capabilities = data.get('capabilities', [])
         self._specification = data.get('specification', {})
-        self._nickname = data.get('nickname', None)
-        self._deactivated = data.get('deactivated', None)
         self._homeregion = 'https://msg.volkswagen.de'
         self._discovered = False
-        self._states = {}
+
         self._requests = {
             'departuretimer': {'status': '', 'timestamp': datetime.now()},
             'batterycharge': {'status': '', 'timestamp': datetime.now()},
@@ -52,12 +49,7 @@ class Vehicle:
 
         # API Endpoints that might be enabled for car (that we support)
         self._services = {}
-        # SmartLink connectivity is enabled
-        if 'INCAR' in self._connectivities:
-            self._services.update({
-                'vehicle_status': {'active': True}
-            })
-        # Connect connectivity is enabled
+        # VW-Group API connectivity is enabled
         if 'ONLINE' in self._connectivities:
             self._services.update({
                 'rheating_v1': {'active': False},
@@ -70,12 +62,18 @@ class Vehicle:
                 'carfinder_v1': {'active': False},
                 'timerprogramming_v1': {'active': False},
             })
-        # New API connectivity is enabled
+        # Skoda Native API connectivity is enabled
         elif 'REMOTE' in self._connectivities:
             self._services.update({
                 'CHARGING': {'active': False},
                 'AIR_CONDITIONING': {'active': False},
             })
+        # SmartLink connectivity is enabled
+        elif 'INCAR' in self._connectivities:
+            self._services.update({
+                'vehicle_status': {'active': True}
+            })
+        # No supported connectivity types found
         else:
             self._services = {}
 
@@ -95,7 +93,7 @@ class Vehicle:
                 self.get_realcardata(),
                 return_exceptions=True
             )
-            _LOGGER.info(f'Vehicle {self.vin} added. Homeregion is "{self._homeregion}"')
+            _LOGGER.info(f'Vehicle "{self.nickname}" - ({self.vin}) added. Homeregion is "{self._homeregion}"')
 
             _LOGGER.debug('Attempting discovery of supported API endpoints for vehicle.')
             operationList = await self._connection.getOperationList(self.vin)
@@ -135,29 +133,41 @@ class Vehicle:
                 for capability in self._capabilities:
                     if capability == service:
                         self._services[service]['active'] = True
-        # For SmartLink
+        # For ONLY SmartLink capability
         elif 'INCAR' in self._connectivities:
             self._services = {'vehicle_status': {'active': True}}
         else:
             self._services = {}
         _LOGGER.debug(f'API endpoints: {self._services}')
-        self._discovered = True
+        self._discovered = datetime.now()
 
     async def update(self):
         """Try to fetch data for all known API endpoints."""
+        # Update vehicle information if not discovered or stale information
         if not self._discovered:
             await self.discover()
+        else:
+            # Rediscover if data is older than 1 hour
+            hourago = datetime.now() - timedelta(hours = 1)
+            if self._discovered < hourago:
+                await self.discover()
+
+        # Fetch all data if car is not deactivated
         if not self.deactivated:
-            await asyncio.gather(
-                self.get_preheater(),
-                self.get_climater(),
-                self.get_trip_statistic(),
-                self.get_position(),
-                self.get_statusreport(),
-                self.get_charger(),
-                self.get_timerprogramming(),
-                return_exceptions=True
-            )
+            try:
+                await asyncio.gather(
+                    self.get_preheater(),
+                    self.get_climater(),
+                    self.get_trip_statistic(),
+                    self.get_position(),
+                    self.get_statusreport(),
+                    self.get_charger(),
+                    self.get_timerprogramming(),
+                    return_exceptions=True
+                )
+            except:
+                raise SkodaException("Update failed")
+            return True
         else:
             _LOGGER.info(f'Vehicle with VIN {self.vin} is deactivated.')
             return False
@@ -293,7 +303,7 @@ class Vehicle:
             return 'Timeout'
         try:
             status = await self._connection.get_request_status(self.vin, section, request)
-            _LOGGER.debug(f'Request ID {request}: {status}')
+            _LOGGER.info(f'Request for {section} with ID {request}: {status}')
             if status == 'In progress':
                 self._requests['state'] = 'In progress'
                 await asyncio.sleep(5)
@@ -306,7 +316,7 @@ class Vehicle:
             return 'Exception'
 
   # Data set functions
-   # Charging (BATTERYCHARGE)
+   # API endpoint charging
     async def set_charger_current(self, value):
         """Set charger current"""
         if self.is_charging_supported:
@@ -368,9 +378,11 @@ class Vehicle:
                 raise SkodaRequestInProgressException('Charging action already in progress')
         # VW-Group API requests
         if self._services.get('rbatterycharge_v1', False):
-            if action in ['start', 'stop']:
-                data = {'action': {'type': action.lower()}}
-            elif action.get('action', {}).get('type', '') == 'setSettings':
+            if action in ['start', 'Start', 'On', 'on']:
+                data = {'action': {'type': 'start'}}
+            elif action in ['stop', 'Stop', 'Off', 'off']:
+                data = {'action': {'type': 'stop'}}
+            elif isinstance(action.get('action', None), dict):
                 data = action
             else:
                 _LOGGER.error(f'Invalid charger action: {action}. Must be either start, stop or setSettings')
@@ -425,7 +437,7 @@ class Vehicle:
             self._requests['batterycharge'] = {'status': 'Exception'}
             raise SkodaException(f'Failed to execute set charger - {error}')
 
-   # Departure timers
+   # API endpoint departuretimer
     async def set_charge_limit(self, limit=50):
         """ Set charging limit. """
         if not self._services.get('timerprogramming_v1', False) and not self._services.get('CHARGING', False):
@@ -562,6 +574,7 @@ class Vehicle:
                 else:
                     raise SkodaInvalidRequestException('Invalid type for charge max current variable')
             # Prepare data and execute
+            data['id'] = id
             data['action'] = 'schedule'
             data['schedule'] = schedule
             return await self._set_timers(data)
@@ -631,7 +644,6 @@ class Vehicle:
             data['temp'] = 2930
 
         try:
-            _LOGGER.debug(f'Set departure timer {data.get("schedule", {}).get("id", None)}')
             self._requests['latest'] = 'Departuretimer'
             response = await self._connection.setDeparturetimer(self.vin, data, spin=False)
             if not response:
@@ -1045,21 +1057,30 @@ class Vehicle:
   # Car information
     @property
     def nickname(self):
-        return self._nickname
+        for car in self.attrs.get('realCars', []):
+            if self.vin == car.get('vehicleIdentificationNumber', ''):
+                return car.get('nickname', None)
+        #return self._nickname
 
     @property
     def is_nickname_supported(self):
-        if self._nickname is not None:
-            return True
+        for car in self.attrs.get('realCars', []):
+            if self.vin == car.get('vehicleIdentificationNumber', ''):
+                if car.get('nickname', False):
+                    return True
 
     @property
     def deactivated(self):
-        return self._deactivated
+        for car in self.attrs.get('realCars', []):
+            if self.vin == car.get('vehicleIdentificationNumber', ''):
+                return car.get('deactivated', False)
 
     @property
     def is_deactivated_supported(self):
-        if self._deactivated is not None:
-            return True
+        for car in self.attrs.get('realCars', []):
+            if self.vin == car.get('vehicleIdentificationNumber', ''):
+                if car.get('deactivated', False):
+                    return True
 
     @property
     def model(self):
@@ -1122,7 +1143,7 @@ class Vehicle:
     def last_connected(self):
         """Return when vehicle was last connected to connect servers."""
         last_connected_utc = self.attrs.get('StoredVehicleDataResponse').get('vehicleData').get('data')[0].get('field')[0].get('tsCarSentUtc')
-        last_connected = datetime.strptime(last_connected_utc,'%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc).astimezone(tz=None)
+        last_connected = last_connected_utc.replace(tzinfo=timezone.utc).astimezone(tz=None)
         return last_connected.strftime('%Y-%m-%d %H:%M:%S')
 
     @property
@@ -1512,7 +1533,7 @@ class Vehicle:
     def parking_time(self):
         """Return timestamp of last parking time."""
         parkTime_utc = self.attrs.get('findCarResponse', {}).get('parkingTimeUTC', 'Unknown')
-        parkTime = datetime.strptime(parkTime_utc,'%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc).astimezone(tz=None)
+        parkTime = parkTime_utc.replace(tzinfo=timezone.utc).astimezone(tz=None)
         return parkTime.strftime('%Y-%m-%d %H:%M:%S')
 
     @property
@@ -1696,7 +1717,7 @@ class Vehicle:
         """Return status of auxiliary climatisation."""
         climatisation_type = self.attrs.get('climater', {}).get('settings', {}).get('heaterSource', {}).get('content', '')
         status = self.attrs.get('climater', {}).get('status', {}).get('climatisationStatusData', {}).get('climatisationState', {}).get('content', '')
-        if status in ['heating', 'cooling', 'heatingAuxiliary', 'on'] and climatisation_type == 'auxiliary':
+        if status in ['heating', 'cooling', 'ventilation', 'heatingAuxiliary', 'on'] and climatisation_type == 'auxiliary':
             return True
         elif status in ['heatingAuxiliary'] and climatisation_type == 'electric':
             return True

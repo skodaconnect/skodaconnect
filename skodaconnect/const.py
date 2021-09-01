@@ -6,10 +6,10 @@ BRAND = 'skoda'
 COUNTRY = 'CZ'
 
 # Data used in communication
-CLIENT = {
+CLIENT_LIST = {
     'connect': {
-        'CLIENT_ID':    '7f045eee-7003-4379-9968-9355ed2adb06%40apps_vw-dilab_com',     # Client ID for VW-Group Identiy services, can be used to receive VW-Group API token
-        'SCOPE':        'openid mbb profile cars address email birthdate badge phone driversLicense dealers profession vin',    # Requests to vwg-connect.com/ msg.volkswagen.de etc...
+        'CLIENT_ID':    '7f045eee-7003-4379-9968-9355ed2adb06@apps_vw-dilab_com',       # Client ID for VW-Group Identiy services, can be used to receive VW-Group API token
+        'SCOPE':        'openid profile address cars email birthdate badge mbb phone driversLicense dealers profession vin',    # Requests to vwg-connect.com/ msg.volkswagen.de etc...
         'TOKEN_TYPES':  'code id_token'                                                 # tokentype=IDK_CONNECT / MBB (API token)
     },
     'skoda': {
@@ -26,11 +26,11 @@ CLIENT = {
 
 
 
-XCLIENT_ID = '28cd30c6-dee7-4529-a0e6-b1e07ff90b79'
-#XCLIENT_ID = 'a83d7e44-c8b7-42b7-b8ca-e478270d2091'
+#XCLIENT_ID = '28cd30c6-dee7-4529-a0e6-b1e07ff90b79'
+XCLIENT_ID = 'a83d7e44-c8b7-42b7-b8ca-e478270d2091'
 XAPPVERSION = '3.2.6'
 XAPPNAME = 'cz.skodaauto.connect'
-USER_AGENT = 'okhttp/3.14.7'
+USER_AGENT = 'okhttp/3.14.9'
 APP_URI = 'skodaconnect://oidc.login/'
 
 # Used when fetching data
@@ -48,13 +48,70 @@ HEADERS_SESSION = {
 
 # Used for authentication
 HEADERS_AUTH = {
-    'Connection': 'keep-alive',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
-    'Accept-Encoding': 'gzip, deflate',
     'Content-Type': 'application/x-www-form-urlencoded',
-    'x-requested-with': XAPPNAME,
     'User-Agent': USER_AGENT,
-    'X-App-Name': XAPPNAME
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
+    'x-requested-with': XAPPNAME,
+    'Accept-Encoding': 'gzip, deflate',
+    'Connection': 'keep-alive',
+#    'X-App-Name': XAPPNAME
+}
+
+# Headers used for fetching tokens for different clients
+TOKEN_HEADERS = {
+    'vwg': {
+        'X-Client-Id': XCLIENT_ID,
+        'Accept': 'application/json',
+        'X-Platform': 'Linux',
+        #'X-Language-Id': 'XX',
+        #'X-Country-Id': 'XX',
+        #'Accept-Language': 'XX',
+        'Accept-Charset': 'UTF-8',
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Connection': 'keep-alive',
+        'Accept-Encoding': 'gzip',
+        'User-Agent': USER_AGENT,
+    },
+    'connect': {
+        'Accept': 'application/json',
+        'X-Platform': 'Linux',
+        #'X-Language-Id': 'XX',
+        #'X-Country-Id': 'XX',
+        #'Accept-Language': 'XX',
+        'Accept-Charset': 'UTF-8',
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Connection': 'keep-alive',
+        'Accept-Encoding': 'gzip',
+        'User-Agent': USER_AGENT,
+    },
+    'skoda': {
+        'Accept': 'application/json',
+        'X-Platform': 'Linux',
+        #'X-Language-Id': 'XX',
+        #'X-Country-Id': 'XX',
+        #'Accept-Language': 'XX',
+        'Accept-Charset': 'UTF-8',
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Connection': 'keep-alive',
+        'Accept-Encoding': 'gzip',
+        'User-Agent': USER_AGENT,
+    },
+    'smartlink': {
+        'Accept': 'application/json',
+        'X-Platform': 'Linux',
+        #'X-Language-Id': 'XX',
+        #'X-Country-Id': 'XX',
+        #'Accept-Language': 'XX',
+        'Accept-Charset': 'UTF-8',
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Connection': 'keep-alive',
+        'Accept-Encoding': 'gzip',
+        'User-Agent': USER_AGENT,
+    }
+}
+
+ERROR_CODES = {
+    '11': 'Charger not connected'
 }
 
 # API AUTH endpoints

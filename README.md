@@ -2,7 +2,7 @@
 ![PyPi](https://img.shields.io/pypi/v/skodaconnect?label=latest%20pypi)
 ![Downloads PyPi](https://img.shields.io/pypi/dm/skodaconnect)
 
-# Skoda Connect v1.0.52
+# Skoda Connect v1.1.0
 Fork of https://github.com/robinostlund/volkswagencarnet where it was modified to support also Skoda Connect.
 Changes made to utilize the same API calls as the MySkoda mobile app.
 
@@ -17,6 +17,8 @@ Retrieve statistics about your Skoda from the Skoda Connect online service.
 No licence, public domain, no guarantees, feel free to use for anything. Please contribute improvements/bugfixes etc.
 
 ## Breaking changes
+
+- **From version 1.1.0** and onwards there has been changes to token handling, login procedure and overall mode streamlined code.
 
 - **From version 1.0.40** and onwards there has been changes to Skoda API and this might break the integration for some cars.
 
@@ -48,8 +50,9 @@ $ pip install skodaconnect
 ### Example
 
 For an extensive example, please use the code found in example/example.py.
-When logged in the library will automatically create a vehicle object for every car registered to the account. Initially no data is fetched other than basic information about the car.
-To update all available data use the update method of the Connect class. This will call the update function for all registered vehicles, which in turn will fetch data from all available API endpoints.
+When logged in the library will automatically create a vehicle object for every car registered to the account. Initially no data is fetched at all. Use the doLogin method and it will signin with the credentials used for the class constructor.
+Method get_vehicles will fetch vehicle basic information and create Vehicle class objects for all associated vehicles in account.
+To update all available data use the update_all method of the Connect class. This will call the update function for all registered vehicles, which in turn will fetch data from all available API endpoints.
 
 #### Attributes
 The Vehicle class contains all of the attributes with values fetched from the API.
@@ -78,12 +81,15 @@ Connection:
 ```
 session = aiohttp.ClientSession(headers={'Connection': 'keep-alive'})   # Create a aiohttp session object
 conn = Connection(session, username, password, fulldebug)               #
-conn._login()                                                           # Attempt a login, returns true/false, variable conn._session_logged_in will tell if logged in or not
-conn.update()                                                           # Calls update for all vehicle objects
-conn.logout()                                                           # Logout from API, call for revoke of tokens
-conn.terminate()                                                        # Terminate session, calls logout()
-conn.validate_tokens()                                                  # Checks if tokens are OK, trys a refresh if expired
+conn.doLogin()                                                         # Attempt a login, returns true/false, variable conn.
+conn.get_vehicles()                                                     # Attempts to fetch all vehicles associated to account.
+conn.update_all()                                                       # Calls update for all vehicle objects.
+conn.logout()                                                           # Logout from API, call for revoke of tokens.
+conn.terminate()                                                        # Terminate session, calls logout().
+conn.get<method>                                                        # The get methods calls on API endpoints and returns data. See example.
+conn.set<method>                                                        # The set methods calls on API endpoints to set config for vehicle.
 ```
+Refrain from using methods starting with _, they are intended for internal use only.
 
 ## Further help or contributions
 For questions, further help or contributions you can join the Discord server at https://discord.gg/826X9jEtCh

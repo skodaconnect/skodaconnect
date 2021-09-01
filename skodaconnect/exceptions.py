@@ -77,3 +77,11 @@ class SkodaRequestInProgressException(Exception):
         """Initialize exception"""
         super(SkodaRequestInProgressException, self).__init__(status)
         self.status = status
+
+class SkodaServiceUnavailable(Exception):
+    """Raised when a API is unavailable"""
+
+    def __init__(self, status):
+        """Initialize exception"""
+        super(SkodaServiceUnavailable, self).__init__(status)
+        self.status = status
