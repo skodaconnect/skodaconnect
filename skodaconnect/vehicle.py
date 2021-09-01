@@ -32,6 +32,7 @@ class Vehicle:
         self._specification = data.get('specification', {})
         self._homeregion = 'https://msg.volkswagen.de'
         self._discovered = False
+        self._states = {}
 
         self._requests = {
             'departuretimer': {'status': '', 'timestamp': datetime.now()},
