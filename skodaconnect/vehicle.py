@@ -296,7 +296,7 @@ class Vehicle:
             _LOGGER.debug(f'Request ID {request}: {status}')
             if status == 'In progress':
                 self._requests['state'] = 'In progress'
-                time.sleep(5)
+                await asyncio.sleep(5)
                 return await self.wait_for_request(section, request)
             else:
                 self._requests['state'] = status
