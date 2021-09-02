@@ -1382,15 +1382,17 @@ class Connection:
             now = datetime.now()
             # Try old pyJWT syntax first
             try:
-                expires = jwt.decode(token, verify=False).get('exp', None)
+                exp = jwt.decode(token, verify=False).get('exp', None)
             except:
-                expires = None
+                exp = None
             # Try new pyJWT syntax if old fails
-            if expires is None:
+            if exp is None:
                 try:
-                    expires = jwt.decode(token, options={'verify_signature': False}).get('exp', None)
+                    exp = jwt.decode(token, options={'verify_signature': False}).get('exp', None)
                 except:
                     raise Exception("Could not extract exp attribute")
+
+            expires = datetime.fromtimestamp(int(exp))
 
             # Lazy check but it's very inprobable that the token expires the very second we want to use it
             if expires > now:
