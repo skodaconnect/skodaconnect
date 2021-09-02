@@ -1144,7 +1144,10 @@ class Vehicle:
     def last_connected(self):
         """Return when vehicle was last connected to connect servers."""
         last_connected_utc = self.attrs.get('StoredVehicleDataResponse').get('vehicleData').get('data')[0].get('field')[0].get('tsCarSentUtc')
-        last_connected = last_connected_utc.replace(tzinfo=timezone.utc).astimezone(tz=None)
+        if isinstance(last_connected_utc, datetime):
+            last_connected = last_connected_utc.replace(tzinfo=timezone.utc).astimezone(tz=None)
+        else:
+            last_connected = datetime.strptime(last_connected_utc,'%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc).astimezone(tz=None)
         return last_connected.strftime('%Y-%m-%d %H:%M:%S')
 
     @property
@@ -1534,7 +1537,10 @@ class Vehicle:
     def parking_time(self):
         """Return timestamp of last parking time."""
         parkTime_utc = self.attrs.get('findCarResponse', {}).get('parkingTimeUTC', 'Unknown')
-        parkTime = parkTime_utc.replace(tzinfo=timezone.utc).astimezone(tz=None)
+        if isinstance(parkTime_utc, datetime):
+            parkTime = parkTime_utc.replace(tzinfo=timezone.utc).astimezone(tz=None)
+        else:
+            parkTime = datetime.strptime(parkTime_utc,'%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc).astimezone(tz=None)
         return parkTime.strftime('%Y-%m-%d %H:%M:%S')
 
     @property

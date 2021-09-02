@@ -289,10 +289,16 @@ class Position(Instrument):
     def str_state(self):
         state = super().state #or {}
         ts = state.get("timestamp", None)
+        if isinstance(ts, str):
+            time = str(datetime.strptime(ts,'%Y-%m-%dT%H:%M:%SZ').astimezone(tz=None))
+        elif isinstance(ts, datetime):
+            time = str(ts.astimezone(tz=None))
+        else:
+            time = None
         return (
             state.get("lat", "?"),
             state.get("lng", "?"),
-            str(datetime.strptime(ts,'%Y-%m-%dT%H:%M:%SZ').astimezone(tz=None)) if ts else None,
+            time,
         )
 
 
