@@ -3,4 +3,4 @@ beautifulsoup4
 cryptography
 lxml
 pytest-asyncio
-pyjwt==1.7.1
+pyjwt

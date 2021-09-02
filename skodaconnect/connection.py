@@ -684,7 +684,18 @@ class Connection:
         try:
             await self.set_token('connect')
             atoken = self._session_tokens['connect']['access_token']
-            subject = jwt.decode(atoken, verify=False).get('sub', None)
+            # Try old pyJWT syntax first
+            try:
+                subject = jwt.decode(atoken, verify=False).get('sub', None)
+            except:
+                subject = None
+            # Try new pyJWT syntax if old fails
+            if subject is None:
+                try:
+                    exp = jwt.decode(atoken, options={'verify_signature': False}).get('sub', None)
+                except:
+                    raise Exception("Could not extract sub attribute from token")
+
             data = {'scopeId': 'commonMandatoryFields'}
             response = await self.post(f'https://profileintegrityservice.apps.emea.vwapps.io/iaa/pic/v1/users/{subject}/check-profile', json=data)
             if response.get('mandatoryConsentInfo', False):
@@ -706,7 +717,18 @@ class Connection:
             await self.set_token('connect')
             _LOGGER.debug("Attempting extraction of jwt subject from identity token.")
             atoken = self._session_tokens['connect']['access_token']
-            subject = jwt.decode(atoken, verify=False).get('sub', None)
+            # Try old pyJWT syntax first
+            try:
+                subject = jwt.decode(atoken, verify=False).get('sub', None)
+            except:
+                subject = None
+            # Try new pyJWT syntax if old fails
+            if subject is None:
+                try:
+                    subject = jwt.decode(atoken, options={'verify_signature': False}).get('sub', None)
+                except:
+                    raise Exception("Could not extract sub attribute from token")
+
             response = await self.get(
                 f'https://customer-profile.apps.emea.vwapps.io/v2/customers/{subject}/realCarData'
             )
@@ -1358,8 +1380,17 @@ class Connection:
         """Function to validate a single token."""
         try:
             now = datetime.now()
-            exp = jwt.decode(token, verify=False).get('exp', None)
-            expires = datetime.fromtimestamp(int(exp))
+            # Try old pyJWT syntax first
+            try:
+                exp = jwt.decode(token, verify=False).get('exp', None)
+            except:
+                exp = None
+            # Try new pyJWT syntax if old fails
+            if exp is None:
+                try:
+                    exp = jwt.decode(token, options={'verify_signature': False}).get('exp', None)
+                except:
+                    raise Exception("Could not extract exp attribute")
 
             # Lazy check but it's very inprobable that the token expires the very second we want to use it
             if expires > now:
@@ -1374,15 +1405,26 @@ class Connection:
         """Function to verify a single token."""
         try:
             req = None
-            audience = jwt.decode(token, verify=False).get('aud', '')
-            if not isinstance(audience, str):
-                audience = next(iter(audience))
-            _LOGGER.debug(f"Verifying token for {audience}")
+            # Try old pyJWT syntax first
+            try:
+                aud = jwt.decode(token, verify=False).get('aud', None)
+            except:
+                aud = None
+            # Try new pyJWT syntax if old fails
+            if aud is None:
+                try:
+                    aud = jwt.decode(token, options={'verify_signature': False}).get('aud', None)
+                except:
+                    raise Exception("Could not extract exp attribute")
+
+            if not isinstance(aud, str):
+                aud = next(iter(aud))
+            _LOGGER.debug(f"Verifying token for {aud}")
             # If audience indicates a client from https://identity.vwgroup.io
             for client in CLIENT_LIST:
                 if self._session_fulldebug:
-                    _LOGGER.debug(f"Matching {audience} against {CLIENT_LIST[client].get('CLIENT_ID', '')}")
-                if audience == CLIENT_LIST[client].get('CLIENT_ID', ''):
+                    _LOGGER.debug(f"Matching {aud} against {CLIENT_LIST[client].get('CLIENT_ID', '')}")
+                if aud == CLIENT_LIST[client].get('CLIENT_ID', ''):
                     req = await self._session.get(url = 'https://identity.vwgroup.io/oidc/v1/keys')
                     break
 
@@ -1408,12 +1450,12 @@ class Connection:
             pubkey = pubkeys[token_kid]
 
             # Verify token with public key
-            if jwt.decode(token, key=pubkey, algorithms=['RS256'], audience=audience):
+            if jwt.decode(token, key=pubkey, algorithms=['RS256'], audience=aud):
                 return True
         except ExpiredSignatureError:
             return False
         except Exception as error:
-            _LOGGER.debug(f'Failed to verify {audience} token, error: {error}')
+            _LOGGER.debug(f'Failed to verify {aud} token, error: {error}')
             return error
 
     async def refresh_token(self, client):
