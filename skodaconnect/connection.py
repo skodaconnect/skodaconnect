@@ -1382,13 +1382,13 @@ class Connection:
             now = datetime.now()
             # Try old pyJWT syntax first
             try:
-                exp = jwt.decode(token, verify=False).get('exp', None)
+                expires = jwt.decode(token, verify=False).get('exp', None)
             except:
-                exp = None
+                expires = None
             # Try new pyJWT syntax if old fails
-            if exp is None:
+            if expires is None:
                 try:
-                    exp = jwt.decode(token, options={'verify_signature': False}).get('exp', None)
+                    expires = jwt.decode(token, options={'verify_signature': False}).get('exp', None)
                 except:
                     raise Exception("Could not extract exp attribute")
 
