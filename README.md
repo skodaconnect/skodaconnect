@@ -18,7 +18,7 @@ No licence, public domain, no guarantees, feel free to use for anything. Please 
 
 ## Breaking changes
 
-- **From version 1.1.0** and onwards there has been changes to token handling, login procedure and overall mode streamlined code.
+- **From version 1.1.0** and onwards there has been changes to token handling, login procedure and overall mode streamlined code. Logins should now be significantly faster and reliable.
 
 - **From version 1.0.40** and onwards there has been changes to Skoda API and this might break the integration for some cars.
 

@@ -15,15 +15,15 @@ sys.path.insert(0, parentdir)
 
 try:
     from skodaconnect import Connection
-except ModuleNotFoundError:
-    print("Unable to import library")
+except ModuleNotFoundError as e:
+    print(f"Unable to import library: {e}")
     sys.exit(1)
 
 logging.basicConfig(level=logging.DEBUG)
 
 USERNAME = 'email@domain.com'
 PASSWORD = 'password!'
-PRINTRESPONSE = True
+PRINTRESPONSE = False
 INTERVAL = 20
 
 COMPONENTS = {
@@ -79,6 +79,8 @@ RESOURCES = [
 		"position",
 		"refresh_action_status",
 		"refresh_data",
+        "request_flash",
+        "request_honkandflash",
 		"request_in_progress",
 		"request_results",
 		"requests_remaining",

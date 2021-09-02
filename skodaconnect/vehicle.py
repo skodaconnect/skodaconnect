@@ -41,6 +41,7 @@ class Vehicle:
             'air-conditioning': {'status': '', 'timestamp': datetime.now()},
             'refresh': {'status': '', 'timestamp': datetime.now()},
             'lock': {'status': '', 'timestamp': datetime.now()},
+            'honkandflash': {'status': '', 'timestamp': datetime.now()},
             'preheater': {'status': '', 'timestamp': datetime.now()},
             'remaining': -1,
             'latest': '',
@@ -962,6 +963,67 @@ class Vehicle:
             _LOGGER.warning(f'Failed to {action} vehicle - {error}')
             self._requests['lock'] = {'status': 'Exception'}
         raise SkodaException('Lock action failed')
+
+   # Honk and flash (RHF)
+    async def set_honkandflash(self, action, lat=None, lng=None):
+        """Turn on/off honk and flash."""
+        if not self._services.get('rhonk_v1', False):
+            _LOGGER.info('Remote honk and flash is not supported.')
+            raise SkodaInvalidRequestException('Remote honk and flash is not supported.')
+        if self._requests['honkandflash'].get('id', False):
+            timestamp = self._requests.get('honkandflash', {}).get('timestamp', datetime.now() - timedelta(minutes=5))
+            expired = datetime.now() - timedelta(minutes=3)
+            if expired > timestamp:
+                self._requests.get('honkandflash', {}).pop('id')
+            else:
+                raise SkodaRequestInProgressException('A honk and flash action is already in progress')
+        if action == 'flash':
+            operationCode = 'FLASH_ONLY'
+        elif action == 'honkandflash':
+            operationCode = 'HONK_AND_FLASH'
+        else:
+            raise SkodaInvalidRequestException(f'Invalid action "{action}", must be one of "flash" or "honkandflash"')
+        try:
+            # Get car position
+            if lat is None and lng is None:
+                lat = int(self.attrs.get('findCarResponse', {}).get('Position', {}).get('carCoordinate', {}).get('latitude', None))
+                lng = int(self.attrs.get('findCarResponse', {}).get('Position', {}).get('carCoordinate', {}).get('longitude', None))
+            if lat is None or lng is None:
+                raise SkodaConfigException('No location available, location information is needed for this action')
+            data = {
+                'honkAndFlashRequest': {
+                    'serviceOperationCode': operationCode,
+                    'userPosition': {
+                        'latitude': latitude,
+                        'longitude': longitude
+                    }
+                }
+            }
+            self._requests['latest'] = 'HonkAndFlash'
+            response = await self._connection.setHonkAndFlash(self.vin, data)
+            if not response:
+                self._requests['honkandflash'] = {'status': 'Failed'}
+                _LOGGER.error(f'Failed to execute honk and flash action')
+                raise SkodaException(f'Failed to execute honk and flash action')
+            else:
+                self._requests['remaining'] = response.get('rate_limit_remaining', -1)
+                self._requests['honkandflash'] = {
+                    'timestamp': datetime.now(),
+                    'status': response.get('state', 'Unknown'),
+                    'id': response.get('id', 0),
+                }
+                if response.get('state', None) == 'Throttled':
+                    status = 'Throttled'
+                else:
+                    status = await self.wait_for_request('rhf', response.get('id', 0))
+                self._requests['honkandflash'] = {'status': status}
+                return True
+        except (SkodaInvalidRequestException, SkodaException):
+            raise
+        except Exception as error:
+            _LOGGER.warning(f'Failed to {action} vehicle - {error}')
+            self._requests['honkandflash'] = {'status': 'Exception'}
+        raise SkodaException('Honk and flash action failed')
 
    # Refresh vehicle data (VSR)
     async def set_refresh(self):
@@ -2362,6 +2424,11 @@ class Vehicle:
         return self._requests.get('preheater', {}).get('status', 'None')
 
     @property
+    def honkandflash_action_status(self):
+        """Return latest status of honk and flash action request."""
+        return self._requests.get('honkandflash', {}).get('status', 'None')
+
+    @property
     def lock_action_status(self):
         """Return latest status of lock action request."""
         return self._requests.get('lock', {}).get('status', 'None')
@@ -2370,6 +2437,41 @@ class Vehicle:
     def timer_action_status(self):
         """Return latest status of lock action request."""
         return self._requests.get('departuretimer', {}).get('status', 'None')
+
+    @property
+    def refresh_data(self):
+        """Get state of data refresh"""
+        if self._requests.get('refresh', {}).get('id', False):
+            return True
+
+    @property
+    def is_refresh_data_supported(self):
+        """Data refresh is supported for Skoda Connect."""
+        if 'ONLINE' in self._connectivities:
+            return True
+
+   # Honk and flash
+    @property
+    def request_honkandflash(self):
+        """State is always False"""
+        return False
+
+    @property
+    def is_request_honkandflash_supported(self):
+        """Honk and flash is supported if service is enabled."""
+        if self._services.get('rhonk_v1', False):
+            return True
+
+    @property
+    def request_flash(self):
+        """State is always False"""
+        return False
+
+    @property
+    def is_request_flash_supported(self):
+        """Honk and flash is supported if service is enabled."""
+        if self._services.get('rhonk_v1', False):
+            return True
 
   # Requests data
     @property

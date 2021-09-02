@@ -1042,6 +1042,8 @@ class Connection:
                 url = f'fs-car/bs/$sectionId/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/timer/actions/$requestId'
             elif sectionId == 'vsr':
                 url = f'fs-car/bs/$sectionId/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/requests/$requestId/jobstatus'
+            elif sectionId == 'rhf':
+                url = f'fs-car/bs/$sectionId/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/honkAndFlash/$requestId/status'
             else:
                 url = f'fs-car/bs/$sectionId/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/requests/$requestId/status'
             url = re.sub('\$sectionId', sectionId, url)
@@ -1176,13 +1178,20 @@ class Connection:
             raise
         return False
 
-    async def setRefresh(self, vin):
-        """"Force vehicle data update."""
-        return await self._setVWAPI(f'fs-car/bs/vsr/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/requests', data=None)
-
     async def setCharger(self, vin, data):
         """Start/Stop charger."""
         return await self._setVWAPI(f'fs-car/bs/batterycharge/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/charger/actions', json = data)
+
+    async def setClimater(self, vin, data, spin):
+        """Execute climatisation actions."""
+        try:
+            # Only get security token if auxiliary heater is to be started
+            if data.get('action', {}).get('settings', {}).get('heaterSource', None) == 'auxiliary':
+                self._session_headers['X-securityToken'] = await self.get_sec_token(vin = vin, spin = spin, action = 'rclima')
+            return await self._setVWAPI(f'fs-car/bs/climatisation/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/climater/actions', json = data)
+        except:
+            raise
+        return False
 
     async def setDeparturetimer(self, vin, data, spin):
         """Set departure timers."""
@@ -1278,42 +1287,9 @@ class Connection:
             raise
         return False
 
-    async def setClimater(self, vin, data, spin):
-        """Execute climatisation actions."""
-        try:
-            # Only get security token if auxiliary heater is to be started
-            if data.get('action', {}).get('settings', {}).get('heaterSource', None) == 'auxiliary':
-                self._session_headers['X-securityToken'] = await self.get_sec_token(vin = vin, spin = spin, action = 'rclima')
-            return await self._setVWAPI(f'fs-car/bs/climatisation/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/climater/actions', json = data)
-        except:
-            raise
-        return False
-
-    async def setPreHeater(self, vin, data, spin):
-        """Petrol/diesel parking heater actions."""
-        try:
-            if 'Content-Type' in self._session_headers:
-                contType = self._session_headers['Content-Type']
-            else:
-                contType = ''
-            self._session_headers['Content-Type'] = 'application/vnd.vwg.mbb.RemoteStandheizung_v2_0_2+json'
-            if not 'quickstop' in data:
-                self._session_headers['x-mbbSecToken'] = await self.get_sec_token(vin = vin, spin = spin, action = 'heating')
-            response = await self._setVWAPI(f'fs-car/bs/rs/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/action', json = data)
-
-            # Clean up headers
-            self._session_headers.pop('x-mbbSecToken', None)
-            self._session_headers.pop('Content-Type', None)
-            if contType: self._session_headers['Content-Type'] = contType
-
-            return response
-
-        except Exception as error:
-            self._session_headers.pop('x-mbbSecToken', None)
-            self._session_headers.pop('Content-Type', None)
-            if contType: self._session_headers['Content-Type'] = contType
-            raise
-        return False
+    async def setHonkAndFlash(self, vin, data):
+        """Execute honk and flash actions."""
+        return await self._setVWAPI(f'fs-car/bs/rhf/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/honkAndFlash', json = data)
 
     async def setLock(self, vin, data, spin):
         """Remote lock and unlock actions."""
@@ -1344,6 +1320,36 @@ class Connection:
             if contType: self._session_headers['Content-Type'] = contType
             raise
         return False
+
+    async def setPreHeater(self, vin, data, spin):
+        """Petrol/diesel parking heater actions."""
+        try:
+            if 'Content-Type' in self._session_headers:
+                contType = self._session_headers['Content-Type']
+            else:
+                contType = ''
+            self._session_headers['Content-Type'] = 'application/vnd.vwg.mbb.RemoteStandheizung_v2_0_2+json'
+            if not 'quickstop' in data:
+                self._session_headers['x-mbbSecToken'] = await self.get_sec_token(vin = vin, spin = spin, action = 'heating')
+            response = await self._setVWAPI(f'fs-car/bs/rs/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/action', json = data)
+
+            # Clean up headers
+            self._session_headers.pop('x-mbbSecToken', None)
+            self._session_headers.pop('Content-Type', None)
+            if contType: self._session_headers['Content-Type'] = contType
+
+            return response
+
+        except Exception as error:
+            self._session_headers.pop('x-mbbSecToken', None)
+            self._session_headers.pop('Content-Type', None)
+            if contType: self._session_headers['Content-Type'] = contType
+            raise
+        return False
+
+    async def setRefresh(self, vin):
+        """"Force vehicle data update."""
+        return await self._setVWAPI(f'fs-car/bs/vsr/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/requests', data=None)
 
    # Skoda native API request methods
     async def _setSkodaAPI(self, endpoint, vin, data):
