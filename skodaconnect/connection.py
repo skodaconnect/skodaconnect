@@ -109,6 +109,13 @@ class Connection:
         """Login method, clean login"""
         _LOGGER.info('Initiating new login')
 
+        if len(self._session_tokens) > 0:
+            _LOGGER.info('Revoking old tokens.')
+            try:
+                await self.logout()
+            except:
+                pass
+
         # Remove cookies and re-init session
         self._clear_cookies()
         self._vehicles.clear()
@@ -261,8 +268,12 @@ class Connection:
                 if req.status >= 500:
                     raise SkodaServiceUnavailable(f'API returned HTTP status {req.status}')
                 raise SkodaException(f'Token exchange failed. Request status: {req.status}')
-            # Save tokens according to requested client
-            self._session_tokens[client] = await req.json()
+            # Save access, identity and refresh tokens according to requested client
+            token_data = await req.json()
+            self._session_tokens[client] = {}
+            for key in token_data:
+                if '_token' in key:
+                    self._session_tokens[client][key] = token_data[key]
             if 'error' in self._session_tokens[client]:
                 error = self._session_tokens[client].get('error', '')
                 if 'error_description' in self._session_tokens[client]:
@@ -400,7 +411,11 @@ class Connection:
                 raise SkodaException(f'API token request returned with status code {req.status}')
             else:
                 # Save tokens as "vwg", use theese for get/posts to VW Group API
-                self._session_tokens['vwg'] = await req.json()
+                token_data = await req.json()
+                self._session_tokens['vwg'] = {}
+                for key in token_data:
+                    if '_token' in key:
+                        self._session_tokens['vwg'][key] = token_data[key]
                 if 'error' in self._session_tokens['vwg']:
                     error = self._session_tokens['vwg'].get('error', '')
                     if 'error_description' in self._session_tokens['vwg']:
@@ -430,41 +445,43 @@ class Connection:
     async def logout(self):
         """Logout, revoke tokens."""
         self._session_headers.pop('Authorization', None)
-        try:
-            if self._session_headers.get('vwg', {}).get('access_token', False):
-                _LOGGER.info('Revoking API Access Token...')
-                self._session_headers['token_type_hint'] = 'access_token'
-                params = {"token": self._session_tokens['vwg']['access_token']}
-                revoke_at = await self.post('https://mbboauth-1d.prd.ece.vwg-connect.com/mbbcoauth/mobile/oauth2/v1/revoke', data = params)
-            if self._session_headers.get('vwg', {}).get('refresh_token', False):
-                _LOGGER.info('Revoking API Refresh Token...')
-                self._session_headers['token_type_hint'] = 'refresh_token'
-                params = {"token": self._session_tokens['vwg']['refresh_token']}
-                revoke_rt = await self.post('https://mbboauth-1d.prd.ece.vwg-connect.com/mbbcoauth/mobile/oauth2/v1/revoke', data = params)
-                self._session_headers.pop('token_type_hint', None)
-            if self._session_headers.get('connect', {}).get('refresh_token', False):
-                _LOGGER.info('Revoking Identity Refresh Token...')
-                params = {
-                    "token": self._session_tokens['connect']['refresh_token'],
-                    "brand": BRAND
-                }
-                revoke_rt = await self.post('https://tokenrefreshservice.apps.emea.vwapps.io/revokeToken', data = params)
-            if self._session_headers.get('skoda', {}).get('refresh_token', False):
-                _LOGGER.info('Revoking Identity Access Token...')
-                params = {
-                    "token": self._session_tokens['skoda']['refresh_token'],
-                    "brand": BRAND
-                }
-                revoke_at = await self.post('https://tokenrefreshservice.apps.emea.vwapps.io/revokeToken', data = params)
-            if self._session_headers.get('smartlink', {}).get('refresh_token', False):
-                _LOGGER.info('Revoking Identity Access Token...')
-                params = {
-                    "token": self._session_tokens['smartlink']['refresh_token'],
-                    "brand": BRAND
-                }
-                revoke_at = await self.post('https://tokenrefreshservice.apps.emea.vwapps.io/revokeToken', data = params)
-        except:
-            pass
+        self._session_headers.pop('tokentype', None)
+        self._session_headers['Content-Type'] = 'application/x-www-form-urlencoded'
+
+        for client in self._session_tokens:
+            # Ignore identity tokens
+            for token_type in (
+                token_type
+                for token_type in self._session_tokens[client]
+                if token_type in ['refresh_token', 'access_token']
+            ):
+                # VW-Group tokens need their own data and url
+                if client == 'vwg':
+                    params = {
+                        'token': self._session_tokens[client][token_type],
+                        'token_type_hint': token_type
+                    }
+                    revoke_url = 'https://mbboauth-1d.prd.ece.vwg-connect.com/mbbcoauth/mobile/oauth2/v1/revoke'
+                else:
+                    params = {
+                        "token": self._session_tokens[client][token_type],
+                        "brand": BRAND
+                    }
+                    revoke_url = 'https://tokenrefreshservice.apps.emea.vwapps.io/revokeToken'
+
+                # Only VW-Group access_token is revokeable
+                if not client == 'vwg' and token_type == 'access_token':
+                    pass
+                # Revoke tokens
+                else:
+                    try:
+                        if await self.post(revoke_url, data = params):
+                            _LOGGER.info(f'Revocation of "{token_type}" for client "{client}" successful')
+                        else:
+                            _LOGGER.warning(f'Revocation of "{token_type}" for client "{client}" failed')
+                    except Exception as e:
+                        _LOGGER.info(f'Revocation failed with error: {e}')
+                        pass
 
   # HTTP methods to API
     async def get(self, url, vin=''):
@@ -516,15 +533,22 @@ class Connection:
                 if response.status == 204:
                     res = {'status_code': response.status}
                 elif response.status >= 200 or response.status <= 300:
+                    # If this is a revoke token url, expect Content-Length 0 and return
+                    if int(response.headers.get('Content-Length', 0)) == 0 and 'revoke' in url:
+                        if response.status == 200:
+                            return True
+                        else:
+                            return False
+                    else:
                     res = await response.json(loads=json_loads)
                 else:
                     res = {}
                     _LOGGER.debug(f'Not success status code [{response.status}] response: {response}')
                 if 'X-RateLimit-Remaining' in response.headers:
                     res['rate_limit_remaining'] = response.headers.get('X-RateLimit-Remaining', '')
-            except:
+            except Exception as e:
                 res = {}
-                _LOGGER.debug(f'Something went wrong [{response.status}] response: {response}')
+                _LOGGER.debug(f'Something went wrong [{response.status}] response: {response}, error: {e}')
                 return res
 
             if self._session_fulldebug:
