@@ -540,7 +540,7 @@ class Connection:
                         else:
                             return False
                     else:
-                    res = await response.json(loads=json_loads)
+                        res = await response.json(loads=json_loads)
                 else:
                     res = {}
                     _LOGGER.debug(f'Not success status code [{response.status}] response: {response}')
