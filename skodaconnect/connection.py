@@ -764,7 +764,7 @@ class Connection:
             await self.set_token('vwg')
             response = await self.get(
                 urljoin(
-                    self._session_auth_ref_url,
+                    self._session_spin_ref_url,
                     f'/api/rolesrights/operationlist/v3/vehicles/{vin}'
                 )
             )
