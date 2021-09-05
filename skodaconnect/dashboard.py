@@ -289,10 +289,16 @@ class Position(Instrument):
     def str_state(self):
         state = super().state #or {}
         ts = state.get("timestamp", None)
+        if isinstance(ts, str):
+            time = str(datetime.strptime(ts,'%Y-%m-%dT%H:%M:%SZ').astimezone(tz=None))
+        elif isinstance(ts, datetime):
+            time = str(ts.astimezone(tz=None))
+        else:
+            time = None
         return (
             state.get("lat", "?"),
             state.get("lng", "?"),
-            str(datetime.strptime(ts,'%Y-%m-%dT%H:%M:%SZ').astimezone(tz=None)) if ts else None,
+            time,
         )
 
 
@@ -373,6 +379,57 @@ class TrunkLock(Instrument):
         return None
 
 # Switches
+class RequestHonkAndFlash(Switch):
+    def __init__(self):
+        super().__init__(attr="request_honkandflash", name="Start honking and flashing", icon="mdi:car-emergency")
+
+    @property
+    def state(self):
+        return self.vehicle.request_honkandflash
+
+    async def turn_on(self):
+        await self.vehicle.set_honkandflash('honkandflash')
+        await self.vehicle.update()
+        if self.callback is not None:
+            self.callback()
+
+    async def turn_off(self):
+        pass
+
+    @property
+    def assumed_state(self):
+        return False
+
+    @property
+    def attributes(self):
+        return dict(last_result = self.vehicle.honkandflash_action_status)
+
+
+class RequestFlash(Switch):
+    def __init__(self):
+        super().__init__(attr="request_flash", name="Start flashing", icon="mdi:car-parking-lights")
+
+    @property
+    def state(self):
+        return self.vehicle.request_flash
+
+    async def turn_on(self):
+        await self.vehicle.set_honkandflash('flash')
+        await self.vehicle.update()
+        if self.callback is not None:
+            self.callback()
+
+    async def turn_off(self):
+        pass
+
+    @property
+    def assumed_state(self):
+        return False
+
+    @property
+    def attributes(self):
+        return dict(last_result = self.vehicle.honkandflash_action_status)
+
 
 class RequestUpdate(Switch):
     def __init__(self):
@@ -732,6 +789,8 @@ def create_instruments():
         Position(),
         DoorLock(),
         TrunkLock(),
+        RequestFlash(),
+        RequestHonkAndFlash(),
         RequestUpdate(),
         WindowHeater(),
         SeatHeating(),
