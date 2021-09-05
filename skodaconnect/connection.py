@@ -229,7 +229,8 @@ class Connection:
                         headers=self._session_auth_headers,
                         allow_redirects=False
                     )
-                    if not response.headers.get('Location', False):
+                    if response.headers.get('Location', False) is False:
+                        _LOGGER.debug(f'Unexpected response: {await req.text()}')
                         raise SkodaAuthenticationException('User appears unauthorized')
                     location = response.headers.get('Location', None)
                     # Set a max limit on requests to prevent forever loop
@@ -666,36 +667,41 @@ class Connection:
             raise SkodaConfigException("No vehicles were found for given account!")
         # Get vehicle connectivity information
         else:
-            for vehicle in skoda_vehicles:
-                vin = vehicle.get('vin', '')
-                specs = vehicle.get('specification', vehicle.get('vehicleSpecification', ''))
-                connectivity = []
-                for service in vehicle.get('connectivities', []):
-                    if isinstance(service, str):
-                        connectivity.append(service)
-                    elif isinstance(service, dict):
-                        connectivity.append(service.get('type', ''))
+            try:
+                for vehicle in skoda_vehicles:
+                    _LOGGER.debug(f'Checking vehicle {vehicle}')
+                    vin = vehicle.get('vin', '')
+                    specs = vehicle.get('specification', vehicle.get('vehicleSpecification', ''))
+                    connectivity = []
+                    for service in vehicle.get('connectivities', []):
+                        if isinstance(service, str):
+                            connectivity.append(service)
+                        elif isinstance(service, dict):
+                            connectivity.append(service.get('type', ''))
 
-                capabilities = []
-                for capability in vehicle.get('capabilities', []):
-                    capabilities.append(capability.get('id', ''))
-                vehicle = {
-                    'vin': vin,
-                    'connectivities': connectivity,
-                    'capabilities': capabilities,
-                    'specification': specs,
-                }
-                # Check if object already exist
-                if not self.vehicle(vehicle) is None:
-                    _LOGGER.debug(f'Vehicle with VIN number {vin} already exist.')
-                    car = Vehicle(self, vehicle)
-                    if not car == self.vehicle(vehicle):
-                        _LOGGER.debug(f'Updating {vehicle} object')
-                        self._vehicles.pop(vehicle)
+                    capabilities = []
+                    for capability in vehicle.get('capabilities', []):
+                        capabilities.append(capability.get('id', ''))
+                    vehicle = {
+                        'vin': vin,
+                        'connectivities': connectivity,
+                        'capabilities': capabilities,
+                        'specification': specs,
+                    }
+                    # Check if object already exist
+                    _LOGGER.debug(f'Check if vehicle exists')
+                    if not self.vehicle(vin) is None:
+                        _LOGGER.debug(f'Vehicle with VIN number {vin} already exist.')
+                        car = Vehicle(self, vehicle)
+                        if not car == self.vehicle(vehicle):
+                            _LOGGER.debug(f'Updating {vehicle} object')
+                            self._vehicles.pop(vehicle)
+                            self._vehicles.append(Vehicle(self, vehicle))
+                    else:
+                        _LOGGER.debug(f'Adding vehicle {vin}, with connectivities: {connectivity}')
                         self._vehicles.append(Vehicle(self, vehicle))
-                else:
-                    _LOGGER.debug(f'Adding vehicle {vin}, with connectivities: {connectivity}')
-                    self._vehicles.append(Vehicle(self, vehicle))
+            except:
+                raise SkodaLoginFailedException("Unable to fetch associated vehicles for account")
         # Update data for all vehicles
         await self.update_all()
 
