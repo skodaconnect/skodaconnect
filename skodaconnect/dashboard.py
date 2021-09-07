@@ -29,10 +29,10 @@ class Instrument:
     def setup(self, vehicle, **config):
         self.vehicle = vehicle
         if not self.is_supported:
-            _LOGGER.debug("%s (%s:%s) is not supported", self, type(self).__name__, self.attr)
+            _LOGGER.debug(f"{self} ({type(self).__name__}:{self.attr}) is not supported")
             return False
 
-        _LOGGER.debug("%s is supported", self)
+        _LOGGER.debug(f"{self} is supported")
         self.configurate(**config)
         return True
 
@@ -42,7 +42,7 @@ class Instrument:
 
     @property
     def full_name(self):
-        return "%s %s" % (self.vehicle_name, self.name)
+        return f"{self.vehicle_name} {self.name}"
 
     @property
     def is_mutable(self):
@@ -79,8 +79,8 @@ class Sensor(Instrument):
         self.unit = unit
         self.convert = False
 
-    def configurate(self, miles=False, **config):
-        if self.unit and miles:
+    def configurate(self, **config):
+        if self.unit and config.get('miles', False) is True:
             if "km" == self.unit:
                 self.unit = "mi"
                 self.convert = True
@@ -93,6 +93,15 @@ class Sensor(Instrument):
             elif "kWh/100 km" == self.unit:
                 self.unit = "kWh/100 mi"
                 self.convert = True
+        elif self.unit and config.get('scandinavian_miles', False) is True:
+            if "km" == self.unit:
+                self.unit = "mil"
+            elif "km/h" == self.unit:
+                self.unit = "mil/h"
+            elif "l/100 km" == self.unit:
+                self.unit = "l/100 mil"
+            elif "kWh/100 km" == self.unit:
+                self.unit = "kWh/100 mil"
 
         # Init placeholder for parking heater duration
         config.get('parkingheater', 30)
@@ -125,6 +134,8 @@ class Sensor(Instrument):
         elif val and self.unit and "°F" in self.unit and self.convert is True:
             temp = round((val * 9 / 5) + 32, 1)
             return temp
+        elif val and self.unit in ['mil', 'mil/h']:
+            return val / 10
         else:
             return val
 
@@ -150,7 +161,7 @@ class BinarySensor(Instrument):
         if self.device_class == "plug":
             return "Connected" if self.state else "Disconnected"
         if self.state is None:
-            _LOGGER.error("Can not encode state %s:%s", self.attr, self.state)
+            _LOGGER.error(f"Can not encode state {self.attr} {self.state}")
             return "?"
         return "On" if self.state else "Off"
 
@@ -333,7 +344,7 @@ class DoorLock(Instrument):
                 self.callback()
             return response
         except Exception as e:
-            _LOGGER.error("Lock failed: %", e.args[0])
+            _LOGGER.error(f"Lock failed: {e}")
             return False
 
     async def unlock(self):
@@ -344,7 +355,7 @@ class DoorLock(Instrument):
                 self.callback()
             return response
         except Exception as e:
-            _LOGGER.error("Unlock failed: %", e.args[0])
+            _LOGGER.error(f"Unlock failed: {e}")
             return False
 
     @property
@@ -816,6 +827,12 @@ def create_instruments():
             attr="battery_level",
             name="Battery level",
             icon="mdi:battery",
+            unit="%",
+        ),
+        Sensor(
+            attr="min_charge_level",
+            name="Minimum charge level",
+            icon="mdi:battery-positive",
             unit="%",
         ),
         Sensor(

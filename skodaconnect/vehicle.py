@@ -31,6 +31,7 @@ class Vehicle:
         self._capabilities = data.get('capabilities', [])
         self._specification = data.get('specification', {})
         self._homeregion = 'https://msg.volkswagen.de'
+        self._modelimageurl = None
         self._discovered = False
         self._states = {}
 
@@ -141,6 +142,10 @@ class Vehicle:
         else:
             self._services = {}
         _LOGGER.debug(f'API endpoints: {self._services}')
+
+        # Get URL for model image
+        self._modelimageurl = await self.get_modelimageurl()
+
         self._discovered = datetime.now()
 
     async def update(self):
@@ -176,6 +181,10 @@ class Vehicle:
         return True
 
   # Data collection functions
+    async def get_modelimageurl(self):
+        """Fetch the URL for model image."""
+        return await self._connection.getModelImageURL(self.vin)
+
     async def get_realcardata(self):
         """Fetch realcar data."""
         data = await self._connection.getRealCarData()
@@ -894,6 +903,7 @@ class Vehicle:
             }
         try:
             self._requests['latest'] = 'Preheater'
+            _LOGGER.debug(f'Executing setPreHeater with data: {data}')
             response = await self._connection.setPreHeater(self.vin, data, spin)
             if not response:
                 self._requests['preheater'] = {'status': 'Failed'}
@@ -985,8 +995,9 @@ class Vehicle:
             raise SkodaInvalidRequestException(f'Invalid action "{action}", must be one of "flash" or "honkandflash"')
         try:
             # Get car position
-            if lat is None and lng is None:
+            if lat is None:
                 lat = int(self.attrs.get('findCarResponse', {}).get('Position', {}).get('carCoordinate', {}).get('latitude', None))
+            if lng is None:
                 lng = int(self.attrs.get('findCarResponse', {}).get('Position', {}).get('carCoordinate', {}).get('longitude', None))
             if lat is None or lng is None:
                 raise SkodaConfigException('No location available, location information is needed for this action')
@@ -994,8 +1005,8 @@ class Vehicle:
                 'honkAndFlashRequest': {
                     'serviceOperationCode': operationCode,
                     'userPosition': {
-                        'latitude': latitude,
-                        'longitude': longitude
+                        'latitude': lat,
+                        'longitude': lng
                     }
                 }
             }
@@ -1079,9 +1090,8 @@ class Vehicle:
     def get_attr(self, attr):
         return find_path(self.attrs, attr)
 
-    # METHOD NOT IN USE, not implemented yet
     async def expired(self, service):
-        """Check if access to service has expired."""
+        """Check if access to service has expired. Return true if expired."""
         try:
             now = datetime.utcnow()
             if self._services.get(service, {}).get('expiration', False):
@@ -1172,14 +1182,13 @@ class Vehicle:
 
     @property
     def model_image(self):
-        #Not implemented
-        """Return model image"""
-        return self.attrs.get('imageUrl')
+        """Return URL for model image"""
+        return self._modelimageurl
 
     @property
     def is_model_image_supported(self):
-        #Not implemented
-        if self.attrs.get('imageUrl', False):
+        """Return true if model image url is not None."""
+        if not self._modelimageurl is None:
             return True
 
   # Lights
@@ -1358,6 +1367,25 @@ class Vehicle:
                     if 'chargingState' in self.attrs.get('charger')['status']['chargingStatusData']:
                         return True
         elif self.attrs.get('charging', False):
+            return True
+        return False
+
+    @property
+    def min_charge_level(self):
+        """Return the charge level that car charges directly to"""
+        if self.attrs.get('departuretimer', {}).get('timersAndProfiles', {}).get('timerBasicSetting', {}).get('chargeMinLimit', False):
+            return self.attrs.get('departuretimer', {}).get('timersAndProfiles', {}).get('timerBasicSetting', {}).get('chargeMinLimit', 0)
+        elif self.attrs.get('chargerSettings', False):
+            return self.attrs.get('chargerSettings', {}).get('targetStateOfChargeInPercent', 0)
+        else:
+            return 0
+
+    @property
+    def is_min_charge_level_supported(self):
+        """Return true if car supports setting the min charge level"""
+        if self.attrs.get('departuretimer', {}).get('timersAndProfiles', {}).get('timerBasicSetting', {}).get('chargeMinLimit', False):
+            return True
+        elif self.attrs.get('chargerSettings', {}).get('targetStateOfChargeInPercent', False):
             return True
         return False
 
@@ -2195,11 +2223,10 @@ class Vehicle:
     @property
     def is_departure1_supported(self):
         """Return true if timer 1 is supported."""
-        if self.attrs.get('departuretimer', False):
+        if len(self.attrs.get('departuretimer', {}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', [])) >=1:
             return True
-        elif self.attrs.get('timers', False):
-            if len(self.attrs.get('timers', [])) >= 1:
-                return True
+        elif len(self.attrs.get('timers', [])) >= 1:
+            return True
         return False
 
     @property
@@ -2239,11 +2266,10 @@ class Vehicle:
     @property
     def is_departure2_supported(self):
         """Return true if timer 2 is supported."""
-        if self.attrs.get('departuretimer', {}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', False):
+        if len(self.attrs.get('departuretimer', {}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', [])) >= 2:
             return True
-        elif self.attrs.get('timers', False):
-            if len(self.attrs.get('timers', [])) >= 2:
-                return True
+        elif len(self.attrs.get('timers', [])) >= 2:
+            return True
         return False
 
     @property
@@ -2283,11 +2309,10 @@ class Vehicle:
     @property
     def is_departure3_supported(self):
         """Return true if timer 3 is supported."""
-        if self.attrs.get('departuretimer', {}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', False):
+        if len(self.attrs.get('departuretimer', {}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', [])) >= 3:
             return True
-        elif self.attrs.get('timers', False):
-            if len(self.attrs.get('timers', [])) >= 3:
-                return True
+        elif len(self.attrs.get('timers', [])) >= 3:
+            return True
         return False
 
   # Trip data

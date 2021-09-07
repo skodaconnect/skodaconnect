@@ -9,10 +9,11 @@ import logging
 import asyncio
 import hashlib
 import jwt
+import hmac
 
 from sys import version_info, argv
-from datetime import timedelta, datetime
-from urllib.parse import urljoin, parse_qs, urlparse
+from datetime import timedelta, datetime, timezone
+from urllib.parse import urljoin, parse_qs, urlparse, urlencode
 from json import dumps as to_json
 from jwt.exceptions import ExpiredSignatureError
 import aiohttp
@@ -52,6 +53,11 @@ from .const import (
     XAPPNAME,
     USER_AGENT,
     APP_URI,
+    MODELVIEW,
+    MODELAPPID,
+    MODELAPIKEY,
+    MODELHOST,
+    MODELAPI
 )
 
 version_info >= (3, 0) or exit('Python 3 required')
@@ -320,6 +326,8 @@ class Connection:
             response_data = await html.text()
             responseSoup = BeautifulSoup(response_data, 'html.parser')
             mailform = dict()
+            if responseSoup is None:
+                raise SkodaLoginFailedException('Login failed, server did not return a login form')
             for t in responseSoup.find('form', id='emailPasswordForm').find_all('input', type='hidden'):
                 if self._session_fulldebug:
                     _LOGGER.debug(f'Extracted form attribute: {t["name"], t["value"]}')
@@ -329,7 +337,7 @@ class Connection:
             pe_url = authissuer+responseSoup.find('form', id='emailPasswordForm').get('action')
         except Exception as e:
             _LOGGER.error('Failed to extract user login form.')
-            raise SkodaException(e)
+            raise
 
         # POST email
         # https://identity.vwgroup.io/signin-service/v1/{CLIENT_ID}/login/identifier
@@ -478,6 +486,8 @@ class Connection:
                     try:
                         if await self.post(revoke_url, data = params):
                             _LOGGER.info(f'Revocation of "{token_type}" for client "{client}" successful')
+                            # Remove token info
+                            self._session_tokens[client][token_type] = None
                         else:
                             _LOGGER.warning(f'Revocation of "{token_type}" for client "{client}" failed')
                     except Exception as e:
@@ -810,6 +820,35 @@ class Connection:
             _LOGGER.warning(f'Could not fetch operation list, error: {error}')
             data = {'error': 'unknown'}
         return data
+
+    async def getModelImageURL(self, vin):
+        """Construct the URL for the model image."""
+        try:
+            _LOGGER.debug('Attempting Model image URL generate')
+            # Construct message to be encrypted
+            date = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%mZ')
+            message = MODELAPPID +'\n'+ MODELAPI +'?vin='+ vin +'&view='+ MODELVIEW +'&date='+ date
+            # Construct hmac SHA-256 key object and encode the message
+            digest = hmac.new(MODELAPIKEY, msg=message.encode(), digestmod=hashlib.sha256).digest()
+            b64enc = {'sign': b64encode(digest).decode()}
+            sign = urlencode(b64enc)
+            # Construct the URL
+            path = MODELAPI +'?vin='+ vin +'&view='+ MODELVIEW +'&appId='+ MODELAPPID +'&date='+ date +'&'+ sign
+            url = MODELHOST + path
+            try:
+                response = await self._session.get(
+                    url=url,
+                    allow_redirects=False
+                )
+                if response.headers.get('Location', False):
+                    return response.headers.get('Location')
+                else:
+                    _LOGGER.debug('Could not fetch Model image URL, request returned with status code {response.status_code}')
+            except:
+                _LOGGER.debug('Could not fetch Model image URL')
+        except:
+            _LOGGER.debug('Could not fetch Model image URL, message signing failed.')
+        return None
 
     async def getVehicleStatusReport(self, vin):
         """Get stored vehicle status report (Connect services)."""
@@ -1359,8 +1398,11 @@ class Connection:
             else:
                 contType = ''
             self._session_headers['Content-Type'] = 'application/vnd.vwg.mbb.RemoteStandheizung_v2_0_2+json'
-            if not 'quickstop' in data:
-                self._session_headers['x-mbbSecToken'] = await self.get_sec_token(vin = vin, spin = spin, action = 'heating')
+            if isinstance(data, dict):
+                if not 'quickstop' in data.get('performAction'):
+                    self._session_headers['x-mbbSecToken'] = await self.get_sec_token(vin = vin, spin = spin, action = 'heating')
+            else:
+                raise SkodaConfigException("Invalid data for preheater")
             response = await self._setVWAPI(f'fs-car/bs/rs/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/action', json = data)
 
             # Clean up headers
@@ -1382,12 +1424,12 @@ class Connection:
         return await self._setVWAPI(f'fs-car/bs/vsr/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/requests', data=None)
 
    # Skoda native API request methods
-    async def _setSkodaAPI(self, endpoint, vin, data):
+    async def _setSkodaAPI(self, endpoint, vin, **data):
         """Data call through Skoda API."""
         try:
             await self.set_token('connect')
             url = f"https://api.connect.skoda-auto.cz/api/v1/{endpoint}/operation-requests?vin={vin}"
-            response = await self._data_call(url, vin, json = data)
+            response = await self._data_call(url, **data)
             if not response:
                 raise SkodaException('Invalid or no response')
             else:
