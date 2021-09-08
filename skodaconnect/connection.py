@@ -1327,6 +1327,23 @@ class Connection:
                     if key not in ['timestamp']:
                         profiles[i][key] = profile[i][key]
 
+            if data.get('schedule', {}).get('chargeMaxCurrent', None) is not None:
+                profiles[timerid]['chargeMaxCurrent']=data.get('schedule', {}).get('chargeMaxCurrent',False)
+            
+            if data.get('schedule', {}).get('targetChargeLevel', None) is not None:
+                profiles[timerid]['targetChargeLevel']=data.get('schedule', {}).get('targetChargeLevel',False)
+                
+            if data.get('schedule', {}).get('profileName', None) is not None:
+                profiles[timerid]['profileName']=data.get('schedule', {}).get('profileName',False)
+                
+            if data.get('schedule', {}).get('operationClimatisation', None) is not None:
+                profiles[timerid]['operationClimatisation']=data.get('schedule', {}).get('operationClimatisation',False)
+                
+            if data.get('schedule', {}).get('operationCharging', None) is not None:
+                profiles[timerid]['operationCharging']=data.get('schedule', {}).get('operationCharging',False)
+
+                                                       
+
             # Construct basic settings
             settings = {
                 'chargeMinLimit': int(setting['chargeMinLimit']),
