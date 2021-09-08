@@ -1188,7 +1188,7 @@ class Vehicle:
     @property
     def is_model_image_supported(self):
         """Return true if model image url is not None."""
-        if not self._modelimageurl is None:
+        if self._modelimageurl is not None:
             return True
 
   # Lights

@@ -700,7 +700,7 @@ class Connection:
                     }
                     # Check if object already exist
                     _LOGGER.debug(f'Check if vehicle exists')
-                    if not self.vehicle(vin) is None:
+                    if self.vehicle(vin) is not None:
                         _LOGGER.debug(f'Vehicle with VIN number {vin} already exist.')
                         car = Vehicle(self, vehicle)
                         if not car == self.vehicle(vehicle):
@@ -1147,7 +1147,7 @@ class Connection:
                 status = 'In progress'
             elif result in ['request_fail', 'failed']:
                 status = 'Failed'
-                if not error_code is None:
+                if error_code is not None:
                     # Identified error code for charging, 11 = not connected
                     if sectionId == 'charging' and error_code == 11:
                         _LOGGER.info(f'Request failed, charger is not connected')
@@ -1327,22 +1327,21 @@ class Connection:
                     if key not in ['timestamp']:
                         profiles[i][key] = profile[i][key]
 
+            # Set optional settings
             if data.get('schedule', {}).get('chargeMaxCurrent', None) is not None:
                 profiles[timerid]['chargeMaxCurrent']=data.get('schedule', {}).get('chargeMaxCurrent',False)
-            
+
             if data.get('schedule', {}).get('targetChargeLevel', None) is not None:
                 profiles[timerid]['targetChargeLevel']=data.get('schedule', {}).get('targetChargeLevel',False)
-                
+
             if data.get('schedule', {}).get('profileName', None) is not None:
                 profiles[timerid]['profileName']=data.get('schedule', {}).get('profileName',False)
-                
+
             if data.get('schedule', {}).get('operationClimatisation', None) is not None:
                 profiles[timerid]['operationClimatisation']=data.get('schedule', {}).get('operationClimatisation',False)
-                
+
             if data.get('schedule', {}).get('operationCharging', None) is not None:
                 profiles[timerid]['operationCharging']=data.get('schedule', {}).get('operationCharging',False)
-
-                                                       
 
             # Construct basic settings
             settings = {
@@ -1627,7 +1626,7 @@ class Connection:
                         result = await self._getAPITokens()
 
                     # If authorization wasn't successful
-                    if not result is True:
+                    if result is not True:
                         raise SkodaAuthenticationException(f'Failed to authorize client {client}')
                 except:
                     raise
@@ -1637,7 +1636,7 @@ class Connection:
                 if not valid:
                     _LOGGER.debug(f'Tokens for "{client}" are invalid')
                     # Try to refresh tokens for client
-                    if not await self.refresh_token(client) is True:
+                    if await self.refresh_token(client) is not True:
                         raise SkodaTokenExpiredException(f'Tokens for client {client} are invalid')
                     else:
                         _LOGGER.debug(f'Tokens refreshed successfully for client "{client}"')
