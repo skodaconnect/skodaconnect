@@ -1459,15 +1459,15 @@ class Connection:
 
     async def setAirConditioning(self, vin, data):
         """Execute air conditioning actions."""
-        return await self._setSkodaAPI('air-conditioning', vin, data)
+        return await self._setSkodaAPI('air-conditioning', vin, json = data)
 
     async def setTimers(self, vin, data):
         """Execute timer actions."""
-        return await self._setSkodaAPI('air-conditioning', vin, data)
+        return await self._setSkodaAPI('air-conditioning', vin, json = data)
 
     async def setCharging(self, vin, data):
         """Execute charging actions."""
-        return await self._setSkodaAPI('charging', vin, data)
+        return await self._setSkodaAPI('charging', vin, json = data)
 
  #### Token handling ####
     async def validate_token(self, token):
