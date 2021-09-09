@@ -96,8 +96,6 @@ class Vehicle:
                 self.get_realcardata(),
                 return_exceptions=True
             )
-            _LOGGER.info(f'Vehicle "{self.nickname}" - ({self.vin}) added. Homeregion is "{self._homeregion}"')
-
             _LOGGER.debug('Attempting discovery of supported API endpoints for vehicle.')
             operationList = await self._connection.getOperationList(self.vin)
             if operationList:
@@ -109,7 +107,6 @@ class Vehicle:
                             data = {}
                             serviceName = service.get('serviceId', None)
                             if service.get('serviceStatus', {}).get('status', 'Disabled') == 'Enabled':
-                                _LOGGER.debug(f'Discovered enabled service: {service["serviceId"]}')
                                 data['active'] = True
                                 if service.get('cumulatedLicense', {}).get('expirationDate', False):
                                     data['expiration'] = service.get('cumulatedLicense', {}).get('expirationDate', None).get('content', None)
@@ -117,6 +114,7 @@ class Vehicle:
                                     data.update({'operations': []})
                                     for operation in service.get('operation', []):
                                         data['operations'].append(operation.get('id', None))
+                                _LOGGER.debug(f'Discovered active supported service: {serviceName}, licensed until {data.get("expiration").strftime("%Y-%m-%d %H:%M:%S")}')
                             elif service.get('serviceStatus', {}).get('status', None) == 'Disabled':
                                 reason = service.get('serviceStatus', {}).get('reason', 'Unknown')
                                 _LOGGER.debug(f'Service: {serviceName} is disabled because of reason: {reason}')
@@ -141,7 +139,12 @@ class Vehicle:
             self._services = {'vehicle_status': {'active': True}}
         else:
             self._services = {}
-        _LOGGER.debug(f'API endpoints: {self._services}')
+
+        if self._connection._session_fulldebug:
+            endpointList = []
+            for endpoint in self._services:
+                if endpoint.get('active', False):
+                    _LOGGER.debug(f'API endpoint: {endpoint}, expires at {endpoint.get("expiration").strftime("%Y-%m-%d %H:%M:%S")} - operations: {endpoint.get("operations", [])}')
 
         # Get URL for model image
         self._modelimageurl = await self.get_modelimageurl()

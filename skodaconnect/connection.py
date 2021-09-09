@@ -180,8 +180,8 @@ class Connection:
                     if 'error' in ref:
                         error = parse_qs(urlparse(ref).query).get('error', '')[0]
                         if 'error_description' in ref:
-                            error_description = parse_qs(urlparse(ref).query).get('error_description', '')[0]
-                            _LOGGER.info(f'Unable to login, {error_description}')
+                            error = parse_qs(urlparse(ref).query).get('error_description', '')[0]
+                            _LOGGER.info(f'Unable to login, {error}')
                         else:
                             _LOGGER.info(f'Unable to login.')
                         raise SkodaException(error)
@@ -394,8 +394,11 @@ class Connection:
                 else:
                     raise SkodaAuthenticationException('Failed to authorize client "connect"')
 
+            # If connect token is not valid, try to refresh it
             if not await self.validate_token(token):
-                raise SkodaTokenExpiredException('Token is invalid for client "connect"')
+                # Try to refresh "Connect" token
+                if not await refresh_token('connect'):
+                    raise SkodaTokenExpiredException('Token is invalid for client "connect"')
 
             # https://mbboauth-1d.prd.ece.vwg-connect.com/mbbcoauth/mobile/oauth2/v1/token
             tokenBody2 =  {
@@ -496,7 +499,7 @@ class Connection:
 
   # HTTP methods to API
     async def get(self, url, vin=''):
-        """Perform a http GET."""
+        """Perform a HTTP GET."""
         try:
             response = await self._request(METH_GET, url)
             return response
@@ -512,16 +515,18 @@ class Connection:
             else:
                 _LOGGER.error(f'Got unhandled error from server: {error.status}')
             return {'status_code': error.status}
+        except Exception as e:
+            _LOGGER.debug(f'Got non HTTP related error: {e}')
 
     async def post(self, url, **data):
-        """Perform a http POST."""
+        """Perform a HTTP POST."""
         if data:
             return await self._request(METH_POST, url, **data)
         else:
             return await self._request(METH_POST, url)
 
     async def _request(self, method, url, **kwargs):
-        """Perform a query to the VW-Group API"""
+        """Perform a HTTP query"""
         _LOGGER.debug(f'HTTP {method} "{url}"')
         async with self._session.request(
             method,
@@ -615,7 +620,7 @@ class Connection:
                 await asyncio.gather(*update_list)
             return True
         except (IOError, OSError, LookupError, Exception) as error:
-            _LOGGER.warning(f'Could not update information: {error}')
+            _LOGGER.warning(f'An error was encountered during interaction with the API: {error}')
         except:
             raise
         return False
@@ -824,7 +829,6 @@ class Connection:
     async def getModelImageURL(self, vin):
         """Construct the URL for the model image."""
         try:
-            _LOGGER.debug('Attempting Model image URL generate')
             # Construct message to be encrypted
             date = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%mZ')
             message = MODELAPPID +'\n'+ MODELAPI +'?vin='+ vin +'&view='+ MODELVIEW +'&date='+ date
@@ -1492,6 +1496,7 @@ class Connection:
             if expires > now:
                 return expires
             else:
+                _LOGGER.debug(f'Token expired at {expires.strftime("%Y-%m-%d %H:%M:%S")})')
                 return False
         except Exception as e:
             _LOGGER.info(f'Token validation failed, {e}')
@@ -1556,9 +1561,8 @@ class Connection:
 
     async def refresh_token(self, client):
         """Function to refresh tokens for a client."""
-        _LOGGER.debug(f'Refresh token for "{client}"')
         try:
-            # Refresh Skoda API tokens
+            # Refresh API tokens
             _LOGGER.debug(f'Refreshing tokens for client "{client}"')
             if client in ['skoda', 'smartlink', 'connect']:
                 body = {
@@ -1585,7 +1589,6 @@ class Connection:
                 raise
 
             if response.status == 200:
-                _LOGGER.debug(f'Tokens retrieved for client "{client}"')
                 tokens = await response.json()
                 # Verify access_token
                 if 'access_token' in tokens:
@@ -1643,7 +1646,7 @@ class Connection:
                         pass
                 else:
                     try:
-                        dt = datetime.fromtimestamp(int(valid))
+                        dt = datetime.fromtimestamp(valid)
                         _LOGGER.debug(f'Access token for "{client}" is valid until {dt.strftime("%Y-%m-%d %H:%M:%S")}')
                     except:
                         pass

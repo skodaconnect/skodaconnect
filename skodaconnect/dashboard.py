@@ -29,10 +29,8 @@ class Instrument:
     def setup(self, vehicle, **config):
         self.vehicle = vehicle
         if not self.is_supported:
-            _LOGGER.debug(f"{self} ({type(self).__name__}:{self.attr}) is not supported")
             return False
 
-        _LOGGER.debug(f"{self} is supported")
         self.configurate(**config)
         return True
 
@@ -1157,3 +1155,5 @@ class Dashboard:
             for instrument in create_instruments()
             if instrument.setup(vehicle, **config)
         ]
+        _LOGGER.debug("Supported instruments: " + ", ".join(str(inst.attr) for inst in self.instruments))
+
