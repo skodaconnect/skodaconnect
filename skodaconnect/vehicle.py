@@ -143,7 +143,7 @@ class Vehicle:
         if self._connection._session_fulldebug:
             for endpointName, endpoint in self._services.items():
                 if endpoint.get('active', False):
-                    _LOGGER.debug(f'API endpoint: {endpointName}, expires at {endpoint.get("expiration").strftime("%Y-%m-%d %H:%M:%S")} - operations: {endpoint.get("operations", [])}')
+                    _LOGGER.debug(f'API endpoint "{endpointName}" valid until {endpoint.get("expiration").strftime("%Y-%m-%d %H:%M:%S")} - operations: {endpoint.get("operations", [])}')
 
         # Get URL for model image
         self._modelimageurl = await self.get_modelimageurl()
