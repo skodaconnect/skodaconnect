@@ -116,8 +116,9 @@ ERROR_CODES = {
 }
 
 # Constants related to model image URL construction
-MODELVIEW = 'w1080'                                     # Related to image size, other option is 'main' from web client (smaller?)
-MODELAPPID = 'ModcwpMobile'                             # Client, other option is 'Connectedmod' from web client
+MODELVIEWL = 'w1080'                                    # Related to image size, large
+MODELVIEWS = 'main'                                     # Related to image size, small
+MODELAPPID = 'ModcwpMobile'                             # Client ID, other ID might require other key
 MODELAPIKEY = b'P{+!!H:+I#6)SJS_?[_wh6puD#UH*%l:'       # Key used to sign message
 MODELAPI = 'ms/GetMODCWPImage'                          # API base path
 MODELHOST = 'https://iaservices.skoda-auto.com/'        # API host

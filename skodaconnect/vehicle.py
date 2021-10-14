@@ -31,8 +31,10 @@ class Vehicle:
         self._capabilities = data.get('capabilities', [])
         self._specification = data.get('specification', {})
         self._homeregion = 'https://msg.volkswagen.de'
-        self._modelimageurl = None
+        self._modelimagel = None
+        self._modelimages = None
         self._discovered = False
+        self._dashboard = None
         self._states = {}
 
         self._requests = {
@@ -145,8 +147,9 @@ class Vehicle:
                 if endpoint.get('active', False):
                     _LOGGER.debug(f'API endpoint "{endpointName}" valid until {endpoint.get("expiration").strftime("%Y-%m-%d %H:%M:%S")} - operations: {endpoint.get("operations", [])}')
 
-        # Get URL for model image
-        self._modelimageurl = await self.get_modelimageurl()
+        # Get URLs for model image
+        self._modelimagel = await self.get_modelimageurl(size='L')
+        self._modelimages = await self.get_modelimageurl(size='S')
 
         self._discovered = datetime.now()
 
@@ -183,9 +186,9 @@ class Vehicle:
         return True
 
   # Data collection functions
-    async def get_modelimageurl(self):
+    async def get_modelimageurl(self, size='L'):
         """Fetch the URL for model image."""
-        return await self._connection.getModelImageURL(self.vin)
+        return await self._connection.getModelImageURL(self.vin, size)
 
     async def get_realcardata(self):
         """Fetch realcar data."""
@@ -614,7 +617,7 @@ class Vehicle:
                             data['timersSettings']['timers'][index]['recurringOn'] = []
                             days = schedule.get('days', 'nnnnnnn')
                             for num in range(0, 7):
-                                if days[num] == y:
+                                if days[num] == 'y':
                                     data['timersSettings']['timers'][index]['recurringOn'].append(days[num])
                         else:
                             data['timersSettings']['timers'][index]['type'] = 'ONE_OFF'
@@ -726,6 +729,7 @@ class Vehicle:
 
     async def set_climatisation(self, mode = 'off', temp = None, hvpower = None, spin = None):
         """Turn on/off climatisation with electric/auxiliary heater."""
+        data = {}
         # Validate user input
         if mode not in ['electric', 'auxiliary', 'Start', 'Stop', 'on', 'off']:
             raise SkodaInvalidRequestException(f"Invalid mode for set_climatisation: {mode}")
@@ -768,15 +772,30 @@ class Vehicle:
                 if mode == 'auxiliary':
                     raise SkodaInvalidRequestException('No auxiliary climatisation support.')
                 if mode in ['Start', 'start', 'On', 'on', 'electric']:
-                    # Fetch current settings
+                    # Fetch current climatisation settings
                     airconData = await self._connection.getAirConditioning(self.vin)
                     if airconData:
                         data = airconData.get('airConditioningSettings', False)
                     else:
-                        raise SkodaException("Failed to fetch current air-conditioning settings")
+                        # Try to use saved configuration from previous poll, else use defaults
+                        if self.attrs.get('airConditioningSettings', False):
+                            _LOGGER.warning('Failed to fetch climatisation settings, using saved values.')
+                            data = self.attrs.get('airConditioningSettings')
+                        else:
+                            _LOGGER.warning('Could not fetch climatisation settings, using defaults.')
+                            data['airConditioningSettings'] = {
+                                'targetTemperatureInKelvin': 294.15,
+                                'windowHeatingEnabled': False,
+                                'airConditioningAtUnlock': False,
+                                'zonesSettings': {
+                                    'frontLeftEnabled': False,
+                                    'frontRightEnabled': False
+                                }
+                            }
+                    data.pop('temperatureConversionTableUsed', None)
                     data['type'] = 'Start'
                     if temp is not None:
-                        data['airConditioningSettings'] = temp + 273.15
+                        data['airConditioningSettings']['targetTemperatureInKelvin'] = temp + 273.15
                 else:
                     data = {'type': 'Stop'}
                 return await self._set_aircon(data)
@@ -1115,9 +1134,16 @@ class Vehicle:
             return False
 
     def dashboard(self, **config):
-        #Classic python notation
-        from skodaconnect.dashboard import Dashboard
-        return Dashboard(self, **config)
+        """Returns dashboard, creates new if none exist."""
+        if self._dashboard is None:
+            # Init new dashboard if none exist
+            from skodaconnect.dashboard import Dashboard
+            self._dashboard = Dashboard(self, **config)
+        elif config != self._dashboard._config:
+            # Init new dashboard on config change
+            from skodaconnect.dashboard import Dashboard
+            self._dashboard = Dashboard(self, **config)
+        return self._dashboard
 
     @property
     def vin(self):
@@ -1135,7 +1161,6 @@ class Vehicle:
         for car in self.attrs.get('realCars', []):
             if self.vin == car.get('vehicleIdentificationNumber', ''):
                 return car.get('nickname', None)
-        #return self._nickname
 
     @property
     def is_nickname_supported(self):
@@ -1183,14 +1208,25 @@ class Vehicle:
             return True
 
     @property
-    def model_image(self):
+    def model_image_small(self):
         """Return URL for model image"""
-        return self._modelimageurl
+        return self._modelimages
 
     @property
-    def is_model_image_supported(self):
+    def is_model_image_small_supported(self):
         """Return true if model image url is not None."""
-        if self._modelimageurl is not None:
+        if self._modelimages is not None:
+            return True
+
+    @property
+    def model_image_large(self):
+        """Return URL for model image"""
+        return self._modelimagel
+
+    @property
+    def is_model_image_large_supported(self):
+        """Return true if model image url is not None."""
+        if self._modelimagel is not None:
             return True
 
   # Lights
@@ -1430,6 +1466,7 @@ class Vehicle:
         elif self.attrs.get('chargerSettings', False):
             value = self.attrs.get('chargerSettings', {}).get('maxChargeCurrentAc', 'Unknown')
             return value
+        return 0
 
     @property
     def is_charge_max_ampere_supported(self):
@@ -1498,12 +1535,12 @@ class Vehicle:
             elif self.attrs.get('charger', {}).get('status', {}).get('batteryStatusData', {}).get('remainingChargingTime', False):
                 minutes = self.attrs.get('charger', {}).get('status', {}).get('batteryStatusData', {}).get('remainingChargingTime', {}).get('content', 0)
             try:
-                if minutes == -1: return "00:00"
-                if minutes == 65535: return "00:00"
+                if minutes == -1: return '00:00'
+                if minutes == 65535: return '00:00'
                 return "%02d:%02d" % divmod(minutes, 60)
             except Exception:
                 pass
-        return "00:00"
+        return '00:00'
 
     @property
     def is_charging_time_left_supported(self):
@@ -2473,7 +2510,7 @@ class Vehicle:
 
     @property
     def is_refresh_data_supported(self):
-        """Data refresh is supported for Skoda Connect."""
+        """Data refresh is supported."""
         if 'ONLINE' in self._connectivities:
             return True
 

@@ -990,6 +990,18 @@ def create_instruments():
             unit="kWh/100 km",
         ),
         Sensor(
+            attr="model_image_large",
+            name="Model image URL (Large)",
+            icon="mdi:file-image",
+            unit=""
+        ),
+        Sensor(
+            attr="model_image_small",
+            name="Model image URL (Small)",
+            icon="mdi:file-image",
+            unit=""
+        ),
+        Sensor(
             attr="trip_last_total_electric_consumption",
             name="Last trip total electric consumption",
             icon="mdi:car-battery",
@@ -1150,6 +1162,7 @@ def create_instruments():
 
 class Dashboard:
     def __init__(self, vehicle, **config):
+        self._config = config
         self.instruments = [
             instrument
             for instrument in create_instruments()

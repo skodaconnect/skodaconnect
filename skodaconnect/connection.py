@@ -10,6 +10,8 @@ import asyncio
 import hashlib
 import jwt
 import hmac
+import string
+import secrets
 
 from sys import version_info, argv
 from datetime import timedelta, datetime, timezone
@@ -53,7 +55,8 @@ from .const import (
     XAPPNAME,
     USER_AGENT,
     APP_URI,
-    MODELVIEW,
+    MODELVIEWL,
+    MODELVIEWS,
     MODELAPPID,
     MODELAPIKEY,
     MODELHOST,
@@ -96,19 +99,17 @@ class Connection:
 
     def _clear_cookies(self):
         self._session._cookie_jar._cookies.clear()
-        self._session_cookies = ""
+        self._session_cookies = ''
 
     def _getNonce(self):
-        ts = "%d" % (time.time())
+        chars = string.ascii_letters + string.digits
+        text = ''.join(secrets.choice(chars) for i in range(10))
         sha256 = hashlib.sha256()
-        sha256.update(ts.encode())
+        sha256.update(text.encode())
         return (b64encode(sha256.digest()).decode('utf-8')[:-1])
 
     def _getState(self):
-        ts = "%d" % (time.time()-1000)
-        sha256 = hashlib.sha256()
-        sha256.update(ts.encode())
-        return (b64encode(sha256.digest()).decode('utf-8')[:-1])
+        return self._getNonce()
 
   # API login/logout/authorization
     async def doLogin(self):
@@ -145,7 +146,6 @@ class Connection:
 
         # Login/Authorization starts here
         try:
-            # Get OpenID config:
             self._session_headers = HEADERS_SESSION.copy()
             self._session_auth_headers = HEADERS_AUTH.copy()
 
@@ -160,7 +160,6 @@ class Connection:
             authissuer = response_data['issuer']
 
             # Get authorization page (login page)
-            # https://identity.vwgroup.io/oidc/v1/authorize?nonce={NONCE}&state={STATE}&response_type={TOKEN_TYPES}&scope={SCOPE}&redirect_uri={APP_URI}&client_id={CLIENT_ID}
             if self._session_fulldebug:
                 _LOGGER.debug(f'Get authorization page: "{authorizationEndpoint}"')
             try:
@@ -397,7 +396,7 @@ class Connection:
             # If connect token is not valid, try to refresh it
             if not await self.validate_token(token):
                 # Try to refresh "Connect" token
-                if not await refresh_token('connect'):
+                if not await self.refresh_token('connect'):
                     raise SkodaTokenExpiredException('Token is invalid for client "connect"')
 
             # https://mbboauth-1d.prd.ece.vwg-connect.com/mbbcoauth/mobile/oauth2/v1/token
@@ -527,7 +526,8 @@ class Connection:
 
     async def _request(self, method, url, **kwargs):
         """Perform a HTTP query"""
-        _LOGGER.debug(f'HTTP {method} "{url}"')
+        if self._session_fulldebug:
+            _LOGGER.debug(f'HTTP {method} "{url}"')
         async with self._session.request(
             method,
             url,
@@ -580,6 +580,7 @@ class Connection:
             _LOGGER.debug(f'Data call returned: {response}')
             return response
         except aiohttp.client_exceptions.ClientResponseError as error:
+            _LOGGER.debug(f'Request failed. Data: {data}, HTTP request headers: {self._session_headers}')
             if error.status == 401:
                 _LOGGER.error('Unauthorized')
             elif error.status == 400:
@@ -826,18 +827,24 @@ class Connection:
             data = {'error': 'unknown'}
         return data
 
-    async def getModelImageURL(self, vin):
+    async def getModelImageURL(self, vin, size):
         """Construct the URL for the model image."""
         try:
             # Construct message to be encrypted
             date = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%mZ')
-            message = MODELAPPID +'\n'+ MODELAPI +'?vin='+ vin +'&view='+ MODELVIEW +'&date='+ date
+            if size in ['S', 's', 'Small', 'small']:
+                message = MODELAPPID +'\n'+ MODELAPI +'?vin='+ vin +'&view='+ MODELVIEWS +'&date='+ date
+            else:
+                message = MODELAPPID +'\n'+ MODELAPI +'?vin='+ vin +'&view='+ MODELVIEWL +'&date='+ date
             # Construct hmac SHA-256 key object and encode the message
             digest = hmac.new(MODELAPIKEY, msg=message.encode(), digestmod=hashlib.sha256).digest()
             b64enc = {'sign': b64encode(digest).decode()}
             sign = urlencode(b64enc)
             # Construct the URL
-            path = MODELAPI +'?vin='+ vin +'&view='+ MODELVIEW +'&appId='+ MODELAPPID +'&date='+ date +'&'+ sign
+            if size in ['S', 's', 'Small', 'small']:
+                path = MODELAPI +'?vin='+ vin +'&view='+ MODELVIEWS +'&appId='+ MODELAPPID +'&date='+ date +'&'+ sign
+            else:
+                path = MODELAPI +'?vin='+ vin +'&view='+ MODELVIEWL +'&appId='+ MODELAPPID +'&date='+ date +'&'+ sign
             url = MODELHOST + path
             try:
                 response = await self._session.get(
@@ -845,7 +852,7 @@ class Connection:
                     allow_redirects=False
                 )
                 if response.headers.get('Location', False):
-                    return response.headers.get('Location')
+                    return response.headers.get('Location').split('?')[0]
                 else:
                     _LOGGER.debug('Could not fetch Model image URL, request returned with status code {response.status_code}')
             except:
@@ -983,7 +990,7 @@ class Connection:
             if response.get('timers', []):
                 data = {'timers': response.get('timers', [])}
                 return data
-            elif chargerStatus.get('status_code', {}):
+            elif response.get('status_code', False):
                 _LOGGER.warning(f'Could not fetch timers, HTTP status code: {response.get("status_code")}')
             else:
                 _LOGGER.info('Unhandled error while trying to fetch timers data')
@@ -1028,8 +1035,10 @@ class Connection:
                     data['airConditioningTimers'] = airconData[2]
                 _LOGGER.info(f"Returning with data {data}")
                 return data
-            elif response.get('status_code', {}):
-                _LOGGER.warning(f'Could not fetch air-conditioning, HTTP status code: {response.get("status_code")}')
+            elif airconData[0].get('status_code', False):
+                _LOGGER.warning(f'Could not fetch air-conditioning data, HTTP status code: {airconData[0].get("status_code")}')
+            elif airconData[1].get('status_code', False):
+                _LOGGER.warning(f'Could not fetch air-conditioning settings, HTTP status code: {airconData[1].get("status_code")}')
             else:
                 _LOGGER.info('Unhandled error while trying to fetch air-conditioning data')
         except Exception as error:
@@ -1103,6 +1112,7 @@ class Connection:
     async def get_request_status(self, vin, sectionId, requestId):
         """Return status of a request ID for a given section ID."""
         try:
+            error_code = None
             # Requests for Skoda Native API
             if sectionId in ['charging',  'air-conditioning']:
                 url = 'https://api.connect.skoda-auto.cz/api/v1/$sectionId/operation-requests/$requestId'
