@@ -679,7 +679,7 @@ class Connection:
                 raise
 
         # If neither API returns any vehicles, raise an error
-        if len(skoda_vehicles) == 0 or 'status_code' in skoda_vehicles:
+        if len(skoda_vehicles) == 0:
             raise SkodaConfigException("No vehicles were found for given account!")
         # Get vehicle connectivity information
         else:
