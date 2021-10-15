@@ -669,7 +669,7 @@ class Connection:
         try:
             await self.set_token('skoda')
             response = await self.get(
-                'https://api.connect.skoda-auto.cz/api/v2/garage/vehicles2'
+                'https://api.connect.skoda-auto.cz/api/v2/garage/vehicles'
             )
             # Check that response is a list
             if isinstance(response, list):
