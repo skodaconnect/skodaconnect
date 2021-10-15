@@ -503,17 +503,31 @@ class Connection:
             response = await self._request(METH_GET, url)
             return response
         except aiohttp.client_exceptions.ClientResponseError as error:
+            data = {
+                'status_code': error.status,
+                'error': error.code,
+                'error_description': error.message,
+                'response_headers': error.headers,
+                'request_info': error.request_info
+            }
             if error.status == 401:
-                _LOGGER.warning(f'Received "unauthorized" error while fetching data: {error}')
+                _LOGGER.warning('Received "Unauthorized" while fetching data.\nThis can occur if tokens expired or refresh service is unavailable.')
             elif error.status == 400:
-                _LOGGER.error(f'Got HTTP 400 {error}"Bad Request" from server, this request might be malformed or not implemented correctly for this vehicle')
+                _LOGGER.error('Received "Bad Request" from server.\nThe request might be malformed or not implemented correctly for this vehicle.')
+            elif error.status == 412:
+                _LOGGER.debug('Received "Pre-condition failed".\nService might be temporarily unavailable.')
             elif error.status == 500:
-                _LOGGER.info('Got HTTP 500 from server, service might be temporarily unavailable')
+                _LOGGER.info('Received "Internal server error".\nThe service is temporarily unavailable.')
             elif error.status == 502:
-                _LOGGER.info('Got HTTP 502 from server, this request might not be supported for this vehicle')
+                _LOGGER.info('Received "Bad gateway".\nEither the endpoint is temporarily unavailable or not supported for this vehicle.')
+            elif 400 <= error.status <= 499:
+                _LOGGER.error('Received unhandled error indicating client-side problem.\nRestart or try again later.')
+            elif 500 <= error.status <= 599:
+                _LOGGER.error('Received unhandled error indicating server-side problem.\nThe service might be temporarily unavailable.')
             else:
-                _LOGGER.error(f'Got unhandled error from server: {error.status}')
-            return {'status_code': error.status}
+                _LOGGER.error('Received unhandled error while requesting API endpoint.')
+            _LOGGER.debug(f'HTTP request information: {data}')
+            return data
         except Exception as e:
             _LOGGER.debug(f'Got non HTTP related error: {e}')
 
@@ -629,50 +643,58 @@ class Connection:
     async def get_vehicles(self):
         """Fetch vehicle information from user profile."""
         skoda_vehicles = []
+
+        # Check if user needs to update consent
+        try:
+            await self.set_token('connect')
+            consent = await self.getConsentInfo()
+            if isinstance(consent, dict):
+                _LOGGER.debug(f'Consent returned {consent}')
+                if 'status' in consent.get('mandatoryConsentInfo', []):
+                    if consent.get('mandatoryConsentInfo', [])['status'] != 'VALID':
+                        _LOGGER.error(f'The user needs to update consent for {consent.get("mandatoryConsentInfo", [])["id"]}. If problems are encountered please visit the web portal first and accept terms and conditions.')
+                        #raise SkodaEULAException(f'User needs to update consent for {consent.get("mandatoryConsentInfo", [])["id"]}')
+                elif len(consent.get('missingMandatoryFields', [])) > 0:
+                    _LOGGER.error(f'Missing mandatory field for user: {consent.get("missingMandatoryFields", [])[0].get("name", "")}. If problems are encountered please visit the web portal first and accept terms and conditions.')
+                    #raise SkodaEULAException(f'Missing mandatory field for user: {consent.get("missingMandatoryFields", [])[0].get("name", "")}')
+                else:
+                    _LOGGER.debug('User consent is valid, no missing information for profile')
+            else:
+                _LOGGER.debug('Could not fetch consent information. If problems are encountered please visit the web portal first and make sure that no new terms and conditions need to be accepted.')
+        except:
+            _LOGGER.debug('Could not fetch consent information. If problems are encountered please visit the web portal first and make sure that no new terms and conditions need to be accepted.')
+            #raise
+
         # Authorize for "skoda" client and get vehicles from garage endpoint
         try:
             await self.set_token('skoda')
-            skoda_vehicles = await self.get(
-                'https://api.connect.skoda-auto.cz/api/v2/garage/vehicles'
+            response = await self.get(
+                'https://api.connect.skoda-auto.cz/api/v2/garage/vehicles2'
             )
+            # Check that response is a list
+            if isinstance(response, list):
+                skoda_vehicles = response
         except:
             raise
 
         # If Skoda API return no cars, fallback to VW-Group API
-        if not skoda_vehicles:
-            # Check if user needs to update consent
-            try:
-                await self.set_token('connect')
-                consent = await self.getConsentInfo()
-                if isinstance(consent, dict):
-                    _LOGGER.debug(f'Consent returned {consent}')
-                    if 'status' in consent.get('mandatoryConsentInfo', []):
-                        if consent.get('mandatoryConsentInfo', [])['status'] != 'VALID':
-                            raise SkodaEULAException(f'User needs to update consent for {consent.get("mandatoryConsentInfo", [])["id"]}')
-                    elif len(consent.get('missingMandatoryFields', [])) > 0:
-                        raise SkodaEULAException(f'Missing mandatory field for user: {consent.get("missingMandatoryFields", [])[0].get("name", "")}')
-                    else:
-                        _LOGGER.debug('User consent is valid, no missing information for profile')
-                else:
-                    _LOGGER.debug('Could not retrieve consent information')
-            except:
-                raise
-            _LOGGER.debug('Skoda native API returned no cars! Using fallback legacy discovery.')
+        if len(skoda_vehicles) == 0:
+            _LOGGER.debug('Skoda native API returned no vehicles. Using fallback VW-Group API.')
             try:
                 await self.set_token('vwg')
                 self._session_headers.pop('Content-Type', None)
-                vwg_vehicles = await self.get(
+                response = await self.get(
                     url=f'https://msg.volkswagen.de/fs-car/usermanagement/users/v1/{BRAND}/{COUNTRY}/vehicles'
                 )
 
-                if vwg_vehicles.get('userVehicles', {}).get('vehicle', False):
+                if response.get('userVehicles', {}).get('vehicle', False):
                     _LOGGER.debug('Found vehicle(s) associated with account.')
-                    for vehicle in vwg_vehicles.get('userVehicles').get('vehicle'):
+                    for vehicle in response.get('userVehicles').get('vehicle'):
                         await self.set_token('skoda')
-                        response = await self.get(url=f'https://api.connect.skoda-auto.cz/api/v2/vehicles/{vehicle}')
-                        if response.get('vehicleSpecification', False):
-                            response['vin'] = vehicle
-                            skoda_vehicles.append(response)
+                        vehicle_info = await self.get(url=f'https://api.connect.skoda-auto.cz/api/v2/vehicles/{vehicle}')
+                        if vehicle_info.get('vehicleSpecification', False):
+                            vehicle_info['vin'] = vehicle
+                            skoda_vehicles.append(vehicle_info)
                         else:
                             _LOGGER.warning(f"Failed to aquire information about vehicle with VIN {vehicle}")
             except:
@@ -681,6 +703,7 @@ class Connection:
         # If neither API returns any vehicles, raise an error
         if len(skoda_vehicles) == 0:
             raise SkodaConfigException("No vehicles were found for given account!")
+
         # Get vehicle connectivity information
         else:
             try:
