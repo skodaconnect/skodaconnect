@@ -130,6 +130,11 @@ class Vehicle:
                         pass
             else:
                 _LOGGER.warning(f'Could not determine available API endpoints for {self.vin}')
+            if self._connection._session_fulldebug:
+                for endpointName, endpoint in self._services.items():
+                    if endpoint.get('active', False):
+                        _LOGGER.debug(f'API endpoint "{endpointName}" valid until {endpoint.get("expiration").strftime("%Y-%m-%d %H:%M:%S")} - operations: {endpoint.get("operations", [])}')
+
         # For Skoda native API
         elif 'REMOTE' in self._connectivities:
             for service in self._services:
@@ -141,11 +146,6 @@ class Vehicle:
             self._services = {'vehicle_status': {'active': True}}
         else:
             self._services = {}
-
-        if self._connection._session_fulldebug:
-            for endpointName, endpoint in self._services.items():
-                if endpoint.get('active', False):
-                    _LOGGER.debug(f'API endpoint "{endpointName}" valid until {endpoint.get("expiration").strftime("%Y-%m-%d %H:%M:%S")} - operations: {endpoint.get("operations", [])}')
 
         # Get URLs for model image
         self._modelimagel = await self.get_modelimageurl(size='L')
@@ -775,7 +775,8 @@ class Vehicle:
                     # Fetch current climatisation settings
                     airconData = await self._connection.getAirConditioning(self.vin)
                     if airconData:
-                        data = airconData.get('airConditioningSettings', False)
+                        airconData.pop('airConditioning', None)
+                        data = airconData
                     else:
                         # Try to use saved configuration from previous poll, else use defaults
                         if self.attrs.get('airConditioningSettings', False):
@@ -1757,7 +1758,7 @@ class Vehicle:
         if self.attrs.get('climater', False):
             value = self.attrs.get('climater').get('settings', {}).get('targetTemperature', {}).get('content', 2730)
         elif self.attrs.get('airConditioningSettings', False):
-            value = float(self.attrs.get('airConditioningSettings').get('targetTemperatureInKelvin', 273.15) * 10)
+            value = float(self.attrs.get('airConditioningSettings').get('targetTemperatureInKelvin', 273.15)-0.15)*10
         if value:
             reply = float((value / 10) - 273)
             return reply
