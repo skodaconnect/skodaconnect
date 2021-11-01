@@ -235,7 +235,7 @@ class Connection:
                         allow_redirects=False
                     )
                     if response.headers.get('Location', False) is False:
-                        _LOGGER.debug(f'Unexpected response: {await req.text()}')
+                        _LOGGER.debug(f'Unexpected response: {await response.text()}')
                         raise SkodaAuthenticationException('User appears unauthorized')
                     location = response.headers.get('Location', None)
                     # Set a max limit on requests to prevent forever loop
@@ -1054,8 +1054,6 @@ class Connection:
                 data = {'airConditioning': airconData[0]}
                 if len(airconData) >= 2:
                     data['airConditioningSettings'] = airconData[1]
-                if len(airconData) >= 3:
-                    data['airConditioningTimers'] = airconData[2]
                 _LOGGER.info(f"Returning with data {data}")
                 return data
             elif airconData[0].get('status_code', False):
@@ -1484,6 +1482,7 @@ class Connection:
             url = f"https://api.connect.skoda-auto.cz/api/v1/{endpoint}/operation-requests?vin={vin}"
             response = await self._data_call(url, **data)
             if not response:
+                _LOGGER.debug(f'API call failed, data: {data}')
                 raise SkodaException('Invalid or no response')
             else:
                 request_id = response.get('id', 0)
