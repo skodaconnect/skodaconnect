@@ -1882,6 +1882,18 @@ class Vehicle:
         return False
 
     @property
+    def aircon_at_unlock(self):
+        """Return status of air-conditioning at unlock setting."""
+        return self.attrs.get('airConditioningSettings', {}).get('airConditioningAtUnlock', False)
+
+    @property
+    def is_aircon_at_unlock_supported(self):
+        """Return true if air-conditioning at unlock is supported."""
+        if self.attrs.get('airConditioningSettings', {}).get('airConditioningAtUnlock', False):
+            return True
+        return False
+
+    @property
     def window_heater(self):
         """Return status of window heater."""
         if self.attrs.get('climater', False):
@@ -1912,18 +1924,50 @@ class Vehicle:
         return False
 
     @property
-    def seat_heating(self):
-        """Return status of seat heating."""
-        if self.attrs.get('airConditioning', {}).get('seatHeatingSupport', False):
-            for element in self.attrs.get('airConditioning', {}).get('seatHeatingSupport', {}):
-                if self.attrs.get('airConditioning', {}).get('seatHeatingSupport', {}).get(element, False):
-                    return True
+    def seat_heating_front_left(self):
+        """Return status of seat heating front left."""
+        return self.attrs.get('airConditioningSettings', {}).get('zonesSettings', {}).get('frontLeftEnabled', False)
+
+    @property
+    def is_seat_heating_front_left_supported(self):
+        """Return true if vehichle has seat heating front left."""
+        if self.attrs.get('airConditioning', {}).get('seatHeatingSupport', {}).get('frontLeftAvailable', False):
+            return True
         return False
 
     @property
-    def is_seat_heating_supported(self):
-        """Return true if vehichle has seat heating."""
-        if self.attrs.get('airConditioning', {}).get('seatHeatingSupport', False):
+    def seat_heating_front_right(self):
+        """Return status of seat heating front right."""
+        return self.attrs.get('airConditioningSettings', {}).get('zonesSettings', {}).get('frontRightEnabled', False)
+
+    @property
+    def is_seat_heating_front_right_supported(self):
+        """Return true if vehichle has seat heating front right."""
+        if self.attrs.get('airConditioning', {}).get('seatHeatingSupport', {}).get('frontRightAvailable', False):
+            return True
+        return False
+
+    @property
+    def seat_heating_rear_left(self):
+        """Return status of seat heating rear left."""
+        return self.attrs.get('airConditioningSettings', {}).get('zonesSettings', {}).get('rearLeftEnabled', False)
+
+    @property
+    def is_seat_heating_rear_left_supported(self):
+        """Return true if vehichle has seat heating rear left."""
+        if self.attrs.get('airConditioning', {}).get('seatHeatingSupport', {}).get('rearLeftAvailable', False):
+            return True
+        return False
+
+    @property
+    def seat_heating_rear_right(self):
+        """Return status of seat heating rear right."""
+        return self.attrs.get('airConditioningSettings', {}).get('zonesSettings', {}).get('rearRightEnabled', False)
+
+    @property
+    def is_seat_heating_rear_right_supported(self):
+        """Return true if vehichle has seat heating rear right."""
+        if self.attrs.get('airConditioning', {}).get('seatHeatingSupport', {}).get('rearRightAvailable', False):
             return True
         return False
 
@@ -2479,6 +2523,11 @@ class Vehicle:
         return self._requests.get('batterycharge', {}).get('status', 'None')
 
     @property
+    def aircon_action_status(self):
+        """Return latest status of air-conditioning request."""
+        return self._requests.get('air-conditioning', {}).get('status', 'None')
+
+    @property
     def climater_action_status(self):
         """Return latest status of climater request."""
         return self._requests.get('climatisation', {}).get('status', 'None')
@@ -2576,7 +2625,7 @@ class Vehicle:
             'state': self._requests.get('state', None)
         }
         for section in self._requests:
-            if section in ['departuretimer', 'batterycharge', 'climatisation', 'refresh', 'lock', 'preheater']:
+            if section in ['departuretimer', 'batterycharge', 'air-conditioning', 'climatisation', 'refresh', 'lock', 'preheater']:
                 data[section] = self._requests[section].get('status', 'Unknown')
         return data
 
