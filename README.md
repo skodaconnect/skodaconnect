@@ -2,9 +2,15 @@
 ![PyPi](https://img.shields.io/pypi/v/skodaconnect?label=latest%20pypi)
 ![Downloads PyPi](https://img.shields.io/pypi/dm/skodaconnect)
 
-# Skoda Connect v1.1.10
-Fork of https://github.com/robinostlund/volkswagencarnet where it was modified to support also Skoda Connect.
-Changes made to utilize the same API calls as the MySkoda mobile app.
+# Skoda Connect
+Fork of https://github.com/robinostlund/volkswagencarnet,
+modified to support Skoda Connect.
+Changes has been made to mimic the MySkoda mobile app.
+
+This is an API library for Skoda connected cars.
+The library is reverse engineered by intercepting HTTP requests from from
+MySkoda app, there is no official API. Use at your own risk.
+If the Skoda API changes, this library may stop working without warning.
 
 ## Information
 
@@ -14,7 +20,7 @@ Retrieve statistics about your Skoda from the Skoda Connect online service.
 * All (native) Skoda cars supported though newer cars (Skoda Enyaq iV) use newer API that's under development
 * If your Skoda car don't work with the MySkoda app it won't work with this integration
 
-No licence, public domain, no guarantees, feel free to use for anything. Please contribute improvements/bugfixes etc.
+Pease contribute improvements/bugfixes etc.
 
 ## Breaking changes
 
