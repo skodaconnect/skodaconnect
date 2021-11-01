@@ -488,7 +488,13 @@ class ElectricClimatisation(Switch):
 
     @property
     def attributes(self):
-        return dict(last_result = self.vehicle.climater_action_status)
+        attrs = {}
+        if self.vehicle.is_electric_climatisation_attributes_supported:
+            attrs = self.vehicle.electric_climatisation_attributes
+            attrs['last_result'] = self.vehicle.climater_action_status
+        else:
+            attrs['last_result'] = self.vehicle.climater_action_status
+        return attrs
 
 
 class AuxiliaryClimatisation(Switch):
@@ -566,7 +572,10 @@ class WindowHeater(Switch):
 
     @property
     def attributes(self):
-        return dict(last_result = self.vehicle.climater_action_status)
+        return dict(
+            last_result = self.vehicle.climater_action_status,
+
+        )
 
 
 class SeatHeatingFrontLeft(Switch):
@@ -696,7 +705,7 @@ class AirConditionAtUnlock(Switch):
     def attributes(self):
         return dict(last_result = self.vehicle.climater_action_status)
 
-    
+
 class BatteryClimatisation(Switch):
     def __init__(self):
         super().__init__(attr="climatisation_without_external_power", name="Climatisation from battery", icon="mdi:power-plug")

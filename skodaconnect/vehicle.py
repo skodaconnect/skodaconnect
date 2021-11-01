@@ -1833,6 +1833,22 @@ class Vehicle:
 
   # Climatisation, electric
     @property
+    def electric_climatisation_attributes(self):
+        """Return climatisation attributes."""
+        data = {}
+        if self.attrs.get('climater', {}).get('status', {}).get('climatisationStatusData', {}).get('climatisationState', {}).get('content', False):
+            data['source'] = self.attrs.get('climater', {}).get('settings', {}).get('heaterSource', {}).get('content', '')
+            data['status'] = self.attrs.get('climater', {}).get('status', {}).get('climatisationStatusData', {}).get('climatisationState', {}).get('content', '')
+        elif self.attrs.get('airConditioning', False):
+            data['status'] = self.attrs.get('airConditioning', {}).get('state', '')
+        return data
+
+    @property
+    def is_electric_climatisation_attributes_supported(self):
+        """Return true if vehichle has climater."""
+        return self.is_climatisation_supported
+
+    @property
     def electric_climatisation(self):
         """Return status of climatisation."""
         if self.attrs.get('climater', {}).get('status', {}).get('climatisationStatusData', {}).get('climatisationState', {}).get('content', False):
@@ -1840,7 +1856,7 @@ class Vehicle:
             status = self.attrs.get('climater', {}).get('status', {}).get('climatisationStatusData', {}).get('climatisationState', {}).get('content', '')
             if status in ['heating', 'cooling', 'on'] and climatisation_type == 'electric':
                 return True
-        elif self.attrs.get('airConditioning', {}).get('state', False) in ['ON', 'On', 'on', 'Heating']:
+        elif self.attrs.get('airConditioning', {}).get('state', 'off').lower() in ['on', 'heating', 'cooling', 'ventilation']:
             return True
         return False
 
