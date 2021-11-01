@@ -569,13 +569,91 @@ class WindowHeater(Switch):
         return dict(last_result = self.vehicle.climater_action_status)
 
 
-class SeatHeating(Switch):
+class SeatHeatingFrontLeft(Switch):
     def __init__(self):
-        super().__init__(attr="seat_heating", name="Seat Heating", icon="mdi:seat-recline-normal")
+        super().__init__(attr="seat_heating_front_left", name="Seat heating front left", icon="mdi:seat-recline-normal")
 
     @property
     def state(self):
-        return self.vehicle.seat_heating
+        return self.vehicle.seat_heating_front_left
+
+    async def turn_on(self):
+        #await self.vehicle.set_seat_heating('start')
+        #await self.vehicle.update()
+        pass
+
+    async def turn_off(self):
+        #await self.vehicle.set_seat_heating('stop')
+        #await self.vehicle.update()
+        pass
+
+    @property
+    def assumed_state(self):
+        return False
+
+    @property
+    def attributes(self):
+        return dict(last_result = self.vehicle.climater_action_status)
+
+class SeatHeatingFrontRight(Switch):
+    def __init__(self):
+        super().__init__(attr="seat_heating_front_right", name="Seat heating front right", icon="mdi:seat-recline-normal")
+
+    @property
+    def state(self):
+        return self.vehicle.seat_heating_front_right
+
+    async def turn_on(self):
+        #await self.vehicle.set_seat_heating('start')
+        #await self.vehicle.update()
+        pass
+
+    async def turn_off(self):
+        #await self.vehicle.set_seat_heating('stop')
+        #await self.vehicle.update()
+        pass
+
+    @property
+    def assumed_state(self):
+        return False
+
+    @property
+    def attributes(self):
+        return dict(last_result = self.vehicle.climater_action_status)
+
+class SeatHeatingRearLeft(Switch):
+    def __init__(self):
+        super().__init__(attr="seat_heating_rear_left", name="Seat heating rear left", icon="mdi:seat-recline-normal")
+
+    @property
+    def state(self):
+        return self.vehicle.seat_heating_rear_left
+
+    async def turn_on(self):
+        #await self.vehicle.set_seat_heating('start')
+        #await self.vehicle.update()
+        pass
+
+    async def turn_off(self):
+        #await self.vehicle.set_seat_heating('stop')
+        #await self.vehicle.update()
+        pass
+
+    @property
+    def assumed_state(self):
+        return False
+
+    @property
+    def attributes(self):
+        return dict(last_result = self.vehicle.climater_action_status)
+
+class SeatHeatingRearRight(Switch):
+    def __init__(self):
+        super().__init__(attr="seat_heating_rear_right", name="Seat heating rear right", icon="mdi:seat-recline-normal")
+
+    @property
+    def state(self):
+        return self.vehicle.seat_heating_rear_right
 
     async def turn_on(self):
         #await self.vehicle.set_seat_heating('start')
@@ -596,6 +674,29 @@ class SeatHeating(Switch):
         return dict(last_result = self.vehicle.climater_action_status)
 
 
+class AirConditionAtUnlock(Switch):
+    def __init__(self):
+        super().__init__(attr="aircon_at_unlock", name="Air-conditioning at unlock", icon="mdi:power-plug")
+
+    @property
+    def state(self):
+        return self.vehicle.aircon_at_unlock
+
+    async def turn_on(self):
+        pass
+
+    async def turn_off(self):
+        pass
+
+    @property
+    def assumed_state(self):
+        return False
+
+    @property
+    def attributes(self):
+        return dict(last_result = self.vehicle.climater_action_status)
+
+    
 class BatteryClimatisation(Switch):
     def __init__(self):
         super().__init__(attr="climatisation_without_external_power", name="Climatisation from battery", icon="mdi:power-plug")
@@ -811,7 +912,11 @@ def create_instruments():
         RequestHonkAndFlash(),
         RequestUpdate(),
         WindowHeater(),
-        SeatHeating(),
+        #SeatHeatingFrontLeft(), # Not yet implemented
+        #SeatHeatingFrontRight(), # Not yet implemented
+        #SeatHeatingRearLeft(), # Not yet implemented
+        #SeatHeatingRearRight(), # Not yet implemented
+        #AirConditionAtUnlock(), # Not yet implemented
         BatteryClimatisation(),
         ElectricClimatisation(),
         AuxiliaryClimatisation(),
@@ -1165,6 +1270,31 @@ def create_instruments():
             attr="request_in_progress",
             name="Request in progress",
             device_class="connectivity"
+        ),
+        BinarySensor(
+            attr="seat_heating_front_left",
+            name="Seat heating front left",
+            device_class="heat"
+        ),
+        BinarySensor(
+            attr="seat_heating_front_right",
+            name="Seat heating front right",
+            device_class="heat"
+        ),
+        BinarySensor(
+            attr="seat_heating_rear_left",
+            name="Seat heating rear left",
+            device_class="heat"
+        ),
+        BinarySensor(
+            attr="seat_heating_rear_right",
+            name="Seat heating rear right",
+            device_class="heat"
+        ),
+        BinarySensor(
+            attr="aircon_at_unlock",
+            name="Air-conditioning at unlock",
+            device_class="opening"
         ),
     ]
 
