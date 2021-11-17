@@ -39,17 +39,17 @@ class Vehicle:
         self._states = {}
 
         self._requests = {
-            'departuretimer': {'status': '', 'timestamp': DATEZERO},
-            'batterycharge': {'status': '', 'timestamp': DATEZERO},
-            'climatisation': {'status': '', 'timestamp': DATEZERO},
-            'air-conditioning': {'status': '', 'timestamp': DATEZERO},
-            'refresh': {'status': '', 'timestamp': DATEZERO},
-            'lock': {'status': '', 'timestamp': DATEZERO},
-            'honkandflash': {'status': '', 'timestamp': DATEZERO},
-            'preheater': {'status': '', 'timestamp': DATEZERO},
+            'departuretimer': {'status': 'N/A', 'timestamp': DATEZERO},
+            'batterycharge': {'status': 'N/A', 'timestamp': DATEZERO},
+            'climatisation': {'status': 'N/A', 'timestamp': DATEZERO},
+            'air-conditioning': {'status': 'N/A', 'timestamp': DATEZERO},
+            'refresh': {'status': 'N/A', 'timestamp': DATEZERO},
+            'lock': {'status': 'N/A', 'timestamp': DATEZERO},
+            'honkandflash': {'status': 'N/A', 'timestamp': DATEZERO},
+            'preheater': {'status': 'N/A', 'timestamp': DATEZERO},
             'remaining': -1,
-            'latest': '',
-            'state': ''
+            'latest': 'N/A',
+            'state': 'N/A'
         }
         self._climate_duration = 30
 
@@ -2686,13 +2686,13 @@ class Vehicle:
     def request_results(self):
         """Get last request result."""
         data = {
-            'latest': self._requests.get('latest', None),
-            'state': self._requests.get('state', None)
+            'latest': self._requests.get('latest', 'N/A'),
+            'state': self._requests.get('state', 'N/A'),
         }
         for section in self._requests:
             if section in ['departuretimer', 'batterycharge', 'air-conditioning', 'climatisation', 'refresh', 'lock', 'preheater']:
                 timestamp = self._requests.get(section, {}).get('timestamp', DATEZERO)
-                data[section] = self._requests[section].get('status', 'Unknown')
+                data[section] = self._requests[section].get('status', 'N/A')
                 data[section+'_timestamp'] = timestamp.strftime("%Y-%m-%d %H:%M:%S")
         return data
 

@@ -72,8 +72,9 @@ class Instrument:
 
 
 class Sensor(Instrument):
-    def __init__(self, attr, name, icon, unit):
+    def __init__(self, attr, name, icon, unit=None, device_class=None):
         super().__init__(component="sensor", attr=attr, name=name, icon=icon)
+        self.device_class = device_class
         self.unit = unit
         self.convert = False
 
@@ -895,13 +896,13 @@ class DepartureTimer3(Switch):
 
 class RequestResults(Sensor):
     def __init__(self):
-        super().__init__(attr="request_results", name="Request results", icon="mdi:chat-alert", unit="")
+        super().__init__(attr="request_results", name="Request results", icon="mdi:chat-alert", unit=None)
 
     @property
     def state(self):
         if self.vehicle.request_results.get('state', False):
             return self.vehicle.request_results.get('state')
-        return 'Unknown'
+        return 'N/A'
 
     @property
     def assumed_state(self):
@@ -949,12 +950,14 @@ def create_instruments():
             name="Battery level",
             icon="mdi:battery",
             unit="%",
+            device_class="battery"
         ),
         Sensor(
             attr="min_charge_level",
             name="Minimum charge level",
             icon="mdi:battery-positive",
             unit="%",
+            device_class="battery"
         ),
         Sensor(
             attr="adblue_level",
@@ -996,13 +999,13 @@ def create_instruments():
             attr="last_connected",
             name="Last connected",
             icon="mdi:clock",
-            unit="",
+            device_class="timestamp"
         ),
         Sensor(
             attr="parking_time",
             name="Parking time",
             icon="mdi:clock",
-            unit="",
+            device_class="timestamp"
         ),
         Sensor(
             attr="charging_time_left",
@@ -1014,7 +1017,8 @@ def create_instruments():
             attr="charging_power",
             name="Charging power",
             icon="mdi:flash",
-            unit="W"
+            unit="W",
+            device_class="power"
         ),
         Sensor(
             attr="charge_rate",
@@ -1045,12 +1049,14 @@ def create_instruments():
             name="Charger max ampere",
             icon="mdi:flash",
             unit="A",
+            device_class="current"
         ),
         Sensor(
             attr="climatisation_target_temperature",
             name="Climatisation target temperature",
             icon="mdi:thermometer",
             unit="°C",
+            device_class="temperature"
         ),
         Sensor(
             attr="climatisation_time_left",
@@ -1116,13 +1122,11 @@ def create_instruments():
             attr="model_image_large",
             name="Model image URL (Large)",
             icon="mdi:file-image",
-            unit=""
         ),
         Sensor(
             attr="model_image_small",
             name="Model image URL (Small)",
             icon="mdi:file-image",
-            unit=""
         ),
         Sensor(
             attr="trip_last_total_electric_consumption",
@@ -1134,7 +1138,6 @@ def create_instruments():
             attr="pheater_status",
             name="Parking Heater heating/ventilation status",
             icon="mdi:radiator",
-            unit="",
         ),
         Sensor(
             attr="pheater_duration",
@@ -1147,12 +1150,13 @@ def create_instruments():
             name="Outside temperature",
             icon="mdi:thermometer",
             unit="°C",
+            device_class="temperature"
         ),
         Sensor(
             attr="requests_remaining",
             name="Requests remaining",
             icon="mdi:chat-alert",
-            unit="",
+            unit=""
         ),
         BinarySensor(
             attr="external_power",
