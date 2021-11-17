@@ -346,9 +346,9 @@ class Vehicle:
                     # Skoda Native API charger current request, does this work?
                     elif self._services.get('CHARGING', False) is not False:
                         data = {'chargingSettings': {
-                                'autoUnlockPlugWhenCharged': self.attrs.get('charger', {}).get('settings', {}).get('autoUnlockPlugWhenCharged', 'Off'),
+                                'autoUnlockPlugWhenCharged': self.attrs.get('chargerSettings', {}).get('autoUnlockPlugWhenCharged', 'Off'),
                                 'maxChargeCurrentAc': value,
-                                'targetStateOfChargeInPercent': self.attrs.get('charger', {}).get('settings', {}).get('targetStateOfChargeInPercent', 100)},
+                                'targetStateOfChargeInPercent': self.attrs.get('chargerSettings', {}).get('targetStateOfChargeInPercent', 100)},
                             'type': 'UpdateSettings'
                         }
                 else:
@@ -365,9 +365,9 @@ class Vehicle:
                     elif self._services.get('CHARGING', False) is not False:
                         value = 'Maximum' if value in ['Maximum', 'maximum', 'Max', 'max'] else 'Reduced'
                         data = {'chargingSettings': {
-                                'autoUnlockPlugWhenCharged': self.attrs.get('charger', {}).get('settings', {}).get('autoUnlockPlugWhenCharged', 'Off'),
+                                'autoUnlockPlugWhenCharged': self.attrs.get('chargerSettings', {}).get('autoUnlockPlugWhenCharged', 'Off'),
                                 'maxChargeCurrentAc': value,
-                                'targetStateOfChargeInPercent': self.attrs.get('charger', {}).get('settings', {}).get('targetStateOfChargeInPercent', 100)},
+                                'targetStateOfChargeInPercent': self.attrs.get('chargerSettings', {}).get('targetStateOfChargeInPercent', 100)},
                             'type': 'UpdateSettings'
                         }
                 else:
@@ -410,7 +410,7 @@ class Vehicle:
                 data = {'type': action.capitalize()}
             elif action.get('action', {}) == 'chargelimit':
                 data = {'chargingSettings': {
-                            'autoUnlockPlugWhenCharged': self.attrs.get('charger', {}).get('settings', {}).get('autoUnlockPlugWhenCharged', 'Off'),
+                            'autoUnlockPlugWhenCharged': self.attrs.get('chargerSettings', {}).get('autoUnlockPlugWhenCharged', 'Off'),
                             'maxChargeCurrentAc': self.charge_max_ampere,
                             'targetStateOfChargeInPercent': action.get('limit', 50)},
                         'type': 'UpdateSettings'
@@ -705,6 +705,9 @@ class Vehicle:
     async def set_window_heating(self, action = 'stop'):
         """Turn on/off window heater."""
         if self.is_window_heater_supported:
+            if 'REMOTE' in self._connectivities:
+                raise SkodaInvalidRequestException('This function is not yet implemented for this vehicle.')
+
             if action in ['start', 'stop']:
                 data = {'action': {'type': action + 'WindowHeating'}}
             else:

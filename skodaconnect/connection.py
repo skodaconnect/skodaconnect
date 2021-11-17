@@ -1096,7 +1096,6 @@ class Connection:
             chargingData = await asyncio.gather(chargerStatus, chargerSettings)
 
             if chargingData[0].get('battery', {}) or chargingData[1].get('maxChargeCurrentAc', {}):
-                _LOGGER.debug(f'Got vehicle charging data')
                 response = chargingData[0]
                 response['chargerSettings'] = chargingData[1]
                 return response
