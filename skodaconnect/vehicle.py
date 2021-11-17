@@ -585,6 +585,10 @@ class Vehicle:
                 if isinstance(schedule.get('chargeMaxCurrent', None), str):
                     if not schedule.get("chargeMaxCurrent", None) in ['Maximum', 'maximum', 'Max', 'max', 'Minimum', 'minimum', 'Min', 'min', 'Reduced', 'reduced']:
                         raise SkodaInvalidRequestException('Charge current must be one of Maximum/Minimum/Reduced')
+                    elif 'ONLINE' in self._connectivities:
+                        # Set string to numeric value for VW-Group API
+                        schedule['chargeMaxCurrent'] = 252
+                        if schedule.get("chargeMaxCurrent", None) in ['Maximum', 'maximum', 'Max', 'max']: schedule['chargeMaxCurrent'] = 254
                 elif isinstance(schedule.get('chargeMaxCurrent', None), int):
                     if not 1 <= int(schedule.get("chargeMaxCurrent", 254)) < 255:
                         raise SkodaInvalidRequestException('Charge current must be set from 1 to 254')
