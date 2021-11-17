@@ -22,6 +22,7 @@ from skodaconnect.exceptions import (
 
 _LOGGER = logging.getLogger(__name__)
 
+DATEZERO = datetime(1970,1,1)
 class Vehicle:
     def __init__(self, conn, data):
         _LOGGER.debug(f'Creating Vehicle class object with data {data}')
@@ -38,14 +39,14 @@ class Vehicle:
         self._states = {}
 
         self._requests = {
-            'departuretimer': {'status': '', 'timestamp': datetime.now()},
-            'batterycharge': {'status': '', 'timestamp': datetime.now()},
-            'climatisation': {'status': '', 'timestamp': datetime.now()},
-            'air-conditioning': {'status': '', 'timestamp': datetime.now()},
-            'refresh': {'status': '', 'timestamp': datetime.now()},
-            'lock': {'status': '', 'timestamp': datetime.now()},
-            'honkandflash': {'status': '', 'timestamp': datetime.now()},
-            'preheater': {'status': '', 'timestamp': datetime.now()},
+            'departuretimer': {'status': '', 'timestamp': DATEZERO},
+            'batterycharge': {'status': '', 'timestamp': DATEZERO},
+            'climatisation': {'status': '', 'timestamp': DATEZERO},
+            'air-conditioning': {'status': '', 'timestamp': DATEZERO},
+            'refresh': {'status': '', 'timestamp': DATEZERO},
+            'lock': {'status': '', 'timestamp': DATEZERO},
+            'honkandflash': {'status': '', 'timestamp': DATEZERO},
+            'preheater': {'status': '', 'timestamp': DATEZERO},
             'remaining': -1,
             'latest': '',
             'state': ''
@@ -2534,9 +2535,21 @@ class Vehicle:
         return self._requests.get('refresh', {}).get('status', 'None')
 
     @property
+    def refresh_action_timestamp(self):
+        """Return timestamp of latest data refresh request."""
+        timestamp = self._requests.get('refresh', {}).get('timestamp', DATEZERO)
+        return timestamp.strftime("%Y-%m-%d %H:%M:%S")
+
+    @property
     def charger_action_status(self):
         """Return latest status of charger request."""
         return self._requests.get('batterycharge', {}).get('status', 'None')
+
+    @property
+    def charger_action_timestamp(self):
+        """Return timestamp of latest charger request."""
+        timestamp = self._requests.get('charger', {}).get('timestamp', DATEZERO)
+        return timestamp.strftime("%Y-%m-%d %H:%M:%S")
 
     @property
     def aircon_action_status(self):
@@ -2544,9 +2557,21 @@ class Vehicle:
         return self._requests.get('air-conditioning', {}).get('status', 'None')
 
     @property
+    def aircon_action_timestamp(self):
+        """Return timestamp of latest air-conditioning request."""
+        timestamp = self._requests.get('air-conditioning', {}).get('timestamp', DATEZERO)
+        return timestamp.strftime("%Y-%m-%d %H:%M:%S")
+
+    @property
     def climater_action_status(self):
         """Return latest status of climater request."""
         return self._requests.get('climatisation', {}).get('status', 'None')
+
+    @property
+    def climater_action_timestamp(self):
+        """Return timestamp of latest climater request."""
+        timestamp = self._requests.get('climatisation', {}).get('timestamp', DATEZERO)
+        return timestamp.strftime("%Y-%m-%d %H:%M:%S")
 
     @property
     def pheater_action_status(self):
@@ -2554,9 +2579,21 @@ class Vehicle:
         return self._requests.get('preheater', {}).get('status', 'None')
 
     @property
+    def pheater_action_timestamp(self):
+        """Return timestamp of latest parking heater request."""
+        timestamp = self._requests.get('preheater', {}).get('timestamp', DATEZERO)
+        return timestamp.strftime("%Y-%m-%d %H:%M:%S")
+
+    @property
     def honkandflash_action_status(self):
         """Return latest status of honk and flash action request."""
         return self._requests.get('honkandflash', {}).get('status', 'None')
+
+    @property
+    def honkandflash_action_timestamp(self):
+        """Return timestamp of latest honk and flash request."""
+        timestamp = self._requests.get('honkandflash', {}).get('timestamp', DATEZERO)
+        return timestamp.strftime("%Y-%m-%d %H:%M:%S")
 
     @property
     def lock_action_status(self):
@@ -2564,9 +2601,21 @@ class Vehicle:
         return self._requests.get('lock', {}).get('status', 'None')
 
     @property
+    def lock_action_timestamp(self):
+        """Return timestamp of latest lock action request."""
+        timestamp = self._requests.get('lock', {}).get('timestamp', DATEZERO)
+        return timestamp.strftime("%Y-%m-%d %H:%M:%S")
+
+    @property
     def timer_action_status(self):
-        """Return latest status of lock action request."""
+        """Return latest status of departure timer request."""
         return self._requests.get('departuretimer', {}).get('status', 'None')
+
+    @property
+    def timer_action_timestamp(self):
+        """Return timestamp of latest departure timer request."""
+        timestamp = self._requests.get('departuretimer', {}).get('timestamp', DATEZERO)
+        return timestamp.strftime("%Y-%m-%d %H:%M:%S")
 
     @property
     def refresh_data(self):
@@ -2642,7 +2691,9 @@ class Vehicle:
         }
         for section in self._requests:
             if section in ['departuretimer', 'batterycharge', 'air-conditioning', 'climatisation', 'refresh', 'lock', 'preheater']:
+                timestamp = self._requests.get(section, {}).get('timestamp', DATEZERO)
                 data[section] = self._requests[section].get('status', 'Unknown')
+                data[section+'_timestamp'] = timestamp.strftime("%Y-%m-%d %H:%M:%S")
         return data
 
     @property
