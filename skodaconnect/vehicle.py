@@ -15,6 +15,7 @@ from skodaconnect.exceptions import (
     SkodaConfigException,
     SkodaException,
     SkodaEULAException,
+    SkodaServiceUnavailable,
     SkodaThrottledException,
     SkodaInvalidRequestException,
     SkodaRequestInProgressException
@@ -709,15 +710,37 @@ class Vehicle:
     async def set_window_heating(self, action = 'stop'):
         """Turn on/off window heater."""
         if self.is_window_heater_supported:
-            if 'REMOTE' in self._connectivities:
-                raise SkodaInvalidRequestException('This function is not yet implemented for this vehicle.')
-
             if action in ['start', 'stop']:
-                data = {'action': {'type': action + 'WindowHeating'}}
+                # This is a Skoda native API vehicle
+                if self._services.get('AIR_CONDITIONING', False):
+                    data = {}
+                    # Fetch current climatisation settings
+                    airconData = await self._connection.getAirConditioning(self.vin)
+                    if airconData:
+                        airconData.pop('airConditioning', None)
+                        data = airconData
+                    else:
+                        # Try to use saved configuration from previous poll
+                        if self.attrs.get('airConditioningSettings', False):
+                            _LOGGER.warning('Failed to fetch climatisation settings, using saved values.')
+                            data = self.attrs.get('airConditioningSettings')
+                        else:
+                            _LOGGER.warning('Could not fetch current climatisation settings.')
+                            raise SkodaServiceUnavailable("Unable to fetch current settings.")
+                    data.pop('temperatureConversionTableUsed', None)
+                    data['airConditioningSettings']['type'] = 'UpdateSettings'
+                    if action == 'start':
+                        data['airConditioningSettings']['windowHeatingEnabled'] = True
+                    else:
+                        data['airConditioningSettings']['windowHeatingEnabled'] = False
+                    return await self._set_aircon(data)
+                else:
+                    # Vehicle is hosted by VW-Group API
+                    data = {'action': {'type': action + 'WindowHeating'}}
+                    return await self._set_climater(data)
             else:
                 _LOGGER.error(f'Window heater action "{action}" is not supported.')
                 raise SkodaInvalidRequestException(f'Window heater action "{action}" is not supported.')
-            return await self._set_climater(data)
         else:
             _LOGGER.error('No climatisation support.')
             raise SkodaInvalidRequestException('No climatisation support.')
