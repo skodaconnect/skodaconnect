@@ -20,7 +20,7 @@ Retrieve statistics about your Skoda from the Skoda Connect online service.
 * All (native) Skoda cars supported though newer cars (Skoda Enyaq iV) use newer API that's under development
 * If your Skoda car don't work with the MySkoda app it won't work with this integration
 
-Pease contribute improvements/bugfixes etc.
+Please contribute improvements/bugfixes etc.
 
 ## Breaking changes
 
