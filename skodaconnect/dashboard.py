@@ -1307,7 +1307,7 @@ def create_instruments():
         BinarySensor(
             attr="aircon_at_unlock",
             name="Air-conditioning at unlock",
-            device_class="opening"
+            device_class=None
         ),
     ]
 
