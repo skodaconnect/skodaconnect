@@ -465,7 +465,7 @@ class Vehicle:
         # VW-Group API charging
         if self._services.get('timerprogramming_v1', False) is not False:
             if isinstance(limit, int):
-                if limit in [0, 10, 20, 30, 40, 50]:
+                if limit in [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]:
                     data['limit'] = limit
                     data['action'] = 'chargelimit'
                 else:
