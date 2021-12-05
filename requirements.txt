@@ -2,5 +2,4 @@ aiohttp
 beautifulsoup4
 cryptography
 lxml
-pytest-asyncio
 pyjwt
