@@ -8,7 +8,7 @@ modified to support Skoda Connect.
 Changes has been made to mimic the MySkoda mobile app.
 
 This is an API library for Skoda connected cars.
-The library is reverse engineered by intercepting HTTP requests from from
+The library is reverse engineered by intercepting HTTP requests from
 MySkoda app, there is no official API. Use at your own risk.
 If the Skoda API changes, this library may stop working without warning.
 
