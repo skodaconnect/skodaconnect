@@ -324,18 +324,21 @@ class Connection:
         try:
             response_data = await html.text()
             responseSoup = BeautifulSoup(response_data, 'html.parser')
-            mailform = dict()
+            form_data = dict()
             if responseSoup is None:
                 raise SkodaLoginFailedException('Login failed, server did not return a login form')
             for t in responseSoup.find('form', id='emailPasswordForm').find_all('input', type='hidden'):
                 if self._session_fulldebug:
                     _LOGGER.debug(f'Extracted form attribute: {t["name"], t["value"]}')
-                mailform[t['name']] = t['value']
+                #mailform[t['name']] = t['value']
+                form_data[t['name']] = t['value']
             #mailform = dict([(t['name'],t['value']) for t in responseSoup.find('form', id='emailPasswordForm').find_all('input', type='hidden')])
-            mailform['email'] = self._session_auth_username
+            form_data['email'] = self._session_auth_username
             pe_url = authissuer+responseSoup.find('form', id='emailPasswordForm').get('action')
+            login_base = pe_url.split('login')
         except Exception as e:
             _LOGGER.error('Failed to extract user login form.')
+            _LOGGER.debug(f'Form: {form_data}')
             raise
 
         # POST email
@@ -346,7 +349,7 @@ class Connection:
         req = await self._session.post(
             url = pe_url,
             headers = self._session_auth_headers,
-            data = mailform
+            data = form_data
         )
         if req.status != 200:
             raise SkodaException('Authorization request failed')
@@ -354,16 +357,39 @@ class Connection:
             response_data = await req.text()
             responseSoup = BeautifulSoup(response_data, 'html.parser')
             pwform = {}
-            for t in responseSoup.find('form', id='credentialsForm').find_all('input', type='hidden'):
-                if self._session_fulldebug:
-                    _LOGGER.debug(f'Extracted form attribute: {t["name"], t["value"]}')
-                pwform[t['name']] = t['value']
-            #pwform = dict([(t['name'],t['value']) for t in responseSoup.find('form', id='credentialsForm').find_all('input', type='hidden')])
-            pwform['password'] = self._session_auth_password
-            pw_url = authissuer+responseSoup.find('form', id='credentialsForm').get('action')
+            credentials_form = responseSoup.find('form', id='credentialsForm')
+            all_scripts = responseSoup.find_all('script', {'src': False})
+            if credentials_form is not None:
+                _LOGGER.debug('Found HTML credentials form, extracting attributes')
+                for t in credentials_form.find_all('input', type='hidden'):
+                    if self._session_fulldebug:
+                        _LOGGER.debug(f'Extracted form attribute: {t["name"], t["value"]}')
+                    pwform[t['name']] = t['value']
+                    form_data = pwform
+                    post_action = responseSoup.find('form', id='credentialsForm').get('action')
+            elif all_scripts is not None:
+                _LOGGER.debug('Found dynamic credentials form, extracting attributes')
+                pattern = re.compile("templateModel: (.*?),\n")
+                for sc in all_scripts:
+                    if(pattern.search(sc.string)):
+                        import json
+                        data = pattern.search(sc.string)
+                        jsondata = json.loads(data.groups()[0])
+                        _LOGGER.debug(f'JSON: {jsondata}')
+                        if not jsondata.get('hmac', False):
+                            raise SkodaLoginFailedException('Failed to extract login hmac attribute')
+                        if not jsondata.get('postAction', False):
+                            raise SkodaLoginFailedException('Failed to extract login post action attribute')
+                        if jsondata.get('error', None) is not None:
+                            raise SkodaLoginFailedException(f'Login failed with error: {jsondata.get("error", None)}')
+                        form_data['hmac'] = jsondata.get('hmac', '')
+                        post_action = jsondata.get('postAction')
+            else:
+                raise SkodaLoginFailedException('Failed to extract login form data')
+            form_data['password'] = self._session_auth_password
+        except (SkodaLoginFailedException) as e:
+            raise
         except Exception as e:
-            if responseSoup.find('form', id='credentialsForm') is None:
-                raise SkodaAuthenticationException("Invalid username")
             raise SkodaAuthenticationException("Invalid username or service unavailable")
 
         # POST password
@@ -372,13 +398,15 @@ class Connection:
         self._session_auth_headers['Origin'] = authissuer
         _LOGGER.debug(f"Finalizing login")
         if self._session_fulldebug:
-            _LOGGER.debug(f'Using login action url: "{pw_url}"')
+            _LOGGER.debug(f'Using login action url: "{login_base[0]}{post_action}"')
+            _LOGGER.debug(f'POSTing following form data: {form_data}')
         req = await self._session.post(
-            url=pw_url,
+            url=login_base[0]+post_action,
             headers=self._session_auth_headers,
-            data = pwform,
+            data = form_data,
             allow_redirects=False
         )
+        _LOGGER.debug(f'Got response: {req}')
         return req.headers.get('Location', None)
 
     async def _getAPITokens(self):
