@@ -221,7 +221,7 @@ class Connection:
                             timeout = parse_qs(urlparse(location).query).get('enableNextButtonAfterSeconds', '')[0]
                             raise SkodaAccountLockedException(f'Account is locked for another {timeout} seconds')
                         elif error == 'login.errors.password_invalid':
-                            raise SkodaAuthenticationException('Invalid credentials')
+                            raise SkodaAuthenticationException('Invalid password')
                         else:
                             _LOGGER.warning(f'Login failed: {error}')
                         raise SkodaLoginFailedException(error)
