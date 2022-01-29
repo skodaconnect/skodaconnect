@@ -41,6 +41,7 @@ Heating is what it sounds like and ventilation is used to ventilate/cool the car
 - [Farfar](https://github.com/Farfar) for modifications related to electric engines
 - [tanelvakker](https://github.com/tanelvakker) for modifications related to correct SPIN handling for various actions and using correct URLs also for MY2021
 - [wieshka](https://github.com/wieshka) for help with Skoda Enyaq iV development
+- WebSpider and GAEvakYD from Discord for their help with fixing login form handling
 
 ## Other related repositories
 
