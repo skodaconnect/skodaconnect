@@ -8,7 +8,7 @@ modified to support Skoda Connect.
 Changes has been made to mimic the MySkoda mobile app.
 
 This is an API library for Skoda connected cars.
-The library is reverse engineered by intercepting HTTP requests from from
+The library is reverse engineered by intercepting HTTP requests from
 MySkoda app, there is no official API. Use at your own risk.
 If the Skoda API changes, this library may stop working without warning.
 
@@ -41,6 +41,7 @@ Heating is what it sounds like and ventilation is used to ventilate/cool the car
 - [Farfar](https://github.com/Farfar) for modifications related to electric engines
 - [tanelvakker](https://github.com/tanelvakker) for modifications related to correct SPIN handling for various actions and using correct URLs also for MY2021
 - [wieshka](https://github.com/wieshka) for help with Skoda Enyaq iV development
+- WebSpider and GAEvakYD from Discord for their help with fixing login form handling
 
 ## Other related repositories
 

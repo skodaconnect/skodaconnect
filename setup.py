@@ -26,6 +26,5 @@ setuptools.setup(
     use_scm_version={"local_scheme": local_scheme},
     setup_requires=[
         'setuptools_scm',
-        'pytest>=5,<6',
     ]
 )
