@@ -1780,11 +1780,13 @@ class Vehicle:
         value = -1
         if self.is_secondary_drive_supported:
             if self.secondary_drive == 3:
-                return self.secondary_range
+                value = self.secondary_range
         elif self.is_primary_drive_supported:
             if self.primary_drive == 3:
-                return self.primary_range
-        return -1
+                value = self.primary_range
+        elif self.attrs.get('battery', False):
+            value = int(self.attrs.get('battery', {}).get('cruisingRangeElectricInMeters', 0))/1000
+        return int(value)
 
     @property
     def is_electric_range_supported(self):
@@ -1794,6 +1796,9 @@ class Vehicle:
         elif self.is_primary_drive_supported:
             if self.primary_drive == 3:
                 return self.is_primary_range_supported
+        elif self.attrs.get('battery', False):
+            if 'cruisingRangeElectricInMeters' in self.attrs.get('battery'):
+                return True
         return False
 
     @property
