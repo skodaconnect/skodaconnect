@@ -575,7 +575,6 @@ class WindowHeater(Switch):
     def attributes(self):
         return dict(
             last_result = self.vehicle.climater_action_status,
-
         )
 
 
