@@ -330,15 +330,11 @@ class Connection:
             for t in responseSoup.find('form', id='emailPasswordForm').find_all('input', type='hidden'):
                 if self._session_fulldebug:
                     _LOGGER.debug(f'Extracted form attribute: {t["name"], t["value"]}')
-                #mailform[t['name']] = t['value']
                 form_data[t['name']] = t['value']
-            #mailform = dict([(t['name'],t['value']) for t in responseSoup.find('form', id='emailPasswordForm').find_all('input', type='hidden')])
             form_data['email'] = self._session_auth_username
             pe_url = authissuer+responseSoup.find('form', id='emailPasswordForm').get('action')
-            login_base = pe_url.split('login')
         except Exception as e:
             _LOGGER.error('Failed to extract user login form.')
-            _LOGGER.debug(f'Form: {form_data}')
             raise
 
         # POST email
@@ -398,15 +394,14 @@ class Connection:
         self._session_auth_headers['Origin'] = authissuer
         _LOGGER.debug(f"Finalizing login")
         if self._session_fulldebug:
-            _LOGGER.debug(f'Using login action url: "{login_base[0]}{post_action}"')
+            _LOGGER.debug(f'Using login action url: "{authissuer}{post_action}"')
             _LOGGER.debug(f'POSTing following form data: {form_data}')
         req = await self._session.post(
-            url=login_base[0]+post_action,
+            url=authissuer+post_action,
             headers=self._session_auth_headers,
             data = form_data,
             allow_redirects=False
         )
-        _LOGGER.debug(f'Got response: {req}')
         return req.headers.get('Location', None)
 
     async def _getAPITokens(self):
@@ -681,17 +676,14 @@ class Connection:
                 if 'status' in consent.get('mandatoryConsentInfo', []):
                     if consent.get('mandatoryConsentInfo', [])['status'] != 'VALID':
                         _LOGGER.error(f'The user needs to update consent for {consent.get("mandatoryConsentInfo", [])["id"]}. If problems are encountered please visit the web portal first and accept terms and conditions.')
-                        #raise SkodaEULAException(f'User needs to update consent for {consent.get("mandatoryConsentInfo", [])["id"]}')
                 elif len(consent.get('missingMandatoryFields', [])) > 0:
                     _LOGGER.error(f'Missing mandatory field for user: {consent.get("missingMandatoryFields", [])[0].get("name", "")}. If problems are encountered please visit the web portal first and accept terms and conditions.')
-                    #raise SkodaEULAException(f'Missing mandatory field for user: {consent.get("missingMandatoryFields", [])[0].get("name", "")}')
                 else:
                     _LOGGER.debug('User consent is valid, no missing information for profile')
             else:
                 _LOGGER.debug('Could not fetch consent information. If problems are encountered please visit the web portal first and make sure that no new terms and conditions need to be accepted.')
         except:
             _LOGGER.debug('Could not fetch consent information. If problems are encountered please visit the web portal first and make sure that no new terms and conditions need to be accepted.')
-            #raise
 
         # Authorize for "skoda" client and get vehicles from garage endpoint
         try:
@@ -789,7 +781,7 @@ class Connection:
             # Try new pyJWT syntax if old fails
             if subject is None:
                 try:
-                    exp = jwt.decode(atoken, options={'verify_signature': False}).get('sub', None)
+                    subject = jwt.decode(atoken, options={'verify_signature': False}).get('sub', None)
                 except:
                     raise Exception("Could not extract sub attribute from token")
 

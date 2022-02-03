@@ -1712,21 +1712,90 @@ class Vehicle:
 
   # Vehicle fuel level and range
     @property
-    def electric_range(self):
+    def primary_range(self):
         value = -1
-        if '0x0301030008' in self.attrs.get('StoredVehicleDataResponseParsed', {}):
+        if '0x0301030006' in self.attrs.get('StoredVehicleDataResponseParsed'):
+            if 'value' in self.attrs.get('StoredVehicleDataResponseParsed')['0x0301030006']:
+                value = self.attrs.get('StoredVehicleDataResponseParsed')['0x0301030006'].get('value', 0)
+        return int(value)
+
+    @property
+    def is_primary_range_supported(self):
+        if self.attrs.get('StoredVehicleDataResponseParsed', False):
+            if '0x0301030006' in self.attrs.get('StoredVehicleDataResponseParsed'):
+                if 'value' in self.attrs.get('StoredVehicleDataResponseParsed')['0x0301030006']:
+                    return True
+        return False
+
+    @property
+    def primary_drive(self):
+        value = -1
+        if '0x0301030007' in self.attrs.get('StoredVehicleDataResponseParsed'):
+            if 'value' in self.attrs.get('StoredVehicleDataResponseParsed')['0x0301030007']:
+                value = self.attrs.get('StoredVehicleDataResponseParsed')['0x0301030007'].get('value', 0)
+        return int(value)
+
+    @property
+    def is_primary_drive_supported(self):
+        if self.attrs.get('StoredVehicleDataResponseParsed', False):
+            if '0x0301030007' in self.attrs.get('StoredVehicleDataResponseParsed'):
+                if 'value' in self.attrs.get('StoredVehicleDataResponseParsed')['0x0301030007']:
+                    return True
+        return False
+
+    @property
+    def secondary_range(self):
+        value = -1
+        if '0x0301030008' in self.attrs.get('StoredVehicleDataResponseParsed'):
             if 'value' in self.attrs.get('StoredVehicleDataResponseParsed')['0x0301030008']:
                 value = self.attrs.get('StoredVehicleDataResponseParsed')['0x0301030008'].get('value', 0)
+        return int(value)
+ 
+    @property
+    def is_secondary_range_supported(self):
+        if self.attrs.get('StoredVehicleDataResponseParsed', False):
+            if '0x0301030008' in self.attrs.get('StoredVehicleDataResponseParsed'):
+                if 'value' in self.attrs.get('StoredVehicleDataResponseParsed')['0x0301030008']:
+                    return True
+        return False
+
+    @property
+    def secondary_drive(self):
+        value = -1
+        if '0x0301030009' in self.attrs.get('StoredVehicleDataResponseParsed'):
+            if 'value' in self.attrs.get('StoredVehicleDataResponseParsed')['0x0301030009']:
+                value = self.attrs.get('StoredVehicleDataResponseParsed')['0x0301030009'].get('value', 0)
+        return int(value)
+ 
+    @property
+    def is_secondary_drive_supported(self):
+        if self.attrs.get('StoredVehicleDataResponseParsed', False):
+            if '0x0301030009' in self.attrs.get('StoredVehicleDataResponseParsed'):
+                if 'value' in self.attrs.get('StoredVehicleDataResponseParsed')['0x0301030009']:
+                    return True
+        return False
+
+    @property
+    def electric_range(self):
+        value = -1
+        if self.is_secondary_drive_supported:
+            if self.secondary_drive == 3:
+                value = self.secondary_range
+        elif self.is_primary_drive_supported:
+            if self.primary_drive == 3:
+                value = self.primary_range
         elif self.attrs.get('battery', False):
             value = int(self.attrs.get('battery', {}).get('cruisingRangeElectricInMeters', 0))/1000
         return int(value)
 
     @property
     def is_electric_range_supported(self):
-        if self.attrs.get('StoredVehicleDataResponseParsed', False):
-            if '0x0301030008' in self.attrs.get('StoredVehicleDataResponseParsed'):
-                if 'value' in self.attrs.get('StoredVehicleDataResponseParsed')['0x0301030008']:
-                    return True
+        if self.is_secondary_drive_supported:
+            if self.secondary_drive == 3:
+                return self.is_secondary_range_supported
+        elif self.is_primary_drive_supported:
+            if self.primary_drive == 3:
+                return self.is_primary_range_supported
         elif self.attrs.get('battery', False):
             if 'cruisingRangeElectricInMeters' in self.attrs.get('battery'):
                 return True
@@ -1735,16 +1804,22 @@ class Vehicle:
     @property
     def combustion_range(self):
         value = -1
-        if '0x0301030006' in self.attrs.get('StoredVehicleDataResponseParsed'):
-            if 'value' in self.attrs.get('StoredVehicleDataResponseParsed')['0x0301030006']:
-                value = self.attrs.get('StoredVehicleDataResponseParsed')['0x0301030006'].get('value', 0)
-        return int(value)
+        if self.is_primary_drive_supported:
+            if not self.primary_drive == 3:
+                return self.primary_range
+        elif self.is_secondary_drive_supported:
+            if not self.secondary_drive == 3:
+                return self.secondary_range
+        return -1
 
     @property
     def is_combustion_range_supported(self):
-        if self.attrs.get('StoredVehicleDataResponseParsed', False):
-            if '0x0301030006' in self.attrs.get('StoredVehicleDataResponseParsed'):
-                return True
+        if self.is_primary_drive_supported:
+            if not self.primary_drive == 3:
+                return self.is_primary_range_supported
+        elif self.is_secondary_drive_supported:
+            if not self.secondary_drive == 3:
+                return self.is_secondary_range_supported
         return False
 
     @property
