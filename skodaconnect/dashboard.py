@@ -359,7 +359,10 @@ class DoorLock(Instrument):
 
     @property
     def attributes(self):
-        return dict(last_result = self.vehicle.lock_action_status)
+        return {
+            'last_result': self.vehicle.lock_action_status,
+            'last_timestamp': self.vehicle.lock_action_timestamp
+        }
 
 
 class TrunkLock(Instrument):
@@ -412,7 +415,10 @@ class RequestHonkAndFlash(Switch):
 
     @property
     def attributes(self):
-        return dict(last_result = self.vehicle.honkandflash_action_status)
+        return {
+            'last_result': self.vehicle.honkandflash_action_status,
+            'last_timestamp': self.vehicle.honkandflash_action_timestamp
+        }
 
 
 class RequestFlash(Switch):
@@ -438,7 +444,10 @@ class RequestFlash(Switch):
 
     @property
     def attributes(self):
-        return dict(last_result = self.vehicle.honkandflash_action_status)
+        return {
+            'last_result': self.vehicle.honkandflash_action_status,
+            'last_timestamp': self.vehicle.honkandflash_action_timestamp
+        }
 
 
 class RequestUpdate(Switch):
@@ -447,7 +456,10 @@ class RequestUpdate(Switch):
 
     @property
     def state(self):
-        return self.vehicle.refresh_data
+        if self.vehicle.refresh_data is None:
+            return False
+        else:
+            return self.vehicle.refresh_data
 
     async def turn_on(self):
         await self.vehicle.set_refresh()
@@ -464,7 +476,10 @@ class RequestUpdate(Switch):
 
     @property
     def attributes(self):
-        return dict(last_result = self.vehicle.refresh_action_status)
+        return {
+            'last_result': self.vehicle.refresh_action_status,
+            'last_timestamp': self.vehicle.refresh_action_timestamp
+        }
 
 
 class ElectricClimatisation(Switch):
@@ -493,8 +508,10 @@ class ElectricClimatisation(Switch):
         if self.vehicle.is_electric_climatisation_attributes_supported:
             attrs = self.vehicle.electric_climatisation_attributes
             attrs['last_result'] = self.vehicle.climater_action_status
+            attrs['last_timestamp'] = self.vehicle.climater_action_timestamp
         else:
             attrs['last_result'] = self.vehicle.climater_action_status
+            attrs['last_timestamp'] = self.vehicle.climater_action_timestamp
         return attrs
 
 
@@ -523,7 +540,10 @@ class AuxiliaryClimatisation(Switch):
 
     @property
     def attributes(self):
-        return dict(last_result = self.vehicle.climater_action_status)
+        return {
+            'last_result': self.vehicle.climater_action_status,
+            'last_timestamp': self.vehicle.climater_action_timestamp
+        }
 
 
 class Charging(Switch):
@@ -548,7 +568,10 @@ class Charging(Switch):
 
     @property
     def attributes(self):
-        return dict(last_result = self.vehicle.charger_action_status)
+        return {
+            'last_result': self.vehicle.charger_action_status,
+            'last_timestamp': self.vehicle.charger_action_timestamp
+        }
 
 
 class WindowHeater(Switch):
@@ -573,9 +596,10 @@ class WindowHeater(Switch):
 
     @property
     def attributes(self):
-        return dict(
-            last_result = self.vehicle.climater_action_status,
-        )
+        return {
+            'last_result': self.vehicle.climater_action_status,
+            'last_timestamp': self.vehicle.climater_action_timestamp
+        }
 
 
 class SeatHeatingFrontLeft(Switch):
@@ -602,7 +626,10 @@ class SeatHeatingFrontLeft(Switch):
 
     @property
     def attributes(self):
-        return dict(last_result = self.vehicle.climater_action_status)
+        return {
+            'last_result': self.vehicle.aircon_action_status,
+            'last_timestamp': self.vehicle.aircon_action_timestamp
+        }
 
 class SeatHeatingFrontRight(Switch):
     def __init__(self):
@@ -628,7 +655,10 @@ class SeatHeatingFrontRight(Switch):
 
     @property
     def attributes(self):
-        return dict(last_result = self.vehicle.climater_action_status)
+        return {
+            'last_result': self.vehicle.aircon_action_status,
+            'last_timestamp': self.vehicle.aircon_action_timestamp
+        }
 
 class SeatHeatingRearLeft(Switch):
     def __init__(self):
@@ -654,7 +684,10 @@ class SeatHeatingRearLeft(Switch):
 
     @property
     def attributes(self):
-        return dict(last_result = self.vehicle.climater_action_status)
+        return {
+            'last_result': self.vehicle.aircon_action_status,
+            'last_timestamp': self.vehicle.aircon_action_timestamp
+        }
 
 class SeatHeatingRearRight(Switch):
     def __init__(self):
@@ -680,7 +713,10 @@ class SeatHeatingRearRight(Switch):
 
     @property
     def attributes(self):
-        return dict(last_result = self.vehicle.climater_action_status)
+        return {
+            'last_result': self.vehicle.aircon_action_status,
+            'last_timestamp': self.vehicle.aircon_action_timestamp
+        }
 
 
 class AirConditionAtUnlock(Switch):
@@ -703,7 +739,10 @@ class AirConditionAtUnlock(Switch):
 
     @property
     def attributes(self):
-        return dict(last_result = self.vehicle.climater_action_status)
+        return {
+            'last_result': self.vehicle.aircon_action_status,
+            'last_timestamp': self.vehicle.aircon_action_timestamp
+        }
 
 
 class BatteryClimatisation(Switch):
@@ -728,7 +767,10 @@ class BatteryClimatisation(Switch):
 
     @property
     def attributes(self):
-        return dict(last_result = self.vehicle.climater_action_status)
+        return {
+            'last_result': self.vehicle.climater_action_status,
+            'last_timestamp': self.vehicle.climater_action_timestamp
+        }
 
 
 class PHeaterHeating(Switch):
@@ -757,7 +799,10 @@ class PHeaterHeating(Switch):
 
     @property
     def attributes(self):
-        return dict(last_result = self.vehicle.pheater_action_status)
+        return {
+            'last_result': self.vehicle.pheater_action_status,
+            'last_timestamp': self.vehicle.pheater_action_timestamp
+        }
 
 
 class PHeaterVentilation(Switch):
@@ -786,8 +831,10 @@ class PHeaterVentilation(Switch):
 
     @property
     def attributes(self):
-        return dict(last_result = self.vehicle.pheater_action_status)
-
+        return {
+            'last_result': self.vehicle.pheater_action_status,
+            'last_timestamp': self.vehicle.pheater_action_timestamp
+        }
 
 class DepartureTimer1(Switch):
     def __init__(self):
