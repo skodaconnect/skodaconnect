@@ -429,7 +429,7 @@ class Vehicle:
             elif self._services.get('CHARGING', False):
                 response = await self._connection.setCharging(self.vin, data)
             if not response:
-                self._requests['batterycharge'] = {'status': 'Failed'}
+                self._requests['batterycharge']['status'] = 'Failed'
                 _LOGGER.error(f'Failed to {action} charging')
                 raise SkodaException(f'Failed to {action} charging')
             else:
@@ -446,13 +446,14 @@ class Vehicle:
                         status = await self.wait_for_request('batterycharge', response.get('id', 0))
                     elif self._services.get('CHARGING', False):
                         status = await self.wait_for_request('charging', response.get('id', 0))
-                self._requests['batterycharge'] = {'status': status}
+                self._requests['batterycharge']['status'] = status
+                self._requests['batterycharge'].pop('id', None)
                 return True
         except (SkodaInvalidRequestException, SkodaException):
             raise
         except Exception as error:
             _LOGGER.warning(f'Failed to {action} charging - {error}')
-            self._requests['batterycharge'] = {'status': 'Exception'}
+            self._requests['batterycharge']['status'] = 'Exception'
             raise SkodaException(f'Failed to execute set charger - {error}')
 
    # API endpoint departuretimer
@@ -669,7 +670,7 @@ class Vehicle:
             self._requests['latest'] = 'Departuretimer'
             response = await self._connection.setDeparturetimer(self.vin, data, spin=False)
             if not response:
-                self._requests['departuretimer'] = {'status': 'Failed'}
+                self._requests['departuretimer']['status'] = 'Failed'
                 _LOGGER.error('Failed to execute departure timer request')
                 raise SkodaException('Failed to execute departure timer request')
             else:
@@ -683,13 +684,14 @@ class Vehicle:
                     status = 'Throttled'
                 else:
                     status = await self.wait_for_request('departuretimer', response.get('id', 0))
-                self._requests['departuretimer'] = {'status': status}
+                self._requests['departuretimer']['status'] = status
+                self._requests['departuretimer'].pop('id', None)
                 return True
         except (SkodaInvalidRequestException, SkodaException):
             raise
         except Exception as error:
             _LOGGER.warning(f'Failed to execute departure timer request - {error}')
-            self._requests['departuretimer'] = {'status': 'Exception'}
+            self._requests['departuretimer']['status'] = 'Exception'
         raise SkodaException('Failed to set departure timer schedule')
 
    # Climatisation electric/auxiliary/windows (CLIMATISATION)
@@ -851,7 +853,7 @@ class Vehicle:
             self._requests['latest'] = 'Climatisation'
             response = await self._connection.setClimater(self.vin, data, spin)
             if not response:
-                self._requests['climatisation'] = {'status': 'Failed'}
+                self._requests['climatisation']['status'] = 'Failed'
                 _LOGGER.error('Failed to execute climatisation request')
                 raise SkodaException('Failed to execute climatisation request')
             else:
@@ -865,13 +867,14 @@ class Vehicle:
                     status = 'Throttled'
                 else:
                     status = await self.wait_for_request('climatisation', response.get('id', 0))
-                self._requests['climatisation'] = {'status': status}
+                self._requests['climatisation']['status'] = status
+                self._requests['climatisation'].pop('id', None)
                 return True
         except (SkodaInvalidRequestException, SkodaException):
             raise
         except Exception as error:
             _LOGGER.warning(f'Failed to execute climatisation request - {error}')
-            self._requests['climatisation'] = {'status': 'Exception'}
+            self._requests['climatisation']['status'] = 'Exception'
         raise SkodaException('Climatisation action failed')
 
     async def _set_aircon(self, data, spin = False):
@@ -897,7 +900,7 @@ class Vehicle:
                 self._requests['latest'] = 'Air conditioning'
             response = await self._connection.setAirConditioning(self.vin, data)
             if not response:
-                self._requests['air-conditioning'] = {'status': 'Failed'}
+                self._requests['air-conditioning']['status'] = 'Failed'
                 _LOGGER.error('Failed to execute air conditioning request')
                 raise SkodaException('Failed to execute air conditioning request')
             else:
@@ -911,13 +914,14 @@ class Vehicle:
                     status = 'Throttled'
                 else:
                     status = await self.wait_for_request('air-conditioning', response.get('id', 0))
-                self._requests['air-conditioning'] = {'status': status}
+                self._requests['air-conditioning']['status'] = status
+                self._requests['air-conditioning'].pop('id', None)
                 return True
         except (SkodaInvalidRequestException, SkodaException):
             raise
         except Exception as error:
             _LOGGER.warning(f'Failed to execute air conditioning request - {error}')
-            self._requests['air-conditioning'] = {'status': 'Exception'}
+            self._requests['air-conditioning']['status'] = 'Exception'
         raise SkodaException('Air conditioning action failed')
 
    # Parking heater heating/ventilation (RS)
@@ -959,7 +963,7 @@ class Vehicle:
             _LOGGER.debug(f'Executing setPreHeater with data: {data}')
             response = await self._connection.setPreHeater(self.vin, data, spin)
             if not response:
-                self._requests['preheater'] = {'status': 'Failed'}
+                self._requests['preheater']['status'] = 'Failed'
                 _LOGGER.error(f'Failed to set parking heater to {mode}')
                 raise SkodaException(f'setPreHeater returned "{response}"')
             else:
@@ -973,13 +977,14 @@ class Vehicle:
                     status = 'Throttled'
                 else:
                     status = await self.wait_for_request('rs', response.get('id', 0))
-                self._requests['preheater'] = {'status': status}
+                self._requests['preheater']['status'] = status
+                self._requests['preheater'].pop('id', None)
                 return True
         except (SkodaInvalidRequestException, SkodaException):
             raise
         except Exception as error:
             _LOGGER.warning(f'Failed to set parking heater mode to {mode} - {error}')
-            self._requests['preheater'] = {'status': 'Exception'}
+            self._requests['preheater']['status'] = 'Exception'
         raise SkodaException('Pre-heater action failed')
 
    # Lock (RLU)
@@ -1004,7 +1009,7 @@ class Vehicle:
             self._requests['latest'] = 'Lock'
             response = await self._connection.setLock(self.vin, data, spin)
             if not response:
-                self._requests['lock'] = {'status': 'Failed'}
+                self._requests['lock']['status'] = 'Failed'
                 _LOGGER.error(f'Failed to {action} vehicle')
                 raise SkodaException(f'Failed to {action} vehicle')
             else:
@@ -1018,13 +1023,14 @@ class Vehicle:
                     status = 'Throttled'
                 else:
                     status = await self.wait_for_request('rlu', response.get('id', 0))
-                self._requests['lock'] = {'status': status}
+                self._requests['lock']['status'] = status
+                self._requests['lock'].pop('id', None)
                 return True
         except (SkodaInvalidRequestException, SkodaException):
             raise
         except Exception as error:
             _LOGGER.warning(f'Failed to {action} vehicle - {error}')
-            self._requests['lock'] = {'status': 'Exception'}
+            self._requests['lock']['status'] = 'Exception'
         raise SkodaException('Lock action failed')
 
    # Honk and flash (RHF)
@@ -1066,7 +1072,7 @@ class Vehicle:
             self._requests['latest'] = 'HonkAndFlash'
             response = await self._connection.setHonkAndFlash(self.vin, data)
             if not response:
-                self._requests['honkandflash'] = {'status': 'Failed'}
+                self._requests['honkandflash']['status'] = 'Failed'
                 _LOGGER.error(f'Failed to execute honk and flash action')
                 raise SkodaException(f'Failed to execute honk and flash action')
             else:
@@ -1080,13 +1086,14 @@ class Vehicle:
                     status = 'Throttled'
                 else:
                     status = await self.wait_for_request('rhf', response.get('id', 0))
-                self._requests['honkandflash'] = {'status': status}
+                self._requests['honkandflash']['status'] = status
+                self._requests['honkandflash'].pop('id', None)
                 return True
         except (SkodaInvalidRequestException, SkodaException):
             raise
         except Exception as error:
             _LOGGER.warning(f'Failed to {action} vehicle - {error}')
-            self._requests['honkandflash'] = {'status': 'Exception'}
+            self._requests['honkandflash']['status'] = 'Exception'
         raise SkodaException('Honk and flash action failed')
 
    # Refresh vehicle data (VSR)
@@ -1107,7 +1114,7 @@ class Vehicle:
             response = await self._connection.setRefresh(self.vin)
             if not response:
                 _LOGGER.error('Failed to request vehicle update')
-                self._requests['refresh'] = {'status': 'Failed'}
+                self._requests['refresh']['status'] = 'Failed'
                 raise SkodaException('Failed to execute data refresh')
             else:
                 self._requests['remaining'] = response.get('rate_limit_remaining', -1)
@@ -1120,15 +1127,14 @@ class Vehicle:
                     status = 'Throttled'
                 else:
                     status = await self.wait_for_request('vsr', response.get('id', 0))
-                self._requests['refresh'] = {
-                    'status': status
-                }
+                self._requests['refresh']['status'] = status
+                self._requests['refresh'].pop('id', None)
                 return True
         except(SkodaInvalidRequestException, SkodaException):
             raise
         except Exception as error:
             _LOGGER.warning(f'Failed to execute data refresh - {error}')
-            self._requests['refresh'] = {'status': 'Exception'}
+            self._requests['refresh']['status'] = 'Exception'
         raise SkodaException('Data refresh failed')
 
  #### Vehicle class helpers ####
@@ -2727,6 +2733,7 @@ class Vehicle:
         """Get state of data refresh"""
         if self._requests.get('refresh', {}).get('id', False):
             return True
+        return False
 
     @property
     def is_refresh_data_supported(self):
@@ -2759,18 +2766,6 @@ class Vehicle:
 
   # Requests data
     @property
-    def refresh_data(self):
-        """Get state of data refresh"""
-        if self._requests.get('refresh', {}).get('id', False):
-            return True
-
-    @property
-    def is_refresh_data_supported(self):
-        """Data refresh is supported for Skoda Connect."""
-        if 'ONLINE' in self._connectivities:
-            return True
-
-    @property
     def request_in_progress(self):
         """Returns the current, or latest, request in progress."""
         try:
@@ -2796,6 +2791,8 @@ class Vehicle:
         }
         for section in self._requests:
             if section in ['departuretimer', 'batterycharge', 'air-conditioning', 'climatisation', 'refresh', 'lock', 'preheater']:
+                if self._requests.get(section, {}).get('timestamp', None) is None:
+                    _LOGGER.debug(f'Failed to get latest timestamp for {section} request.')
                 timestamp = self._requests.get(section, {}).get('timestamp', DATEZERO)
                 data[section] = self._requests[section].get('status', 'N/A')
                 data[section+'_timestamp'] = timestamp.strftime("%Y-%m-%d %H:%M:%S")

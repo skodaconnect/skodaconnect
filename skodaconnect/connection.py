@@ -204,7 +204,7 @@ class Connection:
             # If we need to sign in (first token)
             if 'signin-service' in ref:
                 _LOGGER.debug("Got redirect to signin-service")
-                location = await self._signin_service(req, authissuer, authorizationEndpoint)
+                location = await self._signin_service(req, authissuer, authorizationEndpoint, client)
             else:
                 # We are already logged on, shorter authorization flow
                 location = req.headers.get('Location', None)
@@ -318,7 +318,7 @@ class Connection:
             return False
         return True
 
-    async def _signin_service(self, html, authissuer, authorizationEndpoint):
+    async def _signin_service(self, html, authissuer, authorizationEndpoint, client='skoda'):
         """Method to signin to Skoda Connect portal."""
         # Extract login form and extract attributes
         try:
@@ -393,11 +393,16 @@ class Connection:
         self._session_auth_headers['Referer'] = pe_url
         self._session_auth_headers['Origin'] = authissuer
         _LOGGER.debug(f"Finalizing login")
+
+        client_id = CLIENT_LIST[client].get('CLIENT_ID')
+        pp_url = authissuer+post_action
+        if not 'signin-service' in pp_url or not client_id in pp_url:
+            pp_url = authissuer+'/signin-service/v1/'+client_id+"/"+post_action
+
         if self._session_fulldebug:
-            _LOGGER.debug(f'Using login action url: "{authissuer}{post_action}"')
-            _LOGGER.debug(f'POSTing following form data: {form_data}')
+            _LOGGER.debug(f'Using login action url: "{pp_url}"')
         req = await self._session.post(
-            url=authissuer+post_action,
+            url=pp_url,
             headers=self._session_auth_headers,
             data = form_data,
             allow_redirects=False
