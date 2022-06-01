@@ -448,7 +448,7 @@ class Vehicle:
                         status = await self.wait_for_request('charging', response.get('id', 0))
                 self._requests['batterycharge']['status'] = status
                 self._requests['batterycharge'].pop('id', None)
-                return True
+                return status
         except (SkodaInvalidRequestException, SkodaException):
             raise
         except Exception as error:
@@ -686,7 +686,7 @@ class Vehicle:
                     status = await self.wait_for_request('departuretimer', response.get('id', 0))
                 self._requests['departuretimer']['status'] = status
                 self._requests['departuretimer'].pop('id', None)
-                return True
+                return status
         except (SkodaInvalidRequestException, SkodaException):
             raise
         except Exception as error:
@@ -869,7 +869,7 @@ class Vehicle:
                     status = await self.wait_for_request('climatisation', response.get('id', 0))
                 self._requests['climatisation']['status'] = status
                 self._requests['climatisation'].pop('id', None)
-                return True
+                return status
         except (SkodaInvalidRequestException, SkodaException):
             raise
         except Exception as error:
@@ -916,7 +916,7 @@ class Vehicle:
                     status = await self.wait_for_request('air-conditioning', response.get('id', 0))
                 self._requests['air-conditioning']['status'] = status
                 self._requests['air-conditioning'].pop('id', None)
-                return True
+                return status
         except (SkodaInvalidRequestException, SkodaException):
             raise
         except Exception as error:
@@ -979,7 +979,7 @@ class Vehicle:
                     status = await self.wait_for_request('rs', response.get('id', 0))
                 self._requests['preheater']['status'] = status
                 self._requests['preheater'].pop('id', None)
-                return True
+                return status
         except (SkodaInvalidRequestException, SkodaException):
             raise
         except Exception as error:
@@ -1025,7 +1025,7 @@ class Vehicle:
                     status = await self.wait_for_request('rlu', response.get('id', 0))
                 self._requests['lock']['status'] = status
                 self._requests['lock'].pop('id', None)
-                return True
+                return status
         except (SkodaInvalidRequestException, SkodaException):
             raise
         except Exception as error:
@@ -1088,7 +1088,7 @@ class Vehicle:
                     status = await self.wait_for_request('rhf', response.get('id', 0))
                 self._requests['honkandflash']['status'] = status
                 self._requests['honkandflash'].pop('id', None)
-                return True
+                return status
         except (SkodaInvalidRequestException, SkodaException):
             raise
         except Exception as error:
@@ -1129,7 +1129,7 @@ class Vehicle:
                     status = await self.wait_for_request('vsr', response.get('id', 0))
                 self._requests['refresh']['status'] = status
                 self._requests['refresh'].pop('id', None)
-                return True
+                return status
         except(SkodaInvalidRequestException, SkodaException):
             raise
         except Exception as error:
