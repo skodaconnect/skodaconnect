@@ -574,7 +574,7 @@ class Vehicle:
 
             # Validate temp setting, if set
             if schedule.get("targetTemp", None) is not None:
-                if not 16 <= int(schedule.get("targetTemp", None)) <= 30:
+                if not 16 <= float(schedule.get("targetTemp", None)) <= 30:
                     raise SkodaInvalidRequestException('Target temp must be integer value from 16 to 30')
                 else:
                     data['temp'] = schedule.get('targetTemp')
@@ -698,7 +698,7 @@ class Vehicle:
     async def set_climatisation_temp(self, temperature=20):
         """Set climatisation target temp."""
         if self.is_electric_climatisation_supported or self.is_auxiliary_climatisation_supported:
-            if 16 <= int(temperature) <= 30:
+            if 16 <= float(temperature) <= 30:
                 temp = int((temperature + 273) * 10)
                 data = {'action': {'settings': {'targetTemperature': temp}, 'type': 'setSettings'}}
             else:
@@ -769,9 +769,9 @@ class Vehicle:
         elif mode == 'auxiliary' and spin is None:
             raise SkodaInvalidRequestException("Starting auxiliary heater requires provided S-PIN")
         if temp is not None:
-            if not isinstance(temp, int):
+            if not isinstance(temp, float):
                 raise SkodaInvalidRequestException(f"Invalid type for temp")
-            elif not 16 <= int(temp) <=30:
+            elif not 16 <= float(temp) <=30:
                 raise SkodaInvalidRequestException(f"Invalid value for temp")
         else:
             temp = self.climatisation_target_temperature
