@@ -435,7 +435,7 @@ class Vehicle:
             else:
                 self._requests['remaining'] = response.get('rate_limit_remaining', -1)
                 self._requests['batterycharge'] = {
-                    'timestamp': datetime.now(),
+                    'timestamp': datetime.now().replace(microsecond=0),
                     'status': response.get('state', 'Unknown'),
                     'id': response.get('id', 0)
                 }
@@ -676,7 +676,7 @@ class Vehicle:
             else:
                 self._requests['remaining'] = response.get('rate_limit_remaining', -1)
                 self._requests['departuretimer'] = {
-                    'timestamp': datetime.now(),
+                    'timestamp': datetime.now().replace(microsecond=0),
                     'status': response.get('state', 'Unknown'),
                     'id': response.get('id', 0),
                 }
@@ -859,7 +859,7 @@ class Vehicle:
             else:
                 self._requests['remaining'] = response.get('rate_limit_remaining', -1)
                 self._requests['climatisation'] = {
-                    'timestamp': datetime.now(),
+                    'timestamp': datetime.now().replace(microsecond=0),
                     'status': response.get('state', 'Unknown'),
                     'id': response.get('id', 0),
                 }
@@ -906,7 +906,7 @@ class Vehicle:
             else:
                 #self._requests['remaining'] = response.get('rate_limit_remaining', -1)
                 self._requests['air-conditioning'] = {
-                    'timestamp': datetime.now(),
+                    'timestamp': datetime.now().replace(microsecond=0),
                     'status': response.get('state', 'Unknown'),
                     'id': response.get('id', 0),
                 }
@@ -969,7 +969,7 @@ class Vehicle:
             else:
                 self._requests['remaining'] = response.get('rate_limit_remaining', -1)
                 self._requests['preheater'] = {
-                    'timestamp': datetime.now(),
+                    'timestamp': datetime.now().replace(microsecond=0),
                     'status': response.get('state', 'Unknown'),
                     'id': response.get('id', 0),
                 }
@@ -1015,7 +1015,7 @@ class Vehicle:
             else:
                 self._requests['remaining'] = response.get('rate_limit_remaining', -1)
                 self._requests['lock'] = {
-                    'timestamp': datetime.now(),
+                    'timestamp': datetime.now().replace(microsecond=0),
                     'status': response.get('state', 'Unknown'),
                     'id': response.get('id', 0),
                 }
@@ -1078,7 +1078,7 @@ class Vehicle:
             else:
                 self._requests['remaining'] = response.get('rate_limit_remaining', -1)
                 self._requests['honkandflash'] = {
-                    'timestamp': datetime.now(),
+                    'timestamp': datetime.now().replace(microsecond=0),
                     'status': response.get('state', 'Unknown'),
                     'id': response.get('id', 0),
                 }
@@ -1119,7 +1119,7 @@ class Vehicle:
             else:
                 self._requests['remaining'] = response.get('rate_limit_remaining', -1)
                 self._requests['refresh'] = {
-                    'timestamp': datetime.now(),
+                    'timestamp': datetime.now().replace(microsecond=0),
                     'status': response.get('status', 'Unknown'),
                     'id': response.get('id', 0)
                 }
@@ -1292,10 +1292,10 @@ class Vehicle:
         """Return when vehicle was last connected to connect servers."""
         last_connected_utc = self.attrs.get('StoredVehicleDataResponse').get('vehicleData').get('data')[0].get('field')[0].get('tsCarSentUtc')
         if isinstance(last_connected_utc, datetime):
-            last_connected = last_connected_utc.replace(tzinfo=timezone.utc).astimezone(tz=None)
+            last_connected = last_connected_utc.astimezone().replace(tzinfo=None)
         else:
-            last_connected = datetime.strptime(last_connected_utc,'%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc).astimezone(tz=None)
-        return last_connected.strftime('%Y-%m-%d %H:%M:%S')
+            last_connected = datetime.strptime(last_connected_utc,'%Y-%m-%dT%H:%M:%SZ').astimezone().replace(tzinfo=None)
+        return last_connected.isoformat()
 
     @property
     def is_last_connected_supported(self):
@@ -1705,10 +1705,10 @@ class Vehicle:
         """Return timestamp of last parking time."""
         parkTime_utc = self.attrs.get('findCarResponse', {}).get('parkingTimeUTC', 'Unknown')
         if isinstance(parkTime_utc, datetime):
-            parkTime = parkTime_utc.replace(tzinfo=timezone.utc).astimezone(tz=None)
+            parkTime = parkTime_utc.astimezone().replace(tzinfo=None)
         else:
-            parkTime = datetime.strptime(parkTime_utc,'%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc).astimezone(tz=None)
-        return parkTime.strftime('%Y-%m-%d %H:%M:%S')
+            parkTime = datetime.strptime(parkTime_utc,'%Y-%m-%dT%H:%M:%SZ').astimezone().replace(tzinfo=None)
+        return parkTime.isoformat()
 
     @property
     def is_parking_time_supported(self):
@@ -2649,7 +2649,7 @@ class Vehicle:
     def refresh_action_timestamp(self):
         """Return timestamp of latest data refresh request."""
         timestamp = self._requests.get('refresh', {}).get('timestamp', DATEZERO)
-        return timestamp.strftime("%Y-%m-%d %H:%M:%S")
+        return timestamp.isoformat()
 
     @property
     def charger_action_status(self):
@@ -2660,7 +2660,7 @@ class Vehicle:
     def charger_action_timestamp(self):
         """Return timestamp of latest charger request."""
         timestamp = self._requests.get('charger', {}).get('timestamp', DATEZERO)
-        return timestamp.strftime("%Y-%m-%d %H:%M:%S")
+        return timestamp.isoformat()
 
     @property
     def aircon_action_status(self):
@@ -2671,7 +2671,7 @@ class Vehicle:
     def aircon_action_timestamp(self):
         """Return timestamp of latest air-conditioning request."""
         timestamp = self._requests.get('air-conditioning', {}).get('timestamp', DATEZERO)
-        return timestamp.strftime("%Y-%m-%d %H:%M:%S")
+        return timestamp.isoformat()
 
     @property
     def climater_action_status(self):
@@ -2682,7 +2682,7 @@ class Vehicle:
     def climater_action_timestamp(self):
         """Return timestamp of latest climater request."""
         timestamp = self._requests.get('climatisation', {}).get('timestamp', DATEZERO)
-        return timestamp.strftime("%Y-%m-%d %H:%M:%S")
+        return timestamp.isoformat()
 
     @property
     def pheater_action_status(self):
@@ -2693,7 +2693,7 @@ class Vehicle:
     def pheater_action_timestamp(self):
         """Return timestamp of latest parking heater request."""
         timestamp = self._requests.get('preheater', {}).get('timestamp', DATEZERO)
-        return timestamp.strftime("%Y-%m-%d %H:%M:%S")
+        return timestamp.isoformat()
 
     @property
     def honkandflash_action_status(self):
@@ -2704,7 +2704,7 @@ class Vehicle:
     def honkandflash_action_timestamp(self):
         """Return timestamp of latest honk and flash request."""
         timestamp = self._requests.get('honkandflash', {}).get('timestamp', DATEZERO)
-        return timestamp.strftime("%Y-%m-%d %H:%M:%S")
+        return timestamp.isoformat()
 
     @property
     def lock_action_status(self):
@@ -2715,7 +2715,7 @@ class Vehicle:
     def lock_action_timestamp(self):
         """Return timestamp of latest lock action request."""
         timestamp = self._requests.get('lock', {}).get('timestamp', DATEZERO)
-        return timestamp.strftime("%Y-%m-%d %H:%M:%S")
+        return timestamp.isoformat()
 
     @property
     def timer_action_status(self):
@@ -2726,7 +2726,7 @@ class Vehicle:
     def timer_action_timestamp(self):
         """Return timestamp of latest departure timer request."""
         timestamp = self._requests.get('departuretimer', {}).get('timestamp', DATEZERO)
-        return timestamp.strftime("%Y-%m-%d %H:%M:%S")
+        return timestamp.isoformat()
 
     @property
     def refresh_data(self):
@@ -2795,7 +2795,7 @@ class Vehicle:
                     _LOGGER.debug(f'Failed to get latest timestamp for {section} request.')
                 timestamp = self._requests.get(section, {}).get('timestamp', DATEZERO)
                 data[section] = self._requests[section].get('status', 'N/A')
-                data[section+'_timestamp'] = timestamp.strftime("%Y-%m-%d %H:%M:%S")
+                data[section+'_timestamp'] = timestamp.isoformat()
         return data
 
     @property
