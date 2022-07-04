@@ -1830,17 +1830,15 @@ class Vehicle:
 
     @property
     def combined_range(self):
-        value = -1
-        if '0x0301030005' in self.attrs.get('StoredVehicleDataResponseParsed'):
-            if 'value' in self.attrs.get('StoredVehicleDataResponseParsed')['0x0301030005']:
-                value = self.attrs.get('StoredVehicleDataResponseParsed')['0x0301030005'].get('value', 0)
-        return int(value)
+        if self.is_combustion_range_supported and self.is_electric_range_supported:
+            return self.combustion_range + self.electric_range
+        return -1
+
 
     @property
     def is_combined_range_supported(self):
-        if self.attrs.get('StoredVehicleDataResponseParsed', False):
-            if '0x0301030005' in self.attrs.get('StoredVehicleDataResponseParsed'):
-                return True
+        if self.is_combustion_range_supported and self.is_electric_range_supported:
+            return True
         return False
 
     @property
