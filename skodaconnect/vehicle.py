@@ -625,7 +625,7 @@ class Vehicle:
                             days = schedule.get('days', 'nnnnnnn')
                             for num in range(0, 7):
                                 if days[num] == 'y':
-                                    data['timersSettings']['timers'][index]['recurringOn'].append(days[num])
+                                    data['timersSettings']['timers'][index]['recurringOn'].append(weekdays[num])
                         else:
                             data['timersSettings']['timers'][index]['type'] = 'ONE_OFF'
                             data['timersSettings']['timers'][index]['date'] = schedule.get('date')
