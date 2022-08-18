@@ -730,7 +730,7 @@ class Vehicle:
                             _LOGGER.warning('Could not fetch current climatisation settings.')
                             raise SkodaServiceUnavailable("Unable to fetch current settings.")
                     data.pop('temperatureConversionTableUsed', None)
-                    data['airConditioningSettings']['type'] = 'UpdateSettings'
+                    data['type'] = 'UpdateSettings'
                     if action == 'start':
                         data['airConditioningSettings']['windowHeatingEnabled'] = True
                     else:
@@ -890,6 +890,7 @@ class Vehicle:
             else:
                 raise SkodaRequestInProgressException('Air conditioning action is already in progress')
         try:
+            _LOGGER.debug(f'Attempting to update aircon settings with data {data}.')
             if 'UpdateTimers' in data['type']:
                 self._requests['latest'] = 'Timers'
             elif 'UpdateSettings' in data['type']:
@@ -898,6 +899,7 @@ class Vehicle:
                 self._requests['latest'] = 'Climatisation'
             else:
                 self._requests['latest'] = 'Air conditioning'
+            _LOGGER.debug('Sending request')
             response = await self._connection.setAirConditioning(self.vin, data)
             if not response:
                 self._requests['air-conditioning']['status'] = 'Failed'
@@ -1756,7 +1758,7 @@ class Vehicle:
             if 'value' in self.attrs.get('StoredVehicleDataResponseParsed')['0x0301030008']:
                 value = self.attrs.get('StoredVehicleDataResponseParsed')['0x0301030008'].get('value', 0)
         return int(value)
- 
+
     @property
     def is_secondary_range_supported(self):
         if self.attrs.get('StoredVehicleDataResponseParsed', False):
@@ -1772,7 +1774,7 @@ class Vehicle:
             if 'value' in self.attrs.get('StoredVehicleDataResponseParsed')['0x0301030009']:
                 value = self.attrs.get('StoredVehicleDataResponseParsed')['0x0301030009'].get('value', 0)
         return int(value)
- 
+
     @property
     def is_secondary_drive_supported(self):
         if self.attrs.get('StoredVehicleDataResponseParsed', False):
@@ -2029,10 +2031,8 @@ class Vehicle:
             status_rear = self.attrs.get('climater', {}).get('status', {}).get('windowHeatingStatusData', {}).get('windowHeatingStateRear', {}).get('content', '')
             if status_rear == 'on':
                 return True
-        elif self.attrs.get('airConditioning', {}).get('windowsHeatingStatuses', False):
-            for element in self.attrs.get('airConditioning', {}).get('windowsHeatingStatuses', []):
-                if element.get('state', 'Off') in ['ON', 'On', 'on']:
-                    return True
+        elif self.attrs.get('airConditioningSettings', {}):
+            return self.attrs.get('airConditioningSettings', {}).get('windowsHeatingEnabled', False)
         return False
 
     @property
@@ -2044,8 +2044,8 @@ class Vehicle:
                     return True
                 if self.attrs.get('climater', {}).get('status', {}).get('windowHeatingStatusData', {}).get('windowHeatingStateRear', {}).get('content', '') in ['on', 'off']:
                     return True
-            elif self.attrs.get('airConditioning', {}).get('windowsHeatingStatuses', False):
-                if self.attrs.get('airConditioning', {}).get('windowsHeatingStatuses', []):
+            elif self.attrs.get('airConditioningSettings', {}):
+                if self.attrs.get('airConditioning', {}).get('windowsHeatingStatuses', False):
                     return True
         return False
 
