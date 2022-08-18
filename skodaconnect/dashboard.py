@@ -87,7 +87,7 @@ class Sensor(Instrument):
                 self.unit = "mi/h"
                 self.convert = True
             elif "l/100 km" == self.unit:
-                self.unit = "l/100 mi"
+                self.unit = "mpg"
                 self.convert = True
             elif "kWh/100 km" == self.unit:
                 self.unit = "kWh/100 mi"
@@ -98,9 +98,9 @@ class Sensor(Instrument):
             elif "km/h" == self.unit:
                 self.unit = "mil/h"
             elif "l/100 km" == self.unit:
-                self.unit = "l/100 mil"
+                self.unit = "l/mil"
             elif "kWh/100 km" == self.unit:
-                self.unit = "kWh/100 mil"
+                self.unit = "kWh/mil"
 
         # Init placeholder for parking heater duration
         config.get('parkingheater', 30)
@@ -126,14 +126,14 @@ class Sensor(Instrument):
             return int(round(val / 1.609344))
         elif val and self.unit and "mi/h" in self.unit and self.convert is True:
             return int(round(val / 1.609344))
-        elif val and self.unit and "gal/100 mi" in self.unit and self.convert is True:
-            return round(val * 0.4251438, 1)
+        elif val and self.unit and "mpg" in self.unit and self.convert is True:
+            return round(val * 235.215, 1)
         elif val and self.unit and "kWh/100 mi" in self.unit and self.convert is True:
             return round(val * 0.4251438, 1)
         elif val and self.unit and "°F" in self.unit and self.convert is True:
             temp = round((val * 9 / 5) + 32, 1)
             return temp
-        elif val and self.unit in ['mil', 'mil/h']:
+        elif val and self.unit in ['mil', 'mil/h', 'l/mil', 'kWh/mil']:
             return val / 10
         else:
             return val
