@@ -24,6 +24,7 @@ logging.basicConfig(level=logging.DEBUG)
 USERNAME = 'email@domain.com'
 PASSWORD = 'password!'
 PRINTRESPONSE = False
+MILES = False
 INTERVAL = 20
 
 COMPONENTS = {
@@ -68,6 +69,7 @@ RESOURCES = [
 		"hood_closed",
 		"last_connected",
 		"lock_action_status",
+        "model",
 		"oil_inspection",
 		"oil_inspection_distance",
 		"outside_temperature",
@@ -135,7 +137,7 @@ async def main():
                 print('########################################')
                 print('#         Setting up dashboard         #')
                 print('########################################')
-                dashboard = vehicle.dashboard(mutable=True)
+                dashboard = vehicle.dashboard(mutable=True, miles=MILES)
 
                 for instrument in (
                         instrument

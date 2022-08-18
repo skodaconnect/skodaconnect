@@ -1269,6 +1269,73 @@ class Vehicle:
         if self._modelimagel is not None:
             return True
 
+    # Battery
+    @property
+    def battery_capacity(self):
+        value = -1
+        if 'capacityInKWh' in self._specification.get('battery', {}):
+            value = self._specification.get('battery', {}).get('capacityInKWh', 0)
+        return int(value)
+
+    @property
+    def is_battery_capacity_supported(self):
+        if 'capacityInKWh' in self._specification.get('battery', {}):
+            return True
+        return False
+
+    @property
+    def max_charging_power(self):
+        value = -1
+        if 'maxChargingPowerInKW' in self._specification:
+            value = self._specification.get('maxChargingPowerInKW', 0)
+        return int(value)
+
+    @property
+    def is_max_charging_power_supported(self):
+        if 'maxChargingPowerInKW' in self._specification:
+            return True
+        return False
+
+    # Engine
+    @property
+    def engine_power(self):
+        value = -1
+        if 'powerInKW' in self._specification.get('engine', {}):
+            value = self._specification.get('engine', {}).get('powerInKW', 0)
+        return int(value)
+
+    @property
+    def is_engine_power_supported(self):
+        if 'powerInKW' in self._specification.get('engine', {}):
+            return True
+        return False
+
+    @property
+    def engine_type(self):
+        value = ''
+        if 'type' in self._specification.get('engine', {}):
+            value = self._specification.get('engine', {}).get('type', '')
+        return value
+
+    @property
+    def is_engine_type_supported(self):
+        if 'type' in self._specification.get('engine', {}):
+            return True
+        return False
+
+    @property
+    def engine_capacity(self):
+        value = ''
+        if 'capacityInLiters' in self._specification.get('engine', {}):
+            value = self._specification.get('engine', {}).get('capacityInLiters', '')
+        return value
+
+    @property
+    def is_engine_capacity_supported(self):
+        if 'capacityInLiters' in self._specification.get('engine', {}):
+            return True
+        return False
+
   # Lights
     @property
     def parking_light(self):
@@ -1718,7 +1785,7 @@ class Vehicle:
         if 'parkingTimeUTC' in self.attrs.get('findCarResponse', {}):
             return True
 
-  # Vehicle fuel level and range
+   # Vehicle fuel level and range
     @property
     def primary_range(self):
         value = -1

@@ -958,6 +958,69 @@ class RequestResults(Sensor):
     def attributes(self):
         return dict(self.vehicle.request_results)
 
+class ChargingPower(Sensor):
+    def __init__(self):
+        super().__init__(attr="charging_power", name="Charging Power", icon="mdi:flash", unit="W", device_class="power")
+
+    @property
+    def state(self):
+        return self.vehicle.charging_power
+
+    @property
+    def assumed_state(self):
+        return False
+
+    @property
+    def attributes(self):
+        values = {
+            "max_power": self.vehicle.max_charging_power
+        }
+        return values
+
+class CarInfo(Sensor):
+    def __init__(self):
+        super().__init__(attr="model", name="Car Info", icon="mdi:information-outline", unit=None)
+
+    @property
+    def state(self):
+        return self.vehicle.vin
+
+    @property
+    def assumed_state(self):
+        return False
+
+    @property
+    def attributes(self):
+        values = {}
+        if self.vehicle.is_engine_capacity_supported:
+            values['engine'] = {
+                "type": self.vehicle.engine_type,
+                "power_in_kw": self.vehicle.engine_power,
+                "capacity_in_liter": self.vehicle.engine_capacity
+            }
+        else:
+            if self.vehicle.is_battery_capacity_supported:
+                values['engine'] = {
+                    "engine_type": self.vehicle.engine_type,
+                    "power_in_kw": self.vehicle.engine_power,
+                    "battery_capacity_kwh": self.vehicle.battery_capacity
+                }
+            else:
+                values['engine'] = {
+                    "engine_type": self.vehicle.engine_type,
+                    "power_in_kw": self.vehicle.engine_power
+                }
+
+        values['model'] = {
+            "model": self.vehicle.model,
+            "manufactured": self.vehicle.model_year
+        }
+        if self.vehicle.is_model_image_large_supported:
+            values['model']['image_url_large'] = self.vehicle.model_image_large
+        if self.vehicle.is_model_image_small_supported:
+            values['model']['image_url_small'] = self.vehicle.model_image_small
+
+        return values
 
 def create_instruments():
     return [
@@ -980,8 +1043,10 @@ def create_instruments():
         PHeaterHeating(),
         #ElectricClimatisationClimate(),
         #CombustionClimatisationClimate(),
+        CarInfo(),
         Charging(),
         RequestResults(),
+        ChargingPower(),
         DepartureTimer1(),
         DepartureTimer2(),
         DepartureTimer3(),
@@ -1058,13 +1123,6 @@ def create_instruments():
             name="Charging time left",
             icon="mdi:battery-charging-100",
             unit="h",
-        ),
-        Sensor(
-            attr="charging_power",
-            name="Charging power",
-            icon="mdi:flash",
-            unit="W",
-            device_class="power"
         ),
         Sensor(
             attr="charge_rate",
