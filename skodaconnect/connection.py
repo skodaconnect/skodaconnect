@@ -84,8 +84,8 @@ class Connection:
         self._session_nonce = self._getNonce()
         self._session_state = self._getState()
 
-        self._session_auth_ref_url = BASE_SESSION
-        self._session_spin_ref_url = BASE_SESSION
+        self._session_auth_ref_url = {'default': BASE_SESSION}
+        self._session_spin_ref_url = {'default': BASE_SESSION}
         self._session_first_update = False
         self._session_auth_username = username
         self._session_auth_password = password
@@ -845,11 +845,13 @@ class Connection:
         try:
             await self.set_token('vwg')
             response = await self.get(f'https://mal-1a.prd.ece.vwg-connect.com/api/cs/vds/v1/vehicles/{vin}/homeRegion', vin)
-            self._session_auth_ref_url = response['homeRegion']['baseUri']['content'].split('/api')[0].replace('mal-', 'fal-') if response['homeRegion']['baseUri']['content'] != 'https://mal-1a.prd.ece.vwg-connect.com/api' else 'https://msg.volkswagen.de'
-            self._session_spin_ref_url = response['homeRegion']['baseUri']['content'].split('/api')[0]
+            self._session_auth_ref_url[vin] = response['homeRegion']['baseUri']['content'].split('/api')[0].replace('mal-', 'fal-') if response['homeRegion']['baseUri']['content'] != 'https://mal-1a.prd.ece.vwg-connect.com/api' else 'https://msg.volkswagen.de'
+            self._session_spin_ref_url[vin] = response['homeRegion']['baseUri']['content'].split('/api')[0]
             return response['homeRegion']['baseUri']['content']
         except Exception as error:
             _LOGGER.debug(f'Could not get homeregion, error {error}')
+            self._session_auth_ref_url[vin] = self._session_auth_ref_url['default']
+            self._session_spin_ref_url[vin] = self._session_spin_ref_url['default']
         return False
 
     async def getOperationList(self, vin):
@@ -858,7 +860,7 @@ class Connection:
             await self.set_token('vwg')
             response = await self.get(
                 urljoin(
-                    self._session_spin_ref_url,
+                    self._session_spin_ref_url[vin],
                     f'/api/rolesrights/operationlist/v3/vehicles/{vin}'
                 )
             )
@@ -915,7 +917,7 @@ class Connection:
             await self.set_token('vwg')
             response = await self.get(
                 urljoin(
-                    self._session_auth_ref_url,
+                    self._session_auth_ref_url[vin],
                     f'fs-car/bs/vsr/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/status'
                 )
             )
@@ -939,7 +941,7 @@ class Connection:
             await self.set_token('smartlink')
             response = await self.get(
                 urljoin(
-                    self._session_auth_ref_url,
+                    self._session_auth_ref_url[vin],
                     f'https://api.connect.skoda-auto.cz/api/v1/vehicle-status/{vin}'
                 )
             )
@@ -962,7 +964,7 @@ class Connection:
             await self.set_token('vwg')
             response = await self.get(
                 urljoin(
-                    self._session_auth_ref_url,
+                    self._session_auth_ref_url[vin],
                     f'fs-car/bs/tripstatistics/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/tripdata/shortTerm?newest'
                 )
             )
@@ -983,7 +985,7 @@ class Connection:
             await self.set_token('vwg')
             response = await self.get(
                 urljoin(
-                    self._session_auth_ref_url,
+                    self._session_auth_ref_url[vin],
                     f'fs-car/bs/cf/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/position'
                 )
             )
@@ -1015,7 +1017,7 @@ class Connection:
             await self.set_token('vwg')
             response = await self.get(
                 urljoin(
-                    self._session_auth_ref_url,
+                    self._session_auth_ref_url[vin],
                     f'fs-car/bs/departuretimer/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/timer'
                 )
             )
@@ -1052,7 +1054,7 @@ class Connection:
             await self.set_token('vwg')
             response = await self.get(
                 urljoin(
-                    self._session_auth_ref_url,
+                    self._session_auth_ref_url[vin],
                     f'fs-car/bs/climatisation/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/climater'
                 )
             )
@@ -1097,7 +1099,7 @@ class Connection:
             await self.set_token('vwg')
             response = await self.get(
                 urljoin(
-                    self._session_auth_ref_url,
+                    self._session_auth_ref_url[vin],
                     f'fs-car/bs/batterycharge/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/charger'
                 )
             )
@@ -1138,7 +1140,7 @@ class Connection:
             await self.set_token('vwg')
             response = await self.get(
                 urljoin(
-                    self._session_auth_ref_url,
+                    self._session_auth_ref_url[vin],
                     f'fs-car/bs/rs/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/status'
                 )
             )
@@ -1185,7 +1187,7 @@ class Connection:
 
             response = await self.get(
                 urljoin(
-                    self._session_auth_ref_url,
+                    self._session_auth_ref_url[vin],
                     url
                 )
             )
@@ -1242,7 +1244,7 @@ class Connection:
                 raise SkodaException(f'Security token for "{action}" is not implemented')
             response = await self.get(
                 urljoin(
-                    self._session_spin_ref_url,
+                    self._session_spin_ref_url[vin],
                     urls.get(action)
                 )
             )
@@ -1259,7 +1261,13 @@ class Connection:
                 }
             }
             self._session_headers['Content-Type'] = 'application/json'
-            response = await self.post(urljoin(self._session_spin_ref_url, '/api/rolesrights/authorization/v2/security-pin-auth-completed'), json = body)
+            response = await self.post(
+                urljoin(
+                    self._session_spin_ref_url[vin],
+                    '/api/rolesrights/authorization/v2/security-pin-auth-completed'
+                ),
+                json = body
+            )
             self._session_headers.pop('Content-Type', None)
             if response.get('securityToken', False):
                 return response['securityToken']
@@ -1270,17 +1278,18 @@ class Connection:
             raise
 
    # VW-Group API methods
-    async def _setVWAPI(self, endpoint, **data):
+    async def _setVWAPI(self, url, **data): #endpoint, **data):
         """Data call through VW-Group API."""
         try:
             await self.set_token('vwg')
             # Combine homeregion with endpoint URL
-            url = urljoin(self._session_auth_ref_url, endpoint)
+            #url = urljoin(self._session_auth_ref_url, endpoint)
             response = await self._data_call(url, **data)
             self._session_headers.pop('X-mbbSecToken', None)
             self._session_headers.pop('X-securityToken', None)
             if not response:
-                raise SkodaException(f'Invalid or no response for endpoint {endpoint}')
+                #raise SkodaException(f'Invalid or no response for endpoint {endpoint}')
+                raise SkodaException(f'Invalid or no response for endpoint {url}')
             elif response == 429:
                 raise SkodaThrottledException('Action rate limit reached. Start the car to reset the action limit')
             else:
@@ -1308,7 +1317,13 @@ class Connection:
 
     async def setCharger(self, vin, data):
         """Start/Stop charger."""
-        return await self._setVWAPI(f'fs-car/bs/batterycharge/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/charger/actions', json = data)
+        return await self._setVWAPI(
+            urljoin(
+                self._session_auth_ref_url[vin],
+                f'fs-car/bs/batterycharge/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/charger/actions'
+            ),
+            json = data
+        )
 
     async def setClimater(self, vin, data, spin):
         """Execute climatisation actions."""
@@ -1426,14 +1441,28 @@ class Connection:
             # Only get security token if auxiliary heater is to be enabled
             #if data.get... == 'auxiliary':
             #   self._session_headers['X-securityToken'] = await self.get_sec_token(vin = vin, spin = spin, action = 'timer')
-            return await self._setVWAPI(f'fs-car/bs/departuretimer/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/timer/actions', json = body)
+            #return await self._setVWAPI(
+            return await self._setVWAPI(
+                urljoin(
+                    self._session_auth_ref_url[vin],
+                    f'fs-car/bs/departuretimer/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/timer/actions'
+                ),
+                json = body
+            )
         except:
             raise
         return False
 
     async def setHonkAndFlash(self, vin, data):
         """Execute honk and flash actions."""
-        return await self._setVWAPI(f'fs-car/bs/rhf/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/honkAndFlash', json = data)
+        #return await self._setVWAPI(
+        return await self._setVWAPI(
+            urljoin(
+                self._session_auth_ref_url[vin],
+                f'fs-car/bs/rhf/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/honkAndFlash'
+            ),
+            json = data
+        )
 
     async def setLock(self, vin, data, spin):
         """Remote lock and unlock actions."""
@@ -1451,7 +1480,13 @@ class Connection:
             # Set temporary Content-Type
             self._session_headers['Content-Type'] = 'application/vnd.vwg.mbb.RemoteLockUnlock_v1_0_0+xml'
 
-            response = await self._setVWAPI(f'fs-car/bs/rlu/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/actions', data = data)
+            response = await self._setVWAPI(
+                urljoin(
+                    self._session_auth_ref_url[vin],
+                    f'fs-car/bs/rlu/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/actions'
+                ),
+                data = data
+            )
 
             # Clean up content-type
             self._session_headers.pop('Content-Type', None)
@@ -1478,7 +1513,13 @@ class Connection:
                     self._session_headers['x-mbbSecToken'] = await self.get_sec_token(vin = vin, spin = spin, action = 'heating')
             else:
                 raise SkodaConfigException("Invalid data for preheater")
-            response = await self._setVWAPI(f'fs-car/bs/rs/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/action', json = data)
+            response = await self._setVWAPI(
+                urljoin(
+                    self._session_auth_ref_url[vin],
+                    f'fs-car/bs/rs/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/action'
+                ),
+                json = data
+            )
 
             # Clean up headers
             self._session_headers.pop('x-mbbSecToken', None)
@@ -1496,7 +1537,13 @@ class Connection:
 
     async def setRefresh(self, vin):
         """"Force vehicle data update."""
-        return await self._setVWAPI(f'fs-car/bs/vsr/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/requests', data=None)
+        return await self._setVWAPI(
+            urljoin(
+                self._session_auth_ref_url[vin],
+                f'fs-car/bs/vsr/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/requests'
+            ),
+            data=None
+        )
 
    # Skoda native API request methods
     async def _setSkodaAPI(self, endpoint, vin, **data):
