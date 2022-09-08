@@ -28,7 +28,7 @@ CLIENT_LIST = {
 
 #XCLIENT_ID = '28cd30c6-dee7-4529-a0e6-b1e07ff90b79'
 XCLIENT_ID = 'a83d7e44-c8b7-42b7-b8ca-e478270d2091'
-XAPPVERSION = '3.2.6'
+XAPPVERSION = '3.5.5'
 XAPPNAME = 'cz.skodaauto.connect'
 USER_AGENT = 'okhttp/3.14.9'
 APP_URI = 'skodaconnect://oidc.login/'
@@ -62,7 +62,7 @@ TOKEN_HEADERS = {
     'vwg': {
         'X-Client-Id': XCLIENT_ID,
         'Accept': 'application/json',
-        'X-Platform': 'Linux',
+        'X-Platform': 'Android',
         #'X-Language-Id': 'XX',
         #'X-Country-Id': 'XX',
         #'Accept-Language': 'XX',
@@ -74,7 +74,7 @@ TOKEN_HEADERS = {
     },
     'connect': {
         'Accept': 'application/json',
-        'X-Platform': 'Linux',
+        'X-Platform': 'Android',
         #'X-Language-Id': 'XX',
         #'X-Country-Id': 'XX',
         #'Accept-Language': 'XX',
@@ -86,7 +86,7 @@ TOKEN_HEADERS = {
     },
     'skoda': {
         'Accept': 'application/json',
-        'X-Platform': 'Linux',
+        'X-Platform': 'Android',
         #'X-Language-Id': 'XX',
         #'X-Country-Id': 'XX',
         #'Accept-Language': 'XX',
@@ -98,7 +98,7 @@ TOKEN_HEADERS = {
     },
     'smartlink': {
         'Accept': 'application/json',
-        'X-Platform': 'Linux',
+        'X-Platform': 'Android',
         #'X-Language-Id': 'XX',
         #'X-Country-Id': 'XX',
         #'Accept-Language': 'XX',
