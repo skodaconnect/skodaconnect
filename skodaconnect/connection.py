@@ -275,6 +275,7 @@ class Connection:
                     raise SkodaServiceUnavailable(f'API returned HTTP status {req.status}')
                 raise SkodaException(f'Token exchange failed. Request status: {req.status}')
             # Save access, identity and refresh tokens according to requested client
+            _LOGGER.debug('Received token exchange response, checking for errors.')
             token_data = await req.json()
             self._session_tokens[client] = {}
             for key in token_data:
@@ -1331,7 +1332,13 @@ class Connection:
             # Only get security token if auxiliary heater is to be started
             if data.get('action', {}).get('settings', {}).get('heaterSource', None) == 'auxiliary':
                 self._session_headers['X-securityToken'] = await self.get_sec_token(vin = vin, spin = spin, action = 'rclima')
-            return await self._setVWAPI(f'fs-car/bs/climatisation/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/climater/actions', json = data)
+            return await self._setVWAPI(
+                urljoin(
+                self._session_auth_ref_url[vin],
+                f'fs-car/bs/climatisation/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/climater/actions'
+            ),
+            json = data
+        )
         except:
             raise
         return False
