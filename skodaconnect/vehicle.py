@@ -72,8 +72,10 @@ class Vehicle:
         # Skoda Native API connectivity is enabled
         elif 'REMOTE' in self._connectivities:
             self._services.update({
+                'STATE': {'active': False},
                 'CHARGING': {'active': False},
                 'AIR_CONDITIONING': {'active': False},
+                'PARKING_POSITION': {'active': False},
             })
         # SmartLink connectivity is enabled
         elif 'INCAR' in self._connectivities:
@@ -260,6 +262,14 @@ class Vehicle:
                     self._states.update(data)
                 else:
                     _LOGGER.debug('Could not fetch any positional data')
+        elif self._services.get('PARKING_POSITION', {}).get('active', False):
+            data = await self._connection.getParkingPosition(self.vin)
+            if data:
+                self._states.update(data)
+            else:
+                _LOGGER.debug('Could not fetch charger data')
+        else:
+            self._requests.pop('charger', None)
 
     async def get_statusreport(self):
         """Fetch status data if function is enabled."""
@@ -270,8 +280,14 @@ class Vehicle:
                     self._states.update(data)
                 else:
                     _LOGGER.debug('Could not fetch status report')
-        elif self._services.get('vehicle_status', {}).get('active', False):
+        elif self._services.get('STATE', {}).get('active', False):
             data = await self._connection.getVehicleStatus(self.vin)
+            if data:
+                self._states.update(data)
+            else:
+                _LOGGER.debug('Could not fetch status report')
+        elif self._services.get('vehicle_status', {}).get('active', False):
+            data = await self._connection.getVehicleStatus(self.vin, smartlink=True)
             if data:
                 self._states.update(data)
             else:
@@ -1340,11 +1356,11 @@ class Vehicle:
     @property
     def parking_light(self):
         """Return true if parking light is on"""
-        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301010001'].get('value', 0))
-        if response != 2:
-            return True
-        else:
-            return False
+        if self.attrs.get('StoredVehicleDataResponseParsed', False):
+            response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301010001'].get('value', 0))
+            return True if response != 2 else False
+        if self.attrs.get('vehicle_remote', {}):
+            return True if self.attrs.get('vehicle_remote', {}).get('lights', {}).get('overallStatus', 0) != 'OFF' else False
 
     @property
     def is_parking_light_supported(self):
@@ -1354,22 +1370,38 @@ class Vehicle:
                 return True
             else:
                 return False
+        if self.attrs.get('vehicle_remote', {}):
+            if 'overallStatus' in self.attrs.get('vehicle_remote', {}).get('lights', {}):
+                return True
+            else:
+                False
 
   # Connection status
     @property
     def last_connected(self):
         """Return when vehicle was last connected to connect servers."""
-        last_connected_utc = self.attrs.get('StoredVehicleDataResponse').get('vehicleData').get('data')[0].get('field')[0].get('tsCarSentUtc')
-        if isinstance(last_connected_utc, datetime):
-            last_connected = last_connected_utc.astimezone().replace(tzinfo=None)
-        else:
-            last_connected = datetime.strptime(last_connected_utc,'%Y-%m-%dT%H:%M:%SZ').astimezone().replace(tzinfo=None)
+        last_connected_utc = None
+        if self.attrs.get('StoredVehicleDataResponse', False):
+            last_connected_utc = self.attrs.get('StoredVehicleDataResponse').get('vehicleData').get('data')[0].get('field')[0].get('tsCarSentUtc')
+            if isinstance(last_connected_utc, datetime):
+                last_connected = last_connected_utc.astimezone().replace(tzinfo=None)
+            else:
+                last_connected = datetime.strptime(last_connected_utc,'%Y-%m-%dT%H:%M:%SZ').astimezone().replace(tzinfo=None)
+        elif self.attrs.get('vehicle_remote', False):
+            last_connected_utc = self.attrs.get('vehicle_remote', {}).get('capturedAt', None)
+            if isinstance(last_connected_utc, datetime):
+                last_connected = last_connected_utc.astimezone().replace(tzinfo=None)
+            else:
+                last_connected = datetime.strptime(last_connected_utc,'%Y-%m-%dT%H:%M:%S.%fZ').astimezone().replace(tzinfo=None).replace(microsecond=0)
         return last_connected.isoformat()
 
     @property
     def is_last_connected_supported(self):
         """Return when vehicle was last connected to connect servers."""
-        if next(iter(next(iter(self.attrs.get('StoredVehicleDataResponse', {}).get('vehicleData', {}).get('data', {})), None).get('field', {})), None).get('tsCarSentUtc', []):
+        if self.attrs.get('StoredVehicleDataResponse', False):
+            if next(iter(next(iter(self.attrs.get('StoredVehicleDataResponse', {}).get('vehicleData', {}).get('data', {})), None).get('field', {})), None).get('tsCarSentUtc', []):
+                return True
+        elif self.attrs.get('vehicle_remote', {}).get('capturedAt', False):
             return True
 
   # Service information
@@ -1378,6 +1410,8 @@ class Vehicle:
         """Return vehicle odometer."""
         if self.attrs.get('vehicle_status', False):
             value = self.attrs.get('vehicle_status').get('totalMileage', 0)
+        elif self.attrs.get('vehicle_remote', False):
+            value = self.attrs.get('vehicle_remote').get('mileageInKm', 0)
         else:
             value = self.attrs.get('StoredVehicleDataResponseParsed')['0x0101010002'].get('value', 0)
         if value:
@@ -1391,6 +1425,9 @@ class Vehicle:
                 return True
         elif self.attrs.get('StoredVehicleDataResponseParsed', False):
             if '0x0101010002' in self.attrs.get('StoredVehicleDataResponseParsed'):
+                return True
+        elif self.attrs.get('vehicle_remote', False):
+            if 'mileageInKm' in self.attrs.get('vehicle_remote', {}):
                 return True
         return False
 
@@ -1734,14 +1771,21 @@ class Vehicle:
                 }
             else:
                 posObj = self.attrs.get('findCarResponse', {})
-                lat = int(posObj.get('Position').get('carCoordinate').get('latitude'))/1000000
-                lng = int(posObj.get('Position').get('carCoordinate').get('longitude'))/1000000
-                parkingTime = posObj.get('parkingTimeUTC')
+                if self._services.get('carfinder_v1', {}).get('active', False):
+                    lat = int(posObj.get('Position').get('carCoordinate').get('latitude'))/1000000
+                    lng = int(posObj.get('Position').get('carCoordinate').get('longitude'))/1000000
+                    parkingTime = posObj.get('parkingTimeUTC')
+                elif self._services.get('PARKING_POSITION', {}).get('active', False):
+                    lat = posObj.get('latitude')
+                    lng = posObj.get('longitude')
+                    parkingTime = posObj.get('lastUpdatedAt')
+
                 output = {
                     'lat' : lat,
                     'lng' : lng,
                     'timestamp' : parkingTime
                 }
+
         except:
             output = {
                 'lat': '?',
@@ -1753,7 +1797,8 @@ class Vehicle:
     def is_position_supported(self):
         """Return true if carfinder_v1 service is active."""
         if self._services.get('carfinder_v1', {}).get('active', False):
-        #if self.attrs.get('findCarResponse', {}).get('Position', {}).get('carCoordinate', {}).get('latitude', False):
+            return True
+        elif self._services.get('PARKING_POSITION', {}).get('active', False):
             return True
         elif self.attrs.get('isMoving', False):
             return True
@@ -1958,8 +2003,8 @@ class Vehicle:
     def climatisation_time_left(self):
         """Return time left for climatisation in hours:minutes."""
         if self.attrs.get('airConditioning', {}).get('remainingTimeToReachTargetTemperatureInSeconds', False):
-            minutes = int(self.attrs.get('airConditioning', {}).get('remainingTimeToReachTargetTemperatureInSeconds', 0))/60
             try:
+                minutes = int(self.attrs.get('airConditioning', {}).get('remainingTimeToReachTargetTemperatureInSeconds', 0))/60
                 if not 0 <= minutes <= 65535:
                     return "00:00"
                 return "%02d:%02d" % divmod(minutes, 60)
@@ -2224,15 +2269,19 @@ class Vehicle:
         if self.attrs.get('StoredVehicleDataResponseParsed', False):
             if '0x0301050001' in self.attrs.get('StoredVehicleDataResponseParsed'):
                 response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301050001'].get('value', 0))
-        return True if response != 0 else False
+            return True if response != 0 else False
+        elif self.attrs.get('vehicle_remote', {}).get('windows', {}):
+            return True
 
     @property
     def window_closed_left_front(self):
-        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301050001'].get('value', 0))
-        if response == 3:
-            return True
-        else:
-            return False
+        if self.attrs.get('StoredVehicleDataResponseParsed', False):
+            response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301050001'].get('value', 0))
+            return True if response == 3 else False
+        elif self.attrs.get('vehicle_remote', {}).get('windows', {}):
+            windows = self.attrs.get('vehicle_remote', {}).get('windows', {})
+            window = next(item for item in windows if item['name'] == 'FRONT_LEFT')
+            return True if window.get('status', 'UNSUPPORTED') == 'CLOSED' else False
 
     @property
     def is_window_closed_left_front_supported(self):
@@ -2241,15 +2290,21 @@ class Vehicle:
         if self.attrs.get('StoredVehicleDataResponseParsed', False):
             if '0x0301050001' in self.attrs.get('StoredVehicleDataResponseParsed'):
                 response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301050001'].get('value', 0))
-        return True if response != 0 else False
+            return True if response != 0 else False
+        elif self.attrs.get('vehicle_remote', {}).get('windows', {}):
+            windows = self.attrs.get('vehicle_remote', {}).get('windows', {})
+            window = next(item for item in windows if item['name'] == 'FRONT_LEFT')
+            return True if window.get('status', 'UNSUPPORTED') != 'UNSUPPORTED' else False
 
     @property
     def window_closed_right_front(self):
-        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301050005'].get('value', 0))
-        if response == 3:
-            return True
-        else:
-            return False
+        if self.attrs.get('StoredVehicleDataResponseParsed', False):
+            response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301050005'].get('value', 0))
+            return True if response == 3 else False
+        elif self.attrs.get('vehicle_remote', {}).get('windows', {}):
+            windows = self.attrs.get('vehicle_remote', {}).get('windows', {})
+            window = next(item for item in windows if item['name'] == 'FRONT_RIGHT')
+            return True if window.get('status', 'UNSUPPORTED') == 'CLOSED' else False
 
     @property
     def is_window_closed_right_front_supported(self):
@@ -2258,15 +2313,21 @@ class Vehicle:
         if self.attrs.get('StoredVehicleDataResponseParsed', False):
             if '0x0301050005' in self.attrs.get('StoredVehicleDataResponseParsed'):
                 response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301050005'].get('value', 0))
-        return True if response != 0 else False
+            return True if response != 0 else False
+        elif self.attrs.get('vehicle_remote', {}).get('windows', {}):
+            windows = self.attrs.get('vehicle_remote', {}).get('windows', {})
+            window = next(item for item in windows if item['name'] == 'FRONT_RIGHT')
+            return True if window.get('status', 'UNSUPPORTED') != 'UNSUPPORTED' else False
 
     @property
     def window_closed_left_back(self):
-        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301050003'].get('value', 0))
-        if response == 3:
-            return True
-        else:
-            return False
+        if self.attrs.get('StoredVehicleDataResponseParsed', False):
+            response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301050003'].get('value', 0))
+            return True if response == 3 else False
+        elif self.attrs.get('vehicle_remote', {}).get('windows', {}):
+            windows = self.attrs.get('vehicle_remote', {}).get('windows', {})
+            window = next(item for item in windows if item['name'] == 'REAR_LEFT')
+            return True if window.get('status', 'UNSUPPORTED') == 'CLOSED' else False
 
     @property
     def is_window_closed_left_back_supported(self):
@@ -2275,15 +2336,21 @@ class Vehicle:
         if self.attrs.get('StoredVehicleDataResponseParsed', False):
             if '0x0301050003' in self.attrs.get('StoredVehicleDataResponseParsed'):
                 response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301050003'].get('value', 0))
-        return True if response != 0 else False
+            return True if response != 0 else False
+        elif self.attrs.get('vehicle_remote', {}).get('windows', {}):
+            windows = self.attrs.get('vehicle_remote', {}).get('windows', {})
+            window = next(item for item in windows if item['name'] == 'REAR_LEFT')
+            return True if window.get('status', 'UNSUPPORTED') != 'UNSUPPORTED' else False
 
     @property
     def window_closed_right_back(self):
-        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301050007'].get('value', 0))
-        if response == 3:
-            return True
-        else:
-            return False
+        if self.attrs.get('StoredVehicleDataResponseParsed', False):
+            response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301050007'].get('value', 0))
+            return True if response == 3 else False
+        elif self.attrs.get('vehicle_remote', {}).get('windows', {}):
+            windows = self.attrs.get('vehicle_remote', {}).get('windows', {})
+            window = next(item for item in windows if item['name'] == 'REAR_RIGHT')
+            return True if window.get('status', 'UNSUPPORTED') == 'CLOSED' else False
 
     @property
     def is_window_closed_right_back_supported(self):
@@ -2292,15 +2359,21 @@ class Vehicle:
         if self.attrs.get('StoredVehicleDataResponseParsed', False):
             if '0x0301050007' in self.attrs.get('StoredVehicleDataResponseParsed'):
                 response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301050007'].get('value', 0))
-        return True if response != 0 else False
+            return True if response != 0 else False
+        elif self.attrs.get('vehicle_remote', {}).get('windows', {}):
+            windows = self.attrs.get('vehicle_remote', {}).get('windows', {})
+            window = next(item for item in windows if item['name'] == 'REAR_RIGHT')
+            return True if window.get('status', 'UNSUPPORTED') != 'UNSUPPORTED' else False
 
     @property
     def sunroof_closed(self):
-        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x030105000B'].get('value', 0))
-        if response == 3:
-            return True
-        else:
-            return False
+        if self.attrs.get('StoredVehicleDataResponseParsed', False):
+            response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x030105000B'].get('value', 0))
+            return True if response == 3 else False
+        elif self.attrs.get('vehicle_remote', {}).get('windows', {}):
+            windows = self.attrs.get('vehicle_remote', {}).get('windows', {})
+            window = next(item for item in windows if item['name'] == 'SUN_ROOF')
+            return True if window.get('status', 'UNSUPPORTED') == 'CLOSED' else False
 
     @property
     def is_sunroof_closed_supported(self):
@@ -2309,29 +2382,37 @@ class Vehicle:
         if self.attrs.get('StoredVehicleDataResponseParsed', False):
             if '0x030105000B' in self.attrs.get('StoredVehicleDataResponseParsed'):
                 response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x030105000B'].get('value', 0))
-        return True if response != 0 else False
+            return True if response != 0 else False
+        elif self.attrs.get('vehicle_remote', {}).get('windows', {}):
+            windows = self.attrs.get('vehicle_remote', {}).get('windows', {})
+            sunroof = next(item for item in windows if item['name'] == 'SUN_ROOF')
+            return True if sunroof.get('status', 'UNSUPPORTED') != 'UNSUPPORTED' else False
+
 
   # Locks
     @property
     def door_locked(self):
-        # LEFT FRONT
-        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040001'].get('value', 0))
-        if response != 2:
-            return False
-        # LEFT REAR
-        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040004'].get('value', 0))
-        if response != 2:
-            return False
-        # RIGHT FRONT
-        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040007'].get('value', 0))
-        if response != 2:
-            return False
-        # RIGHT REAR
-        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x030104000A'].get('value', 0))
-        if response != 2:
-            return False
-
-        return True
+        if self.attrs.get('StoredVehicleDataResponseParsed', False):
+            # LEFT FRONT
+            response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040001'].get('value', 0))
+            if response != 2:
+                return False
+            # LEFT REAR
+            response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040004'].get('value', 0))
+            if response != 2:
+                return False
+            # RIGHT FRONT
+            response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040007'].get('value', 0))
+            if response != 2:
+                return False
+            # RIGHT REAR
+            response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x030104000A'].get('value', 0))
+            if response != 2:
+                return False
+            return True
+        elif self.attrs.get('vehicle_remote', {}).get('status', {}):
+            response = self.attrs.get('vehicle_remote', {}).get('status', {}).get('locked', 0)
+            return True if response == 'YES' else False
 
     @property
     def is_door_locked_supported(self):
@@ -2339,7 +2420,11 @@ class Vehicle:
         if self.attrs.get('StoredVehicleDataResponseParsed', False):
             if '0x0301040001' in self.attrs.get('StoredVehicleDataResponseParsed'):
                 response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040001'].get('value', 0))
-        return True if response != 0 else False
+            return True if response != 0 else False
+        elif self.attrs.get('vehicle_remote', {}).get('status', {}):
+            response = self.attrs.get('vehicle_remote', {}).get('status', {}).get('locked', 0)
+            return True if response in ['YES', 'NO'] else False
+        return False
 
     @property
     def trunk_locked(self):
@@ -2361,11 +2446,13 @@ class Vehicle:
     @property
     def hood_closed(self):
         """Return true if hood is closed"""
-        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040011'].get('value', 0))
-        if response == 3:
-            return True
-        else:
-            return False
+        if self.attrs.get('StoredVehicleDataResponseParsed', False):
+            response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040011'].get('value', 0))
+            return True if response == 3 else False
+        elif self.attrs.get('vehicle_remote', {}):
+            doors = self.attrs.get('vehicle_remote', {}).get('doors', [])
+            bonnet = next(item for item in doors if item['name'] == 'BONNET')
+            return True if bonnet.get('status', 'UNSUPPORTED') in ['CLOSED', 'LOCKED'] else False
 
     @property
     def is_hood_closed_supported(self):
@@ -2374,15 +2461,21 @@ class Vehicle:
         if self.attrs.get('StoredVehicleDataResponseParsed', False):
             if '0x0301040011' in self.attrs.get('StoredVehicleDataResponseParsed', {}):
                 response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040011'].get('value', 0))
-        return True if response != 0 else False
+            return True if response != 0 else False
+        elif self.attrs.get('vehicle_remote', False):
+            doors = self.attrs.get('vehicle_remote', {}).get('doors', [])
+            bonnet = next(item for item in doors if item['name'] == 'BONNET')
+            return True if bonnet.get('status', 'UNSUPPORTED') != 'UNSUPPORTED' else False
 
     @property
     def door_closed_left_front(self):
-        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040002'].get('value', 0))
-        if response == 3:
-            return True
-        else:
-            return False
+        if self.attrs.get('StoredVehicleDataResponseParsed', False):
+            response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040002'].get('value', 0))
+            return True if response == 3 else False
+        elif self.attrs.get('vehicle_remote', {}).get('doors', {}):
+            doors = self.attrs.get('vehicle_remote', {}).get('doors', {})
+            door = next(item for item in doors if item['name'] == 'FRONT_LEFT')
+            return True if door.get('status', 'UNSUPPORTED') in ['CLOSED', 'LOCKED'] else False
 
     @property
     def is_door_closed_left_front_supported(self):
@@ -2391,15 +2484,21 @@ class Vehicle:
         if self.attrs.get('StoredVehicleDataResponseParsed', False):
             if '0x0301040002' in self.attrs.get('StoredVehicleDataResponseParsed'):
                 response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040002'].get('value', 0))
-        return True if response != 0 else False
+            return True if response != 0 else False
+        elif self.attrs.get('vehicle_remote', {}).get('doors', {}):
+            doors = self.attrs.get('vehicle_remote', {}).get('doors', {})
+            door = next(item for item in doors if item['name'] == 'FRONT_LEFT')
+            return True if door.get('status', 'UNSUPPORTED') != 'UNSUPPORTED' else False
 
     @property
     def door_closed_right_front(self):
-        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040008'].get('value', 0))
-        if response == 3:
-            return True
-        else:
-            return False
+        if self.attrs.get('StoredVehicleDataResponseParsed', False):
+            response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040008'].get('value', 0))
+            return True if response == 3 else False
+        elif self.attrs.get('vehicle_remote', {}).get('doors', {}):
+            doors = self.attrs.get('vehicle_remote', {}).get('doors', {})
+            door = next(item for item in doors if item['name'] == 'FRONT_RIGHT')
+            return True if door.get('status', 'UNSUPPORTED') in ['CLOSED', 'LOCKED'] else False
 
     @property
     def is_door_closed_right_front_supported(self):
@@ -2408,15 +2507,21 @@ class Vehicle:
         if self.attrs.get('StoredVehicleDataResponseParsed', False):
             if '0x0301040008' in self.attrs.get('StoredVehicleDataResponseParsed'):
                 response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040008'].get('value', 0))
-        return True if response != 0 else False
+            return True if response != 0 else False
+        elif self.attrs.get('vehicle_remote', {}).get('doors', {}):
+            doors = self.attrs.get('vehicle_remote', {}).get('doors', {})
+            door = next(item for item in doors if item['name'] == 'FRONT_RIGHT')
+            return True if door.get('status', 'UNSUPPORTED') != 'UNSUPPORTED' else False
 
     @property
     def door_closed_left_back(self):
-        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040005'].get('value', 0))
-        if response == 3:
-            return True
-        else:
-            return False
+        if self.attrs.get('StoredVehicleDataResponseParsed', False):
+            response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040005'].get('value', 0))
+            return True if response == 3 else False
+        elif self.attrs.get('vehicle_remote', {}).get('doors', {}):
+            doors = self.attrs.get('vehicle_remote', {}).get('doors', {})
+            door = next(item for item in doors if item['name'] == 'REAR_LEFT')
+            return True if door.get('status', 'UNSUPPORTED') in ['CLOSED', 'LOCKED'] else False
 
     @property
     def is_door_closed_left_back_supported(self):
@@ -2425,15 +2530,21 @@ class Vehicle:
         if self.attrs.get('StoredVehicleDataResponseParsed', False):
             if '0x0301040005' in self.attrs.get('StoredVehicleDataResponseParsed'):
                 response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301040005'].get('value', 0))
-        return True if response != 0 else False
+            return True if response != 0 else False
+        elif self.attrs.get('vehicle_remote', {}).get('doors', {}):
+            doors = self.attrs.get('vehicle_remote', {}).get('doors', {})
+            door = next(item for item in doors if item['name'] == 'REAR_LEFT')
+            return True if door.get('status', 'UNSUPPORTED') != 'UNSUPPORTED' else False
 
     @property
     def door_closed_right_back(self):
-        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x030104000B'].get('value', 0))
-        if response == 3:
-            return True
-        else:
-            return False
+        if self.attrs.get('StoredVehicleDataResponseParsed', False):
+            response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x030104000B'].get('value', 0))
+            return True if response == 3 else False
+        elif self.attrs.get('vehicle_remote', {}).get('doors', {}):
+            doors = self.attrs.get('vehicle_remote', {}).get('doors', {})
+            door = next(item for item in doors if item['name'] == 'REAR_RIGHT')
+            return True if door.get('status', 'UNSUPPORTED') in ['CLOSED', 'LOCKED'] else False
 
     @property
     def is_door_closed_right_back_supported(self):
@@ -2442,15 +2553,21 @@ class Vehicle:
         if self.attrs.get('StoredVehicleDataResponseParsed', False):
             if '0x030104000B' in self.attrs.get('StoredVehicleDataResponseParsed'):
                 response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x030104000B'].get('value', 0))
-        return True if response != 0 else False
+            return True if response != 0 else False
+        elif self.attrs.get('vehicle_remote', {}).get('doors', {}):
+            doors = self.attrs.get('vehicle_remote', {}).get('doors', {})
+            door = next(item for item in doors if item['name'] == 'REAR_RIGHT')
+            return True if door.get('status', 'UNSUPPORTED') != 'UNSUPPORTED' else False
 
     @property
     def trunk_closed(self):
-        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x030104000E'].get('value', 0))
-        if response == 3:
-            return True
-        else:
-            return False
+        if self.attrs.get('StoredVehicleDataResponseParsed', False):
+            response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x030104000E'].get('value', 0))
+            return True if response == 3 else False
+        elif self.attrs.get('vehicle_remote', {}).get('doors', {}):
+            doors = self.attrs.get('vehicle_remote', {}).get('doors', {})
+            door = next(item for item in doors if item['name'] == 'TRUNK')
+            return True if door.get('status', 'UNSUPPORTED') in ['CLOSED', 'LOCKED'] else False
 
     @property
     def is_trunk_closed_supported(self):
@@ -2459,7 +2576,12 @@ class Vehicle:
         if self.attrs.get('StoredVehicleDataResponseParsed', False):
             if '0x030104000E' in self.attrs.get('StoredVehicleDataResponseParsed'):
                 response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x030104000E'].get('value', 0))
-        return True if response != 0 else False
+            return True if response != 0 else False
+        elif self.attrs.get('vehicle_remote', {}).get('doors', {}):
+            doors = self.attrs.get('vehicle_remote', {}).get('doors', {})
+            door = next(item for item in doors if item['name'] == 'TRUNK')
+            return True if door.get('status', 'UNSUPPORTED') != 'UNSUPPORTED' else False
+
 
   # Departure timers
    # Under development

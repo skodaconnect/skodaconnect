@@ -9,7 +9,7 @@ COUNTRY = 'CZ'
 CLIENT_LIST = {
     'connect': {
         'CLIENT_ID':    '7f045eee-7003-4379-9968-9355ed2adb06@apps_vw-dilab_com',       # Client ID for VW-Group Identiy services, can be used to receive VW-Group API token
-        'SCOPE':        'openid profile address cars email birthdate badge mbb phone driversLicense dealers profession vin',    # Requests to vwg-connect.com/ msg.volkswagen.de etc...
+        'SCOPE':        'openid profile address cars email birthdate badge mbb phone driversLicense dealers profession vin mileage',    # Requests to vwg-connect.com/ msg.volkswagen.de etc...
         'TOKEN_TYPES':  'code id_token'                                                 # tokentype=IDK_CONNECT / MBB (API token)
     },
     'skoda': {

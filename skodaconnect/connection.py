@@ -695,11 +695,14 @@ class Connection:
         try:
             await self.set_token('skoda')
             response = await self.get(
-                'https://api.connect.skoda-auto.cz/api/v2/garage/vehicles'
+                #'https://api.connect.skoda-auto.cz/api/v2/garage/vehicles'
+                'https://api.connect.skoda-auto.cz/api/v3/garage'
             )
             # Check that response is a list
-            if isinstance(response, list):
-                skoda_vehicles = response
+            #if isinstance(response, list):
+            if isinstance(response.get('vehicles', None), list):
+                #skoda_vehicles = response
+                skoda_vehicles = response.get('vehicles')
         except:
             raise
 
@@ -745,7 +748,7 @@ class Connection:
                             connectivity.append(service.get('type', ''))
 
                     capabilities = []
-                    for capability in vehicle.get('capabilities', []):
+                    for capability in vehicle.get('capabilities', {}).get('capabilities', []):
                         capabilities.append(capability.get('id', ''))
                     vehicle = {
                         'vin': vin,
@@ -936,25 +939,33 @@ class Connection:
             _LOGGER.warning(f'Could not fetch StoredVehicleDataResponse, error: {error}')
         return False
 
-    async def getVehicleStatus(self, vin):
-        """Get stored vehicle status (SmartLink)."""
+    async def getVehicleStatus(self, vin, smartlink=False):
+        """Get stored vehicle status (SmartLink and new API)."""
         try:
-            await self.set_token('smartlink')
-            response = await self.get(
-                urljoin(
-                    self._session_auth_ref_url[vin],
-                    f'https://api.connect.skoda-auto.cz/api/v1/vehicle-status/{vin}'
-                )
-            )
-            if response:
-                data = {
-                    'vehicle_status': response
-                }
-                return data
-            elif response.get('status_code', {}):
-                _LOGGER.warning(f'Could not fetch vehicle status, HTTP status code: {response.get("status_code")}')
+            if smartlink:
+                await self.set_token('smartlink')
+                response = await self.get(f'https://api.connect.skoda-auto.cz/api/v1/vehicle-status/{vin}')
+                if response:
+                    data = {
+                        'vehicle_status': response
+                    }
+                    return data
+                elif response.get('status_code', {}):
+                    _LOGGER.warning(f'Could not fetch vehicle status, HTTP status code: {response.get("status_code")}')
+                else:
+                    _LOGGER.info('Unhandled error while trying to fetch vehicle status via SmartLink')
             else:
-                _LOGGER.info('Unhandled error while trying to fetch vehicle status via SmartLink')
+                await self.set_token('connect')
+                response = await self.get(f'https://api.connect.skoda-auto.cz/api/v2/vehicle-status/{vin}')
+                if response:
+                    data = {
+                        'vehicle_remote': response.get('remote', {})
+                    }
+                    return data
+                elif response.get('status_code', {}):
+                    _LOGGER.warning(f'Could not fetch vehicle status, HTTP status code: {response.get("status_code")}')
+                else:
+                    _LOGGER.info('Unhandled error while trying to fetch vehicle status via SmartLink')
         except Exception as error:
             _LOGGER.warning(f'Could not fetch SmartLink vehicle status, error: {error}')
         return False
@@ -1002,6 +1013,32 @@ class Connection:
                     data = {
                         'isMoving': True,
                         'rate_limit_remaining': 15
+                    }
+                    return data
+                else:
+                    _LOGGER.warning(f'Could not fetch position, HTTP status code: {response.get("status_code")}')
+            else:
+                _LOGGER.info('Unhandled error while trying to fetch positional data')
+        except Exception as error:
+            _LOGGER.warning(f'Could not fetch position, error: {error}')
+        return False
+
+    async def getParkingPosition(self, vin):
+        """Get position data (New API)."""
+        try:
+            await self.set_token('skoda')
+            response = await self.get(f'https://api.connect.skoda-auto.cz/api/v1/position/vehicles/{vin}/parking-position')
+            if response.get('latitude', False):
+                data = {
+                    'findCarResponse': response,
+                    'isMoving': False
+                }
+                return data
+            elif response.get('status_code', {}):
+                if response.get('status_code', 0) == 204:
+                    _LOGGER.debug(f'Seems car is moving, HTTP 204 received from position')
+                    data = {
+                        'isMoving': True
                     }
                     return data
                 else:
@@ -1119,9 +1156,10 @@ class Connection:
         """Get charging data (New Skoda API)."""
         try:
             await self.set_token('connect')
+            chargerMode = self.get(f'https://api.connect.skoda-auto.cz/api/v1/charging/{vin}/mode')
             chargerStatus = self.get(f'https://api.connect.skoda-auto.cz/api/v1/charging/{vin}/status')
             chargerSettings = self.get(f'https://api.connect.skoda-auto.cz/api/v1/charging/{vin}/settings')
-            chargingData = await asyncio.gather(chargerStatus, chargerSettings)
+            chargingData = await asyncio.gather(chargerStatus, chargerSettings, chargerMode)
 
             if chargingData[0].get('battery', {}) or chargingData[1].get('maxChargeCurrentAc', {}):
                 response = chargingData[0]
