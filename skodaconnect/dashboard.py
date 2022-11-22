@@ -597,8 +597,8 @@ class WindowHeater(Switch):
     @property
     def attributes(self):
         return {
-            'last_result': self.vehicle.climater_action_status,
-            'last_timestamp': self.vehicle.climater_action_timestamp
+            "Front":self.vehicle.window_heater_attributes.get("Front", ''),
+            "Rear": self.vehicle.window_heater_attributes.get("Rear", '')
         }
 
 
