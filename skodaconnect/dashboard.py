@@ -28,7 +28,10 @@ class Instrument:
 
     def setup(self, vehicle, **config):
         self.vehicle = vehicle
-        if not self.is_supported:
+        try:
+            if not self.is_supported:
+                return False
+        except:
             return False
 
         self.configurate(**config)
