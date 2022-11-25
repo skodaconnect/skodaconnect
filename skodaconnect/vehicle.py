@@ -2136,25 +2136,23 @@ class Vehicle:
     @property
     def window_heater(self):
         """Return status of window heater."""
+        status_front = status_rear = ''
         if self.attrs.get('climater', False):
             status_front = self.attrs.get('climater', {}).get('status', {}).get('windowHeatingStatusData', {}).get('windowHeatingStateFront', {}).get('content', '')
-            if status_front == 'on':
-                return True
             status_rear = self.attrs.get('climater', {}).get('status', {}).get('windowHeatingStatusData', {}).get('windowHeatingStateRear', {}).get('content', '')
-            if status_rear == 'on':
-                return True
-        elif self.attrs.get('airConditioning', {}).get('windowsHeatingStatuses', False):            
+        elif self.attrs.get('airConditioning', {}).get('windowsHeatingStatuses', False):
             status = self.attrs.get('airConditioning', {}).get('windowsHeatingStatuses', {})
             for sub_status in status:
                 if (sub_status.get('windowLocation')=='Front'):
                     status_front = sub_status.get('state')
-                    if status_front == 'On':
-                        return True
                 if (sub_status.get('windowLocation')=='Rear'):
                     status_rear = sub_status.get('state')
-                    if status_rear == 'On':
-                        return True
-        elif self.attrs.get('airConditioningSettings', {}).get('windowsHeatingEnabled', False):
+        if status_front in ['on', 'On', 'ON']:
+            return True
+        if status_rear in ['on', 'On', 'ON']:
+            return True
+            
+        if self.attrs.get('airConditioningSettings', {}).get('windowsHeatingEnabled', False):
             return self.attrs.get('airConditioningSettings', {}).get('windowsHeatingEnabled', False)
         return False
 
