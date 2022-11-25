@@ -28,7 +28,10 @@ class Instrument:
 
     def setup(self, vehicle, **config):
         self.vehicle = vehicle
-        if not self.is_supported:
+        try:
+            if not self.is_supported:
+                return False
+        except:
             return False
 
         self.configurate(**config)
@@ -598,7 +601,9 @@ class WindowHeater(Switch):
     def attributes(self):
         return {
             'last_result': self.vehicle.climater_action_status,
-            'last_timestamp': self.vehicle.climater_action_timestamp
+            'last_timestamp': self.vehicle.climater_action_timestamp,
+            "Front":self.vehicle.window_heater_attributes.get("Front", ''),
+            "Rear": self.vehicle.window_heater_attributes.get("Rear", '')
         }
 
 
