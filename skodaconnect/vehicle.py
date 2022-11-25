@@ -2181,9 +2181,9 @@ class Vehicle:
         elif self.attrs.get('airConditioning', False):
             if self.attrs.get('airConditioning', {}).get('windowsHeatingStatuses', False):
             # return self.attrs.get('airConditioningSettings', {}).get('windowsHeatingEnabled', False)
-                status = self.attrs.get('airConditioning', {}).get('windowsHeatingStatuses', {})
-                for status2 in status:
-                    data[status2.get('windowLocation')] = status2.get('state','')
+                statuses = self.attrs.get('airConditioning', {}).get('windowsHeatingStatuses', {})
+                for status in statuses:
+                    data[status.get('windowLocation', '?')] = status.get('state','N/A')
         return data
 
     @property
