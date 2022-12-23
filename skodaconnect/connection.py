@@ -1610,6 +1610,30 @@ class Connection:
             data=None
         )
 
+    async def setWindowHeater(self, vin, action):
+        """Special handling of window heater for native API."""
+        try:
+            await self.set_token('connect')
+            if action in ['start', 'stop']:
+                url = f"https://api.connect.skoda-auto.cz/api/v1/air-conditioning/operation-requests/{action}-window-heating"
+                data = {
+                    'vin': vin
+                }
+            else:
+                raise SkodaInvalidRequestException("Invalid action for window heating.")
+            response = await self._data_call(url, **data)
+            if not response:
+                _LOGGER.debug(f'API call failed, data: {data}')
+                raise SkodaException('Invalid or no response')
+            else:
+                request_id = response.get('id', 0)
+                request_state = response.get('status', 'unknown')
+                _LOGGER.debug(f'Request returned with state "{request_state}", request id: {request_id}')
+                return dict({'id': str(request_id), 'state': request_state})
+        except:
+            raise
+        return False
+
    # Skoda native API request methods
     async def _setSkodaAPI(self, endpoint, vin, **data):
         """Data call through Skoda API."""

@@ -776,28 +776,30 @@ class Vehicle:
         """Turn on/off window heater."""
         if self.is_window_heater_supported:
             if action in ['start', 'stop']:
-                # This is a Skoda native API vehicle
+                # Check if this is a Skoda native API vehicle
                 if self._services.get('AIR_CONDITIONING', False):
-                    data = {}
-                    # Fetch current climatisation settings
-                    airconData = await self._connection.getAirConditioning(self.vin)
-                    if airconData:
-                        airconData.pop('airConditioning', None)
-                        data = airconData
-                    else:
-                        # Try to use saved configuration from previous poll
+                    if action in ['start', 'stop']:
+                        data = {
+                            'type': action,
+                            'section': 'WindowHeating'
+                        }
+                        return await self._set_aircon(data)
+                    elif action in ['enabled', 'disabled']:
+                        setting = True if action == 'enabled' else False
                         if self.attrs.get('airConditioningSettings', False):
-                            _LOGGER.warning('Failed to fetch climatisation settings, using saved values.')
                             data = self.attrs.get('airConditioningSettings')
                         else:
-                            _LOGGER.warning('Could not fetch current climatisation settings.')
-                            raise SkodaServiceUnavailable("Unable to fetch current settings.")
-                    data.pop('temperatureConversionTableUsed', None)
-                    data['type'] = 'UpdateSettings'
-                    if action == 'start':
-                        data['airConditioningSettings']['windowHeatingEnabled'] = True
-                    else:
-                        data['airConditioningSettings']['windowHeatingEnabled'] = False
+                            _LOGGER.warning('Could not find stored climatisation settings, using defaults.')
+                            data['airConditioningSettings'] = {
+                                'targetTemperatureInKelvin': 294.15,
+                                'windowHeatingEnabled': False,
+                                'airConditioningAtUnlock': False,
+                                'zonesSettings': {
+                                    'frontLeftEnabled': False,
+                                    'frontRightEnabled': False
+                                }
+                            }
+                        data['airConditioningSettings']['windowHeatingEnabled'] = setting
                     return await self._set_aircon(data)
                 else:
                     # Vehicle is hosted by VW-Group API
@@ -958,12 +960,16 @@ class Vehicle:
                 self._requests['latest'] = 'Timers'
             elif 'UpdateSettings' in data['type']:
                 self._requests['latest'] = 'Climatisation settings'
-            elif 'Start' in data['type'] or 'Stop' in data['type']:
+            elif data['type'] in ['Start', 'Stop']:
                 self._requests['latest'] = 'Climatisation'
             else:
                 self._requests['latest'] = 'Air conditioning'
             _LOGGER.debug('Sending request')
-            response = await self._connection.setAirConditioning(self.vin, data)
+            # Special handling for window heating
+            if data['section'] == 'WindowHeating':
+                response = await self._connection.setWindowHeater(self.vin, data.get('type', 'Stop'))
+            else:
+                response = await self._connection.setAirConditioning(self.vin, data)
             if not response:
                 self._requests['air-conditioning']['status'] = 'Failed'
                 _LOGGER.error('Failed to execute air conditioning request')
@@ -2198,26 +2204,57 @@ class Vehicle:
         return False
 
     @property
-    def window_heater(self):
+    def window_heater_new(self):
         """Return status of window heater."""
         status_front = status_rear = ''
-        if self.attrs.get('climater', False):
-            status_front = self.attrs.get('climater', {}).get('status', {}).get('windowHeatingStatusData', {}).get('windowHeatingStateFront', {}).get('content', '')
-            status_rear = self.attrs.get('climater', {}).get('status', {}).get('windowHeatingStatusData', {}).get('windowHeatingStateRear', {}).get('content', '')
-        elif self.attrs.get('airConditioning', {}).get('windowsHeatingStatuses', False):
+        if self.attrs.get('airConditioning', {}).get('windowsHeatingStatuses', False):
             status = self.attrs.get('airConditioning', {}).get('windowsHeatingStatuses', {})
             for sub_status in status:
                 if (sub_status.get('windowLocation')=='Front'):
                     status_front = sub_status.get('state')
                 if (sub_status.get('windowLocation')=='Rear'):
                     status_rear = sub_status.get('state')
+        if status_front.lower() == 'on':
+            return True
+        if status_rear.lower() == 'on':
+            return True
+        #if self.attrs.get('airConditioningSettings', {}).get('windowsHeatingEnabled', False):
+        #    return self.attrs.get('airConditioningSettings', {}).get('windowsHeatingEnabled', False)
+        return False
+
+    @property
+    def is_window_heater_new_supported(self):
+        """Return true if vehichle has heater."""
+        if self.is_electric_climatisation_supported:
+            if self.attrs.get('airConditioning', {}).get('windowsHeatingStatuses', False):
+                return True
+            #elif self.attrs.get('airConditioningSettings', {}).get('windowsHeatingEnabled', False):
+            #    return True
+        return False
+
+    @property
+    def climatisation_window_heat(self):
+        """Return window heat during climatisation setting."""
+        return self.attrs.get('airConditioningSettings', {}).get('windowHeatingEnabled', False)
+
+    @property
+    def is_climatisation_window_heat_supported(self):
+        """Return true if window heat during climatisation is available."""
+        if self.attrs.get('airConditioningSettings', {}).get('windowHeatingEnabled', {}):
+            return True
+        return False
+
+    @property
+    def window_heater(self):
+        """Return status of window heater."""
+        status_front = status_rear = ''
+        if self.attrs.get('climater', False):
+            status_front = self.attrs.get('climater', {}).get('status', {}).get('windowHeatingStatusData', {}).get('windowHeatingStateFront', {}).get('content', '')
+            status_rear = self.attrs.get('climater', {}).get('status', {}).get('windowHeatingStatusData', {}).get('windowHeatingStateRear', {}).get('content', '')
         if status_front in ['on', 'On', 'ON']:
             return True
         if status_rear in ['on', 'On', 'ON']:
             return True
-
-        if self.attrs.get('airConditioningSettings', {}).get('windowsHeatingEnabled', False):
-            return self.attrs.get('airConditioningSettings', {}).get('windowsHeatingEnabled', False)
         return False
 
     @property
@@ -2229,10 +2266,6 @@ class Vehicle:
                     return True
                 if self.attrs.get('climater', {}).get('status', {}).get('windowHeatingStatusData', {}).get('windowHeatingStateRear', {}).get('content', '') in ['on', 'off']:
                     return True
-            elif self.attrs.get('airConditioning', {}).get('windowsHeatingStatuses', False):
-                return True
-            elif self.attrs.get('airConditioningSettings', {}).get('windowsHeatingEnabled', False):
-                return True
         return False
 
     @property
