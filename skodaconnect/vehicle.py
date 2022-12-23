@@ -543,7 +543,30 @@ class Vehicle:
         else:
             raise SkodaInvalidRequestException('Departure timers are not supported.')
 
-    async def set_timer_schedule(self, id, schedule={}):
+    async def set_heatersource(self, source='electric', spin=None):
+        """ Activate/deactivate use of aux heater for departure timers. """
+        """ VW-Group API only for PHEV vehicles """
+        data = {}
+        if not self.is_auxiliary_climatisation_supported:
+            raise SkodaInvalidRequestException('Auxiliary heater is not supprted on this vehicle.')
+        if spin is None:
+            raise SkodaInvalidRequestException('SPIN is required to set heater source.')
+
+        # VW-Group API
+        if self._services.get('timerprogramming_v1', False):
+            if source.lower() in ['electric', 'automatic']:
+                data = {
+                    'heaterSource': source.lower(),
+                    'action': 'heaterSource',
+                    'spin': spin
+                }
+            else:
+                raise SkodaInvalidRequestException(f'Source "{action}" is not supported as heater source.')
+            return await self._set_timers(data)
+        else:
+            raise SkodaInvalidRequestException('Departure timers are not supported.')
+
+    async def set_timer_schedule(self, id, schedule={}, spin=False):
         """ Set departure schedules. """
         data = {}
         # Validate required user inputs
@@ -552,6 +575,7 @@ class Vehicle:
             raise SkodaConfigException(f'Timer id "{id}" is not supported for this vehicle.')
         else:
             _LOGGER.debug(f'Timer id {id} is supported')
+        # Verify that needed data is supplied
         if not schedule:
             raise SkodaInvalidRequestException('A schedule must be set.')
         if not isinstance(schedule.get('enabled', ''), bool):
@@ -568,6 +592,12 @@ class Vehicle:
         elif not schedule.get('recurring'):
             if not re.match('^[0-9]{4}-[0-9]{2}-[0-9]{2}$', schedule.get('date', '')):
                 raise SkodaInvalidRequestException('For single departure schedule the date variable must be set to YYYY-mm-dd.')
+        if not schedule.get('heaterSource', False):
+            if not schedule.get('heaterSource', None) in ['automatic', 'electric']:
+                raise SkodaInvalidRequestException('Heater source must be one of "electric" or "automatic".')
+        elif spin is False:
+            if schedule.get('heaterSource', None) == 'automatic':
+                raise SkodaInvalidRequestException('SPIN must be supplied when using auxiliary heater".')
 
         # VW-Group API
         if self._services.get('timerprogramming_v1', False):
@@ -616,6 +646,7 @@ class Vehicle:
             data['id'] = id
             data['action'] = 'schedule'
             data['schedule'] = schedule
+            data['spin'] = spin
             return await self._set_timers(data)
 
         # Skoda native API
@@ -684,7 +715,7 @@ class Vehicle:
 
         try:
             self._requests['latest'] = 'Departuretimer'
-            response = await self._connection.setDeparturetimer(self.vin, data, spin=False)
+            response = await self._connection.setDeparturetimer(self.vin, data, spin=data.get('spin', False))
             if not response:
                 self._requests['departuretimer']['status'] = 'Failed'
                 _LOGGER.error('Failed to execute departure timer request')
@@ -2151,7 +2182,7 @@ class Vehicle:
             return True
         if status_rear in ['on', 'On', 'ON']:
             return True
-            
+
         if self.attrs.get('airConditioningSettings', {}).get('windowsHeatingEnabled', False):
             return self.attrs.get('airConditioningSettings', {}).get('windowsHeatingEnabled', False)
         return False

@@ -1389,6 +1389,8 @@ class Connection:
             timer = departuretimers.get('departuretimer', {}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', [])
             profile = departuretimers.get('departuretimer', {}).get('timersAndProfiles', {}).get('timerProfileList', {}).get('timerProfile', [])
             setting = departuretimers.get('departuretimer', {}).get('timersAndProfiles', {}).get('timerBasicSetting', [])
+            # Set heater source default to electric
+            source = 'electric'
 
             # Construct Timer data
             timers = [{},{},{}]
@@ -1435,16 +1437,32 @@ class Connection:
                 else:
                     action = 'notProgrammed'
                 timers[timerid]['timerProgrammedStatus'] = action
+
+            # If heatersource is to be set
+            elif data.get('action', None) == 'heaterSource':
+                actiontype = 'setTimersAndProfiles'
+
             else:
                 raise SkodaException('Unknown action for departure timer')
 
+            # Set heatersource, if specified
+            source = data.get('heaterSource', data.get('schedule', {}).get('heaterSource', 'electric'))
+
             # Construct Profiles data
+            enabled = None
             profiles = [{},{},{}]
             for i in range(0, 3):
                 for key in profile[i]:
                     # Ignore the timestamp key
                     if key not in ['timestamp']:
                         profiles[i][key] = profile[i][key]
+                # Set heater source
+                profiles[i]['heaterSource'] = source
+                if profiles[i]['enabled'] == True:
+                    enabled = True
+
+            if enabled == None and source == 'automatic':
+                raise SkodaInvalidRequestException('At least one departure must be scheduled for heater to be enabled')
 
             # Set optional settings
             if data.get('schedule', {}).get('chargeMaxCurrent', None) is not None:
@@ -1482,10 +1500,12 @@ class Connection:
                     'type': actiontype
                 }
             }
+
             await self.set_token('vwg')
             # Only get security token if auxiliary heater is to be enabled
-            #if data.get... == 'auxiliary':
-            #   self._session_headers['X-securityToken'] = await self.get_sec_token(vin = vin, spin = spin, action = 'timer')
+            if source == 'automatic':
+               self._session_headers['X-securityToken'] = await self.get_sec_token(vin = vin, spin = spin, action = 'timer')
+
             #return await self._setVWAPI(
             return await self._setVWAPI(
                 urljoin(
