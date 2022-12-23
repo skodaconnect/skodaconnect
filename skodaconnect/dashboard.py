@@ -632,6 +632,63 @@ class WindowHeater(Switch):
             "Rear": self.vehicle.window_heater_attributes.get("Rear", '')
         }
 
+class WindowHeaterNew(Switch):
+    def __init__(self):
+        super().__init__(attr="window_heater_new", name="Window Heater", icon="mdi:car-defrost-rear")
+
+    @property
+    def state(self):
+        return self.vehicle.window_heater_new
+
+    async def turn_on(self):
+        await self.vehicle.set_window_heating('start')
+        await self.vehicle.update()
+
+    async def turn_off(self):
+        await self.vehicle.set_window_heating('stop')
+        await self.vehicle.update()
+
+    @property
+    def assumed_state(self):
+        return False
+
+    @property
+    def attributes(self):
+        return {
+            'last_result': self.vehicle.climater_action_status,
+            'last_timestamp': self.vehicle.climater_action_timestamp,
+            "Front":self.vehicle.window_heater_attributes.get("Front", ''),
+            "Rear": self.vehicle.window_heater_attributes.get("Rear", '')
+        }
+
+class ClimatisationWindowHeat(Switch):
+    def __init__(self):
+        super().__init__(attr="climatisation_window_heat", name="Climatisation Window Heat", icon="mdi:car-defrost-rear")
+
+    @property
+    def state(self):
+        return self.vehicle.climatisation_window_heat
+
+    async def turn_on(self):
+        await self.vehicle.set_window_heating('enabled')
+        await self.vehicle.update()
+
+    async def turn_off(self):
+        await self.vehicle.set_window_heating('disabled')
+        await self.vehicle.update()
+
+    @property
+    def assumed_state(self):
+        return False
+
+    @property
+    def attributes(self):
+        return {
+            'last_result': self.vehicle.climater_action_status,
+            'last_timestamp': self.vehicle.climater_action_timestamp,
+            "Front":self.vehicle.window_heater_attributes.get("Front", ''),
+            "Rear": self.vehicle.window_heater_attributes.get("Rear", '')
+        }
 
 class SeatHeatingFrontLeft(Switch):
     def __init__(self):
@@ -1063,6 +1120,8 @@ def create_instruments():
         RequestUpdate(),
         PlugAutoUnlock(),
         WindowHeater(),
+        WindowHeaterNew(),
+        ClimatisationWindowHeat(),
         #SeatHeatingFrontLeft(), # Not yet implemented
         #SeatHeatingFrontRight(), # Not yet implemented
         #SeatHeatingRearLeft(), # Not yet implemented
