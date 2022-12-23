@@ -2076,8 +2076,10 @@ class Vehicle:
 
     @property
     def is_climatisation_time_left_supported(self):
-        """Return true if remainingTimeToReachTargetTemperatureInSeconds is supported."""
-        if self.attrs.get('airConditioning', {}).get('remainingTimeToReachTargetTemperatureInSeconds', False):
+        #"""Return true if remainingTimeToReachTargetTemperatureInSeconds is supported."""
+        """ Return true if airConditioning is supported. """
+        #if self.attrs.get('airConditioning', {}).get('remainingTimeToReachTargetTemperatureInSeconds', False):
+        if self.attrs.get('airConditioning', False):
             return True
         return False
 
