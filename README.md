@@ -73,10 +73,12 @@ car.set_charger(action = "start")                          # action = "start" or
 car.set_charger_current(value=<int/str>                    # value = integer 1-255 or Maximum/Reduced (For PHEV: 252=Reduced and 254=Maximum)
 car.set_charge_limit(value=<int>)                          # value = integer 0-100 in 10 increments. Valid values is PHEV: 0-50, EV: 50-100.
 car.set_battery_climatisation(mode = False)                # mode = False or True
-car.set_climatisation(mode = "auxilliary", spin="1234")    # mode = "auxilliary", "electric" or "off". spin is S-PIN and only needed for aux heating
+car.set_climatisation(mode = "auxilliary", spin="1234")    # mode = "auxilliary", "electric", "off". SPIN only needed for aux heating
 car.set_climatisation_temp(temperature = 22)               # temperature = integer from 16 to 30
 car.set_window_heating(action = "start")                   # action = "start" or "stop"
+ - car.set_window_heating(action = "enabled")              # action = "enabled/disabled", enable/disable window heating for climatisation
 car.set_lock(action = "unlock", spin = "1234")             # action = "unlock" or "lock". spin = SPIN, needed for both
+car.set_plug_autounlock(setting = "on")                    # setting = "on"/"off". Enable/disable auto unlock of plug when charged
 car.set_pheater(mode = "heating", spin = "1234")           # action = "heating", "ventilation" or "off". spin = SPIN, not needed for off
 car.set_charge_limit(limit = 30)                           # limit = 0,10,20,30,40,50
 car.set_timer_active(id = 1, action = "on"}                # id = 1, 2, 3, action = "on" or "off".
