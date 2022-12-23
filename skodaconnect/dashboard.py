@@ -317,7 +317,7 @@ class Position(Instrument):
 
 class DoorLock(Instrument):
     def __init__(self):
-        super().__init__(component="lock", attr="door_locked", name="Door locked")
+        super().__init__(component="lock", attr="door_locked", name="Door locked", icon="mdi:car-door-lock")
 
     def configurate(self, **config):
         self.spin = config.get('spin', '')
@@ -1287,7 +1287,8 @@ def create_instruments():
             attr="door_locked",
             name="Doors locked",
             device_class="lock",
-            reverse_state=False
+            reverse_state=False,
+            icon="mdi:car-door-lock"
         ),
         BinarySensor(
             attr="door_closed_left_front",
