@@ -576,6 +576,32 @@ class Charging(Switch):
             'last_timestamp': self.vehicle.charger_action_timestamp
         }
 
+class PlugAutoUnlock(Switch):
+    def __init__(self):
+        super().__init__(attr="plug_autounlock", name="Plug Auto Unlock", icon="mdi:battery-lock")
+
+    @property
+    def state(self):
+        return self.vehicle.plug_autounlock
+
+    async def turn_on(self):
+        await self.vehicle.set_plug_autounlock('Permanent')
+        await self.vehicle.update()
+
+    async def turn_off(self):
+        await self.vehicle.set_plug_autounlock('Off')
+        await self.vehicle.update()
+
+    @property
+    def assumed_state(self):
+        return False
+
+    @property
+    def attributes(self):
+        return {
+            'last_result': self.vehicle.charger_action_status,
+            'last_timestamp': self.vehicle.charger_action_timestamp
+        }
 
 class WindowHeater(Switch):
     def __init__(self):
@@ -1035,6 +1061,7 @@ def create_instruments():
         RequestFlash(),
         RequestHonkAndFlash(),
         RequestUpdate(),
+        PlugAutoUnlock(),
         WindowHeater(),
         #SeatHeatingFrontLeft(), # Not yet implemented
         #SeatHeatingFrontRight(), # Not yet implemented

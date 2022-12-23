@@ -398,6 +398,22 @@ class Vehicle:
             _LOGGER.error('No charger support.')
             raise SkodaInvalidRequestException('No charger support.')
 
+    async def set_plug_autounlock(self, setting='Off'):
+        """Set charger plug auto unlock setting."""
+        data = {}
+        if setting in ['Permanent', 'Off']:
+            data = {
+                'chargingSettings': {
+                    'autoUnlockPlugWhenCharged': setting,
+                    'maxChargeCurrentAc': self.charge_max_ampere,
+                    'targetStateOfChargeInPercent': self.min_charge_level
+                },
+                'type': 'UpdateSettings'
+            }
+        else:
+            raise SkodaInvalidRequestException('Invalid setting for plug auto unlock.')
+        return await self.set_charger(data)
+
     async def set_charger(self, action):
         """Charging actions."""
         if not self._services.get('rbatterycharge_v1', False) and not self._services.get('CHARGING', False):
@@ -436,7 +452,7 @@ class Vehicle:
                 data = action
                 pass
             else:
-                _LOGGER.error(f'Invalid charger action: {action}. Must be one of start, stop or data for set chargelimit')
+                _LOGGER.error(f'Invalid charger action: {action}. Must be one of start, stop or data for updating settings')
                 raise SkodaInvalidRequestException(f'Invalid charger action: {action}. Must be one of start, stop or data for set chargelimit')
         try:
             self._requests['latest'] = 'Charger'
@@ -1599,6 +1615,21 @@ class Vehicle:
         if self.attrs.get('departuretimer', {}).get('timersAndProfiles', {}).get('timerBasicSetting', {}).get('chargeMinLimit', False):
             return True
         elif self.attrs.get('chargerSettings', {}).get('targetStateOfChargeInPercent', False):
+            return True
+        return False
+
+    @property
+    def plug_autounlock(self):
+        """Return the state of plug auto unlock at charged"""
+        if self.attrs.get('chargerSettings', False):
+            return self.attrs.get('chargerSettings', {}).get('autoUnlockPlugWhenCharged', 0)
+        else:
+            return 0
+
+    @property
+    def is_plug_autounlock_supported(self):
+        """Return true if plug auto unlock is supported"""
+        if self.attrs.get('chargerSettings', {}).get('autoUnlockPlugWhenCharged', False):
             return True
         return False
 
