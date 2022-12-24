@@ -1627,10 +1627,9 @@ class Vehicle:
     @property
     def plug_autounlock(self):
         """Return the state of plug auto unlock at charged"""
-        if self.attrs.get('chargerSettings', False):
-            return self.attrs.get('chargerSettings', {}).get('autoUnlockPlugWhenCharged', 0)
-        else:
-            return 0
+        if self.attrs.get('chargerSettings', {}).get('autoUnlockPlugWhenCharged', None) == 'Permanent':
+            return True
+        return False
 
     @property
     def is_plug_autounlock_supported(self):
@@ -2188,6 +2187,20 @@ class Vehicle:
         if self.attrs.get('climater', {}).get('status', {}).get('climatisationStatusData', {}).get('climatisationState', {}).get('content', False):
             return True
         elif self.attrs.get('airConditioning', {}).get('state', False):
+            return True
+        return False
+
+    @property
+    def aux_heater_for_departure(self):
+        """Return status of air-conditioning at unlock setting."""
+        if self.departure1.get('heaterSource', 'electric') == 'automatic':
+            return True
+        return False
+
+    @property
+    def is_aux_heater_for_departure_supported(self):
+        """Return true if use of auxiliary heater for next departure is supported."""
+        if self.is_departure1_supported and self.is_electric_climatisation_supported and self.is_auxiliary_climatisation_supported:
             return True
         return False
 
