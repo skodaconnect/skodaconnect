@@ -1458,7 +1458,7 @@ class Connection:
                         profiles[i][key] = profile[i][key]
                 # Set heater source
                 profiles[i]['heaterSource'] = source
-                if profiles[i]['enabled'] == True:
+                if timers[i].get('timerProgrammedStatus', None) == "programmed":
                     enabled = True
 
             if enabled == None and source == 'automatic':
