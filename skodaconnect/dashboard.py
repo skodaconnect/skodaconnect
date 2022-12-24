@@ -690,6 +690,36 @@ class ClimatisationWindowHeat(Switch):
             "Rear": self.vehicle.window_heater_attributes.get("Rear", '')
         }
 
+class AuxHeaterDeparture(Switch):
+    def __init__(self):
+        super().__init__(attr="aux_heater_for_departure", name="Allow aux heater next departure", icon="mdi:car-defrost-rear")
+
+    def configurate(self, **config):
+        self.spin = config.get('spin', '')
+
+    @property
+    def state(self):
+        return self.vehicle.aux_heater_for_departure
+
+    async def turn_on(self):
+        await self.vehicle.set_heatersource(source='automatic', spin=self.spin)
+        await self.vehicle.update()
+
+    async def turn_off(self):
+        await self.vehicle.set_heatersource(source='electric')
+        await self.vehicle.update()
+
+    @property
+    def assumed_state(self):
+        return False
+
+    @property
+    def attributes(self):
+        return {
+            'last_result': self.vehicle.timer_action_status,
+            'last_timestamp': self.vehicle.timer_action_timestamp,
+        }
+
 class SeatHeatingFrontLeft(Switch):
     def __init__(self):
         super().__init__(attr="seat_heating_front_left", name="Seat heating front left", icon="mdi:seat-recline-normal")
@@ -1119,6 +1149,7 @@ def create_instruments():
         RequestHonkAndFlash(),
         RequestUpdate(),
         PlugAutoUnlock(),
+        AuxHeaterDeparture(),
         WindowHeater(),
         WindowHeaterNew(),
         ClimatisationWindowHeat(),
