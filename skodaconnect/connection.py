@@ -1204,17 +1204,35 @@ class Connection:
                 url = 'https://api.connect.skoda-auto.cz/api/v1/$sectionId/operation-requests/$requestId'
             # Requests for VW-Group API
             elif sectionId == 'climatisation':
-                url = f'fs-car/bs/$sectionId/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/climater/actions/$requestId'
+                url = urljoin(
+                    self._session_auth_ref_url[vin],
+                    f'fs-car/bs/$sectionId/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/climater/actions/$requestId'
+                )
             elif sectionId == 'batterycharge':
-                url = f'fs-car/bs/$sectionId/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/charger/actions/$requestId'
+                url = urljoin(
+                    self._session_auth_ref_url[vin],
+                    f'fs-car/bs/$sectionId/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/charger/actions/$requestId'
+                )
             elif sectionId == 'departuretimer':
-                url = f'fs-car/bs/$sectionId/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/timer/actions/$requestId'
+                url = urljoin(
+                    self._session_auth_ref_url[vin],
+                    f'fs-car/bs/$sectionId/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/timer/actions/$requestId'
+                )
             elif sectionId == 'vsr':
-                url = f'fs-car/bs/$sectionId/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/requests/$requestId/jobstatus'
+                url = urljoin(
+                    self._session_auth_ref_url[vin],
+                    f'fs-car/bs/$sectionId/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/requests/$requestId/jobstatus'
+                )
             elif sectionId == 'rhf':
-                url = f'fs-car/bs/$sectionId/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/honkAndFlash/$requestId/status'
+                url = urljoin(
+                    self._session_auth_ref_url[vin],
+                    f'fs-car/bs/$sectionId/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/honkAndFlash/$requestId/status'
+                )
             else:
-                url = f'fs-car/bs/$sectionId/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/requests/$requestId/status'
+                url = urljoin(
+                    self._session_auth_ref_url[vin],
+                    f'fs-car/bs/$sectionId/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/requests/$requestId/status'
+                )
             url = re.sub('\$sectionId', sectionId, url)
             url = re.sub('\$requestId', requestId, url)
 
@@ -1224,12 +1242,8 @@ class Connection:
             else:
                 await self.set_token('vwg')
 
-            response = await self.get(
-                urljoin(
-                    self._session_auth_ref_url[vin],
-                    url
-                )
-            )
+            response = await self.get(url)
+
             # Pre-heater on older cars
             if response.get('requestStatusResponse', {}).get('status', False):
                 result = response.get('requestStatusResponse', {}).get('status', False)
@@ -1621,7 +1635,7 @@ class Connection:
                 }
             else:
                 raise SkodaInvalidRequestException("Invalid action for window heating.")
-            response = await self._data_call(url, data=body)
+            response = await self._data_call(url, json=body)
             if not response:
                 _LOGGER.debug(f'API call failed, data: {body}')
                 raise SkodaException('Invalid or no response')

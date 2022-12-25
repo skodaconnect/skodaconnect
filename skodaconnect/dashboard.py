@@ -729,14 +729,12 @@ class SeatHeatingFrontLeft(Switch):
         return self.vehicle.seat_heating_front_left
 
     async def turn_on(self):
-        #await self.vehicle.set_seat_heating('start')
-        #await self.vehicle.update()
-        pass
+        await self.vehicle.set_seat_heating('frontLeft', 'enable')
+        await self.vehicle.update()
 
     async def turn_off(self):
-        #await self.vehicle.set_seat_heating('stop')
-        #await self.vehicle.update()
-        pass
+        await self.vehicle.set_seat_heating('frontLeft', 'disable')
+        await self.vehicle.update()
 
     @property
     def assumed_state(self):
@@ -758,14 +756,12 @@ class SeatHeatingFrontRight(Switch):
         return self.vehicle.seat_heating_front_right
 
     async def turn_on(self):
-        #await self.vehicle.set_seat_heating('start')
-        #await self.vehicle.update()
-        pass
+        await self.vehicle.set_seat_heating('frontRight', 'enable')
+        await self.vehicle.update()
 
     async def turn_off(self):
-        #await self.vehicle.set_seat_heating('stop')
-        #await self.vehicle.update()
-        pass
+        await self.vehicle.set_seat_heating('frontRight', 'disable')
+        await self.vehicle.update()
 
     @property
     def assumed_state(self):
@@ -787,14 +783,12 @@ class SeatHeatingRearLeft(Switch):
         return self.vehicle.seat_heating_rear_left
 
     async def turn_on(self):
-        #await self.vehicle.set_seat_heating('start')
-        #await self.vehicle.update()
-        pass
+        await self.vehicle.set_seat_heating('rearLeft', 'enable')
+        await self.vehicle.update()
 
     async def turn_off(self):
-        #await self.vehicle.set_seat_heating('stop')
-        #await self.vehicle.update()
-        pass
+        await self.vehicle.set_seat_heating('rearLeft', 'disable')
+        await self.vehicle.update()
 
     @property
     def assumed_state(self):
@@ -816,14 +810,12 @@ class SeatHeatingRearRight(Switch):
         return self.vehicle.seat_heating_rear_right
 
     async def turn_on(self):
-        #await self.vehicle.set_seat_heating('start')
-        #await self.vehicle.update()
-        pass
+        await self.vehicle.set_seat_heating('rearRight', 'enable')
+        await self.vehicle.update()
 
     async def turn_off(self):
-        #await self.vehicle.set_seat_heating('stop')
-        #await self.vehicle.update()
-        pass
+        await self.vehicle.set_seat_heating('rearRight', 'disable')
+        await self.vehicle.update()
 
     @property
     def assumed_state(self):
@@ -846,10 +838,12 @@ class AirConditionAtUnlock(Switch):
         return self.vehicle.aircon_at_unlock
 
     async def turn_on(self):
-        pass
+        await self.vehicle.set_aircon_at_unlock(True)
+        await self.vehicle.update()
 
     async def turn_off(self):
-        pass
+        await self.vehicle.set_aircon_at_unlock(False)
+        await self.vehicle.update()
 
     @property
     def assumed_state(self):
@@ -1153,11 +1147,11 @@ def create_instruments():
         WindowHeater(),
         WindowHeaterNew(),
         ClimatisationWindowHeat(),
-        #SeatHeatingFrontLeft(), # Not yet implemented
-        #SeatHeatingFrontRight(), # Not yet implemented
-        #SeatHeatingRearLeft(), # Not yet implemented
-        #SeatHeatingRearRight(), # Not yet implemented
-        #AirConditionAtUnlock(), # Not yet implemented
+        SeatHeatingFrontLeft(),
+        SeatHeatingFrontRight(),
+        SeatHeatingRearLeft(),
+        SeatHeatingRearRight(),
+        AirConditionAtUnlock(),
         BatteryClimatisation(),
         ElectricClimatisation(),
         AuxiliaryClimatisation(),
@@ -1511,31 +1505,31 @@ def create_instruments():
             name="Request in progress",
             device_class="connectivity"
         ),
-        BinarySensor(
-            attr="seat_heating_front_left",
-            name="Seat heating front left",
-            device_class="heat"
-        ),
-        BinarySensor(
-            attr="seat_heating_front_right",
-            name="Seat heating front right",
-            device_class="heat"
-        ),
-        BinarySensor(
-            attr="seat_heating_rear_left",
-            name="Seat heating rear left",
-            device_class="heat"
-        ),
-        BinarySensor(
-            attr="seat_heating_rear_right",
-            name="Seat heating rear right",
-            device_class="heat"
-        ),
-        BinarySensor(
-            attr="aircon_at_unlock",
-            name="Air-conditioning at unlock",
-            device_class=None
-        ),
+        #BinarySensor(
+        #    attr="seat_heating_front_left",
+        #    name="Seat heating front left",
+        #    device_class="heat"
+        #),
+        #BinarySensor(
+        #    attr="seat_heating_front_right",
+        #    name="Seat heating front right",
+        #    device_class="heat"
+        #),
+        #BinarySensor(
+        #    attr="seat_heating_rear_left",
+        #    name="Seat heating rear left",
+        #    device_class="heat"
+        #),
+        #BinarySensor(
+        #    attr="seat_heating_rear_right",
+        #    name="Seat heating rear right",
+        #    device_class="heat"
+        #),
+        #BinarySensor(
+        #    attr="aircon_at_unlock",
+        #    name="Air-conditioning at unlock",
+        #    device_class=None
+        #),
     ]
 
 

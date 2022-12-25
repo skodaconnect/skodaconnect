@@ -37,6 +37,7 @@ COMPONENTS = {
 
 RESOURCES = [
 		"adblue_level",
+        "aircon_at_unlock",
 		"auxiliary_climatisation",
 		"battery_level",
 		"charge_max_ampere",
@@ -78,6 +79,7 @@ RESOURCES = [
 		"pheater_heating",
 		"pheater_status",
 		"pheater_ventilation",
+        "plug_autounlock",
 		"position",
 		"refresh_action_status",
 		"refresh_data",
@@ -86,6 +88,10 @@ RESOURCES = [
 		"request_in_progress",
 		"request_results",
 		"requests_remaining",
+        "seat_heating_front_left",
+        "seat_heating_front_right",
+        "seat_heating_rear_left",
+        "seat_heating_rear_right",
 		"service_inspection",
 		"service_inspection_distance",
 		"sunroof_closed",
@@ -106,6 +112,7 @@ RESOURCES = [
 		"window_closed_right_back",
 		"window_closed_right_front",
 		"window_heater",
+        "window_heater_new",
 		"windows_closed",
         "seat_heating"
 ]

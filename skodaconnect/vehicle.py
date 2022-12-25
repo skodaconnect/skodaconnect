@@ -10,6 +10,7 @@ import hashlib
 from datetime import datetime, timedelta, timezone
 from json import dumps as to_json
 from collections import OrderedDict
+from xmlrpc.client import boolean
 from skodaconnect.utilities import find_path, is_valid_path
 from skodaconnect.exceptions import (
     SkodaConfigException,
@@ -772,8 +773,77 @@ class Vehicle:
             _LOGGER.error('No climatisation support.')
             raise SkodaInvalidRequestException('No climatisation support.')
 
+    async def set_seat_heating(self, position='front_left', action='enable'):
+        """Enable/disable seat heating during climatisation (Native API)."""
+        supported = 'is_seat_heating_' + position + '_supported'
+        if hasattr(self, supported):
+            if action in ['enable', 'disable']:
+                pos = position.split("_")
+                seat = pos[0] + pos[1].capitalize()
+                setting = True if action == 'enable' else False
+                if self.attrs.get('airConditioningSettings', False):
+                    data = {
+                        'airConditioningSettings': self.attrs.get('airConditioningSettings'),
+                        'type': 'UpdateSettings'
+                    }
+                else:
+                    _LOGGER.warning('Could not find stored climatisation settings, using defaults.')
+                    data = {
+                        'airConditioningSettings': {
+                            'targetTemperatureInKelvin': 294.15,
+                            'windowHeatingEnabled': False,
+                            'airConditioningAtUnlock': False,
+                            'zonesSettings': {
+                                'frontLeftEnabled': False,
+                                'frontRightEnabled': False
+                            }
+                        },
+                        'type': 'UpdateSettings',
+                    }
+                data['airConditioningSettings']['zonesSettings'][f'{seat}Enabled'] = setting
+                return await self._set_aircon(data)
+            else:
+                _LOGGER.error(f'Seat heating action "{action}" is not supported.')
+                raise SkodaInvalidRequestException(f'Seat heating action "{action}" is not supported.')
+        else:
+            _LOGGER.error('No climatisation support.')
+            raise SkodaInvalidRequestException('No climatisation support.')
+
+    async def set_aircon_at_unlock(self, setting=False):
+        """Enable/disable climatisation when unlocked (Native API)."""
+        if self.is_electric_climatisation_supported:
+            if isinstance(setting, bool):
+                if self.attrs.get('airConditioningSettings', False):
+                    data = {
+                        'airConditioningSettings': self.attrs.get('airConditioningSettings'),
+                        'type': 'UpdateSettings'
+                    }
+                    data['airConditioningSettings']['airConditioningAtUnlock'] = setting
+                else:
+                    _LOGGER.warning('Could not find stored climatisation settings, using defaults.')
+                    data = {
+                        'airConditioningSettings': {
+                            'targetTemperatureInKelvin': 294.15,
+                            'windowHeatingEnabled': False,
+                            'airConditioningAtUnlock': setting,
+                            'zonesSettings': {
+                                'frontLeftEnabled': False,
+                                'frontRightEnabled': False
+                            }
+                        },
+                        'type': 'UpdateSettings',
+                    }
+                return await self._set_aircon(data)
+            else:
+                _LOGGER.error(f'Setting air-conditioning at unlock to "{setting}" is not supported.')
+                raise SkodaInvalidRequestException(f'Setting air-conditioning at unlock to "{setting}" is not supported.')
+        else:
+            _LOGGER.error('No climatisation support.')
+            raise SkodaInvalidRequestException('No climatisation support.')
+
     async def set_window_heating(self, action = 'stop'):
-        """Turn on/off window heater."""
+        """Turn on/off window heater (VW API)."""
+        """Enable/disable allow window heating (Native API)."""
         if self.is_window_heater_supported or self.is_window_heater_new_supported:
             if action in ['start', 'stop', 'enabled', 'disabled']:
                 # Check if this is a Skoda native API vehicle
@@ -787,19 +857,25 @@ class Vehicle:
                     elif action in ['enabled', 'disabled']:
                         setting = True if action == 'enabled' else False
                         if self.attrs.get('airConditioningSettings', False):
-                            data = self.attrs.get('airConditioningSettings')
+                            data = {
+                                'airConditioningSettings': self.attrs.get('airConditioningSettings'),
+                                'type': 'UpdateSettings'
+                            }
+                            data['airConditioningSettings']['windowHeatingEnabled'] = setting
                         else:
                             _LOGGER.warning('Could not find stored climatisation settings, using defaults.')
-                            data['airConditioningSettings'] = {
-                                'targetTemperatureInKelvin': 294.15,
-                                'windowHeatingEnabled': False,
-                                'airConditioningAtUnlock': False,
-                                'zonesSettings': {
-                                    'frontLeftEnabled': False,
-                                    'frontRightEnabled': False
-                                }
+                            data = {
+                                'airConditioningSettings': {
+                                    'targetTemperatureInKelvin': 294.15,
+                                    'windowHeatingEnabled': setting,
+                                    'airConditioningAtUnlock': False,
+                                    'zonesSettings': {
+                                        'frontLeftEnabled': False,
+                                        'frontRightEnabled': False
+                                    }
+                                },
+                                'type': 'UpdateSettings',
                             }
-                        data['airConditioningSettings']['windowHeatingEnabled'] = setting
                     return await self._set_aircon(data)
                 else:
                     # Vehicle is hosted by VW-Group API
@@ -879,22 +955,26 @@ class Vehicle:
                         # Try to use saved configuration from previous poll, else use defaults
                         if self.attrs.get('airConditioningSettings', False):
                             _LOGGER.warning('Failed to fetch climatisation settings, using saved values.')
-                            data = self.attrs.get('airConditioningSettings')
+                            data = {
+                                'airConditioningSettings': self.attrs.get('airConditioningSettings')
+                            }
                         else:
                             _LOGGER.warning('Could not fetch climatisation settings, using defaults.')
-                            data['airConditioningSettings'] = {
-                                'targetTemperatureInKelvin': 294.15,
-                                'windowHeatingEnabled': False,
-                                'airConditioningAtUnlock': False,
-                                'zonesSettings': {
-                                    'frontLeftEnabled': False,
-                                    'frontRightEnabled': False
+                            data = {
+                                'airConditioningSettings': {
+                                    'targetTemperatureInKelvin': 294.15,
+                                    'windowHeatingEnabled': False,
+                                    'airConditioningAtUnlock': False,
+                                    'zonesSettings': {
+                                        'frontLeftEnabled': False,
+                                        'frontRightEnabled': False
+                                    }
                                 }
                             }
                     data.pop('temperatureConversionTableUsed', None)
                     data['type'] = 'Start'
                     if temp is not None:
-                        data['airConditioningSettings']['targetTemperatureInKelvin'] = temp + 273.15
+                        data['targetTemperatureInKelvin'] = temp + 273.15
                 else:
                     data = {'type': 'Stop'}
                 return await self._set_aircon(data)
@@ -2591,8 +2671,10 @@ class Vehicle:
             return True if response == 3 else False
         elif self.attrs.get('vehicle_remote', {}):
             doors = self.attrs.get('vehicle_remote', {}).get('doors', [])
-            bonnet = next(item for item in doors if item['name'] == 'BONNET')
-            return True if bonnet.get('status', 'UNSUPPORTED') in ['CLOSED', 'LOCKED'] else False
+            if doors is not None:
+                bonnet = next(item for item in doors if item['name'] == 'BONNET')
+                return True if bonnet.get('status', 'UNSUPPORTED') in ['CLOSED', 'LOCKED'] else False
+        return False
 
     @property
     def is_hood_closed_supported(self):
