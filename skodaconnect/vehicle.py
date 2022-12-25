@@ -775,7 +775,7 @@ class Vehicle:
     async def set_window_heating(self, action = 'stop'):
         """Turn on/off window heater."""
         if self.is_window_heater_supported or self.is_window_heater_new_supported:
-            if action in ['start', 'stop']:
+            if action in ['start', 'stop', 'enabled', 'disabled']:
                 # Check if this is a Skoda native API vehicle
                 if self._services.get('AIR_CONDITIONING', False):
                     if action in ['start', 'stop']:

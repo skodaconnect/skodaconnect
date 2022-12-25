@@ -1616,14 +1616,14 @@ class Connection:
             await self.set_token('connect')
             if action in ['start', 'stop']:
                 url = f"https://api.connect.skoda-auto.cz/api/v1/air-conditioning/operation-requests/{action}-window-heating"
-                data = {
+                body = {
                     'vin': vin
                 }
             else:
                 raise SkodaInvalidRequestException("Invalid action for window heating.")
-            response = await self._data_call(url, **data)
+            response = await self._data_call(url, data=body)
             if not response:
-                _LOGGER.debug(f'API call failed, data: {data}')
+                _LOGGER.debug(f'API call failed, data: {body}')
                 raise SkodaException('Invalid or no response')
             else:
                 request_id = response.get('id', 0)
