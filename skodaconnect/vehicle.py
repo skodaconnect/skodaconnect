@@ -774,7 +774,7 @@ class Vehicle:
 
     async def set_window_heating(self, action = 'stop'):
         """Turn on/off window heater."""
-        if self.is_window_heater_supported:
+        if self.is_window_heater_supported or self.is_window_heater_new_supported:
             if action in ['start', 'stop']:
                 # Check if this is a Skoda native API vehicle
                 if self._services.get('AIR_CONDITIONING', False):
@@ -956,17 +956,17 @@ class Vehicle:
                 raise SkodaRequestInProgressException('Air conditioning action is already in progress')
         try:
             _LOGGER.debug(f'Attempting to update aircon settings with data {data}.')
-            if 'UpdateTimers' in data['type']:
+            if 'UpdateTimers' in data.get('type', {}:
                 self._requests['latest'] = 'Timers'
-            elif 'UpdateSettings' in data['type']:
+            elif 'UpdateSettings' in data.get('type', {}):
                 self._requests['latest'] = 'Climatisation settings'
-            elif data['type'] in ['Start', 'Stop']:
+            elif data.get('type', {}) in ['Start', 'Stop']:
                 self._requests['latest'] = 'Climatisation'
             else:
                 self._requests['latest'] = 'Air conditioning'
             _LOGGER.debug('Sending request')
             # Special handling for window heating
-            if data['section'] == 'WindowHeating':
+            if data.get('section', {}) == 'WindowHeating':
                 response = await self._connection.setWindowHeater(self.vin, data.get('type', 'Stop'))
             else:
                 response = await self._connection.setAirConditioning(self.vin, data)
