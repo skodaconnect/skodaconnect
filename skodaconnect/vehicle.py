@@ -577,7 +577,7 @@ class Vehicle:
                     'spin': spin
                 }
             else:
-                raise SkodaInvalidRequestException(f'Source "{action}" is not supported as heater source.')
+                raise SkodaInvalidRequestException(f'Source {data.get("action", "")} is not supported as heater source.')
             return await self._set_timers(data)
         else:
             raise SkodaInvalidRequestException('Departure timers are not supported.')
@@ -956,7 +956,7 @@ class Vehicle:
                 raise SkodaRequestInProgressException('Air conditioning action is already in progress')
         try:
             _LOGGER.debug(f'Attempting to update aircon settings with data {data}.')
-            if 'UpdateTimers' in data.get('type', {}:
+            if 'UpdateTimers' in data.get('type', {}):
                 self._requests['latest'] = 'Timers'
             elif 'UpdateSettings' in data.get('type', {}):
                 self._requests['latest'] = 'Climatisation settings'
