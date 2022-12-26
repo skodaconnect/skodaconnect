@@ -974,17 +974,33 @@ class Connection:
         """Get short term trip statistics."""
         try:
             await self.set_token('vwg')
-            response = await self.get(
+            short = await self.get(
                 urljoin(
                     self._session_auth_ref_url[vin],
                     f'fs-car/bs/tripstatistics/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/tripdata/shortTerm?newest'
                 )
             )
-            if response.get('tripData', {}):
-                data = {'tripstatistics': response.get('tripData', {})}
+            long = await self.get(
+                urljoin(
+                    self._session_auth_ref_url[vin],
+                    f'fs-car/bs/tripstatistics/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/tripdata/longTerm?newest'
+                )
+            )
+            data = {}
+            if short.get('tripData', False) and long.get('tripData', False):
+                data['tripstatistics'] = short.get('tripData', {})
+                data['longtermstatistics'] = long.get('tripData', {})
                 return data
-            elif response.get('status_code', {}):
-                _LOGGER.warning(f'Could not fetch trip statistics, HTTP status code: {response.get("status_code")}')
+            elif short.get('tripData', False):
+                data['tripstatistics'] = short.get('tripData', {})
+                return data
+            elif long.get('tripData', False):
+                data['longtermstatistics'] = long.get('tripData', {})
+                return data
+            elif short.get('status_code', False):
+                _LOGGER.warning(f'Could not fetch trip statistics, HTTP status code: {short.get("status_code")}')
+            elif long.get('status_code', False):
+                _LOGGER.warning(f'Could not fetch trip statistics, HTTP status code: {long.get("status_code")}')
             else:
                 _LOGGER.info(f'Unhandled error while trying to fetch trip statistics')
         except Exception as error:

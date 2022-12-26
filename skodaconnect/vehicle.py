@@ -2942,12 +2942,26 @@ class Vehicle:
         return self.attrs.get('tripstatistics', {})
 
     @property
+    def trip_longterm_entry(self):
+        return self.attrs.get('longtermstatistics', {})
+
+    @property
     def trip_last_average_speed(self):
         return self.trip_last_entry.get('averageSpeed')
 
     @property
     def is_trip_last_average_speed_supported(self):
         response = self.trip_last_entry
+        if response and type(response.get('averageSpeed', None)) in (float, int):
+            return True
+
+    @property
+    def trip_longterm_average_speed(self):
+        return self.trip_longterm_entry.get('averageSpeed')
+
+    @property
+    def is_trip_longterm_average_speed_supported(self):
+        response = self.trip_longterm_entry
         if response and type(response.get('averageSpeed', None)) in (float, int):
             return True
 
@@ -2963,6 +2977,17 @@ class Vehicle:
             return True
 
     @property
+    def trip_longterm_average_electric_consumption(self):
+        value = self.trip_longterm_entry.get('averageElectricEngineConsumption')
+        return float(value/10)
+
+    @property
+    def is_trip_longterm_average_electric_consumption_supported(self):
+        response = self.trip_longterm_entry
+        if response and type(response.get('averageElectricEngineConsumption', None)) in (float, int):
+            return True
+
+    @property
     def trip_last_average_fuel_consumption(self):
         return int(self.trip_last_entry.get('averageFuelConsumption')) / 10
 
@@ -2973,12 +2998,32 @@ class Vehicle:
             return True
 
     @property
+    def trip_longterm_average_fuel_consumption(self):
+        return int(self.trip_longterm_entry.get('averageFuelConsumption')) / 10
+
+    @property
+    def is_trip_longterm_average_fuel_consumption_supported(self):
+        response = self.trip_longterm_entry
+        if response and type(response.get('averageFuelConsumption', None)) in (float, int):
+            return True
+
+    @property
     def trip_last_average_auxillary_consumption(self):
         return self.trip_last_entry.get('averageAuxiliaryConsumption')
 
     @property
     def is_trip_last_average_auxillary_consumption_supported(self):
         response = self.trip_last_entry
+        if response and type(response.get('averageAuxiliaryConsumption', None)) in (float, int):
+            return True
+
+    @property
+    def trip_longterm_average_auxillary_consumption(self):
+        return self.trip_longterm_entry.get('averageAuxiliaryConsumption')
+
+    @property
+    def is_trip_longterm_average_auxillary_consumption_supported(self):
+        response = self.trip_longterm_entry
         if response and type(response.get('averageAuxiliaryConsumption', None)) in (float, int):
             return True
 
@@ -2994,12 +3039,33 @@ class Vehicle:
             return True
 
     @property
+    def trip_longterm_average_aux_consumer_consumption(self):
+        value = self.trip_longterm_entry.get('averageAuxConsumerConsumption')
+        return float(value / 10)
+
+    @property
+    def is_trip_longterm_average_aux_consumer_consumption_supported(self):
+        response = self.trip_longterm_entry
+        if response and type(response.get('averageAuxConsumerConsumption', None)) in (float, int):
+            return True
+
+    @property
     def trip_last_duration(self):
         return self.trip_last_entry.get('traveltime')
 
     @property
     def is_trip_last_duration_supported(self):
         response = self.trip_last_entry
+        if response and type(response.get('traveltime', None)) in (float, int):
+            return True
+
+    @property
+    def trip_longterm_duration(self):
+        return self.trip_longterm_entry.get('traveltime')
+
+    @property
+    def is_trip_longterm_duration_supported(self):
+        response = self.trip_longterm_entry
         if response and type(response.get('traveltime', None)) in (float, int):
             return True
 
@@ -3014,14 +3080,32 @@ class Vehicle:
             return True
 
     @property
+    def trip_longterm_length(self):
+        return self.trip_longterm_entry.get('mileage')
+
+    @property
+    def is_trip_longterm_length_supported(self):
+        response = self.trip_longterm_entry
+        if response and type(response.get('mileage', None)) in (float, int):
+            return True
+
+    @property
     def trip_last_recuperation(self):
-        # Not implemented
         return self.trip_last_entry.get('recuperation')
 
     @property
     def is_trip_last_recuperation_supported(self):
-        # Not implemented
         response = self.trip_last_entry
+        if response and type(response.get('recuperation', None)) in (float, int):
+            return True
+
+    @property
+    def trip_longterm_recuperation(self):
+        return self.trip_longterm_entry.get('recuperation')
+
+    @property
+    def is_trip_longterm_recuperation_supported(self):
+        response = self.trip_longterm_entry
         if response and type(response.get('recuperation', None)) in (float, int):
             return True
 
@@ -3037,15 +3121,54 @@ class Vehicle:
             return True
 
     @property
+    def trip_longterm_average_recuperation(self):
+        value = self.trip_longterm_entry.get('averageRecuperation')
+        return float(value / 10)
+
+    @property
+    def is_trip_longterm_average_recuperation_supported(self):
+        response = self.trip_longterm_entry
+        if response and type(response.get('averageRecuperation', None)) in (float, int):
+            return True
+
+    @property
     def trip_last_total_electric_consumption(self):
-        # Not implemented
         return self.trip_last_entry.get('totalElectricConsumption')
 
     @property
     def is_trip_last_total_electric_consumption_supported(self):
-        # Not implemented
         response = self.trip_last_entry
         if response and type(response.get('totalElectricConsumption', None)) in (float, int):
+            return True
+
+    @property
+    def trip_longterm_total_electric_consumption(self):
+        return self.trip_longterm_entry.get('totalElectricConsumption')
+
+    @property
+    def is_trip_longterm_total_electric_consumption_supported(self):
+        response = self.trip_longterm_entry
+        if response and type(response.get('totalElectricConsumption', None)) in (float, int):
+            return True
+
+    @property
+    def trip_last_start_mileage(self):
+        return self.trip_last_entry.get('startMileage')
+
+    @property
+    def is_trip_last_start_mileage_supported(self):
+        response = self.trip_last_entry
+        if response and type(response.get('startMileage', None)) in (float, int):
+            return True
+
+    @property
+    def trip_longterm_start_mileage(self):
+        return self.trip_longterm_entry.get('startMileage')
+
+    @property
+    def is_trip_longterm_start_mileage_supported(self):
+        response = self.trip_longterm_entry
+        if response and type(response.get('startMileage', None)) in (float, int):
             return True
 
   # Status of set data requests
