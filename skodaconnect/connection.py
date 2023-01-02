@@ -258,25 +258,41 @@ class Connection:
             # Extract code and tokens
             jwt_auth_code = parse_qs(urlparse(location).fragment).get('code')[0]
             jwt_id_token = parse_qs(urlparse(location).fragment).get('id_token')[0]
+            #tokenBody = {
+            #    'auth_code': jwt_auth_code,
+            #    'id_token':  jwt_id_token,
+            #    'brand': BRAND
+            #}
             tokenBody = {
-                'auth_code': jwt_auth_code,
-                'id_token':  jwt_id_token,
-                'brand': BRAND
+                'authorizationCode': jwt_auth_code
             }
-            tokenURL = 'https://tokenrefreshservice.apps.emea.vwapps.io/exchangeAuthCode'
+            #tokenURL = 'https://tokenrefreshservice.apps.emea.vwapps.io/exchangeAuthCode'
+            tokenURL = 'https://api.connect.skoda-auto.cz/api/v1/authentication/token?systemId=TECHNICAL'
+            _LOGGER.debug(f"Trying to authorize with {tokenBody}")
+            newHeader = {
+                'X-Platform': "Android",
+                'X-Language-ID': "sv",
+                'X-Country-ID': "SE",
+                #'Content-Type': "application/json",
+            }
+            _LOGGER.debug(f"Headers: {newHeader}")
             req = await self._session.post(
                 url=tokenURL,
-                headers=self._session_auth_headers,
-                data = tokenBody,
+                #headers=self._session_auth_headers,
+                headers=newHeader,
+                json = tokenBody,
                 allow_redirects=False
             )
+            _LOGGER.debug(f"Got {req}")
             if req.status != 200:
+                _LOGGER.debug(f"ERROR {req.json}")
                 if req.status >= 500:
                     raise SkodaServiceUnavailable(f'API returned HTTP status {req.status}')
                 raise SkodaException(f'Token exchange failed. Request status: {req.status}')
             # Save access, identity and refresh tokens according to requested client
             _LOGGER.debug('Received token exchange response, checking for errors.')
             token_data = await req.json()
+            _LOGGER.debug(f"Token data is: {token_data}")
             self._session_tokens[client] = {}
             for key in token_data:
                 if '_token' in key:
@@ -312,8 +328,8 @@ class Connection:
         except (SkodaException):
             _LOGGER.error('An API error was encountered during login, try again later')
             raise
-        except (TypeError):
-            _LOGGER.warning(f'Login failed for {self._session_auth_username}. The server might be temporarily unavailable, try again later. If the problem persists, verify your account at https://www.skoda-connect.com')
+        #except (TypeError):
+        #    _LOGGER.warning(f'Login failed for {self._session_auth_username}. The server might be temporarily unavailable, try again later. If the problem persists, verify your account at https://www.skoda-connect.com')
         except Exception as error:
             _LOGGER.error(f'Login failed for {self._session_auth_username}, {error}')
             return False
