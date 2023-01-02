@@ -11,13 +11,13 @@ CLIENT_LIST = {
         'CLIENT_ID':    '7f045eee-7003-4379-9968-9355ed2adb06@apps_vw-dilab_com',       # Client ID for 'CONNECT' service
         'SCOPE':        'openid profile address cars email birthdate badge mbb phone driversLicense dealers profession vin mileage',    # Requests to vwg-connect.com/ msg.volkswagen.de etc...
         'TOKEN_TYPES':  'code id_token',                                                # tokentype=IDK_CONNECT / MBB (API token)
-        'SYSTEM_ID':    'CONNECT'
+        'SYSTEM_ID':    'CONNECT'                                                       # Most things related to profile or domain vwapps
     },
     'technical': {
         'CLIENT_ID':    'f9a2359a-b776-46d9-bd0c-db1904343117@apps_vw-dilab_com',       # Client ID for Skoda native API
         'SCOPE':        'openid mbb profile',                                           # Requests to api.connect.skoda-auto.cz
         'TOKEN_TYPES':  'code id_token',                                                # tokentype=IDK_TECHNICAL
-        'SYSTEM_ID':    'TECHNICAL'
+        'SYSTEM_ID':    'TECHNICAL'                                                     # Most things related to api.connect.skoda-auto.cz
     },
     'cabs': {
         'CLIENT_ID':    '0f365c6e-8fff-41e0-8b02-2733ed1fe67f@apps_vw-dilab_com',       # ???
