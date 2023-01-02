@@ -3,6 +3,7 @@
 ![Downloads PyPi](https://img.shields.io/pypi/dm/skodaconnect)
 
 # Skoda Connect
+**UNOFFICIAL** library for communicating with Skoda Connect.
 Fork of https://github.com/robinostlund/volkswagencarnet,
 modified to support Skoda Connect.
 Changes has been made to mimic the MySkoda mobile app.
