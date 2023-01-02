@@ -8,29 +8,37 @@ COUNTRY = 'CZ'
 # Data used in communication
 CLIENT_LIST = {
     'connect': {
-        'CLIENT_ID':    '7f045eee-7003-4379-9968-9355ed2adb06@apps_vw-dilab_com',       # Client ID for VW-Group Identiy services, can be used to receive VW-Group API token
+        'CLIENT_ID':    '7f045eee-7003-4379-9968-9355ed2adb06@apps_vw-dilab_com',       # Client ID for 'CONNECT' service
         'SCOPE':        'openid profile address cars email birthdate badge mbb phone driversLicense dealers profession vin mileage',    # Requests to vwg-connect.com/ msg.volkswagen.de etc...
-        'TOKEN_TYPES':  'code id_token'                                                 # tokentype=IDK_CONNECT / MBB (API token)
+        'TOKEN_TYPES':  'code id_token',                                                # tokentype=IDK_CONNECT / MBB (API token)
+        'SYSTEM_ID':    'CONNECT'
     },
-    'skoda': {
+    'technical': {
         'CLIENT_ID':    'f9a2359a-b776-46d9-bd0c-db1904343117@apps_vw-dilab_com',       # Client ID for Skoda native API
         'SCOPE':        'openid mbb profile',                                           # Requests to api.connect.skoda-auto.cz
-        'TOKEN_TYPES':  'code id_token'                                                 # tokentype=IDK_TECHNICAL
+        'TOKEN_TYPES':  'code id_token',                                                # tokentype=IDK_TECHNICAL
+        'SYSTEM_ID':    'TECHNICAL'
     },
-    'smartlink': {
-        'CLIENT_ID':    '72f9d29d-aa2b-40c1-bebe-4c7683681d4c@apps_vw-dilab_com',       # SMARTLINK Tokens
+    'cabs': {
+        'CLIENT_ID':    '0f365c6e-8fff-41e0-8b02-2733ed1fe67f@apps_vw-dilab_com',       # ???
+        'SCOPE':        'openid profile phone we_connect_vehicles',
+        'TOKEN_TYPES':  'code id_token',
+        'SYSTEM_ID':    'CABS'
+    },
+    'dcs': {
+        'CLIENT_ID':    '72f9d29d-aa2b-40c1-bebe-4c7683681d4c@apps_vw-dilab_com',       # Used by SMARTLINK Tokens, DCS??
         'SCOPE':        'openid dealers profile email cars address',                    # Requests to consent.vwgroup.io
-        'TOKEN_TYPES':  'code id_token'                                                 # tokentype=IDK_SMARTLINK
+        'TOKEN_TYPES':  'code id_token',                                                # tokentype=IDK_SMARTLINK
+        'SYSTEM_ID':    'DCS'
     },
 }
 
-
-
 #XCLIENT_ID = '28cd30c6-dee7-4529-a0e6-b1e07ff90b79'
-XCLIENT_ID = 'a83d7e44-c8b7-42b7-b8ca-e478270d2091'
-XAPPVERSION = '3.5.5'
+#XCLIENT_ID = 'a83d7e44-c8b7-42b7-b8ca-e478270d2091'
+XCLIENT_ID = 'fef89b3d-a6e0-4525-91eb-a9436e6e469a'
+XAPPVERSION = '5.2.7'
 XAPPNAME = 'cz.skodaauto.connect'
-USER_AGENT = 'okhttp/3.14.9'
+USER_AGENT = 'okhttp/4.9.3'
 APP_URI = 'skodaconnect://oidc.login/'
 
 # Used when fetching data
