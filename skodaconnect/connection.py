@@ -973,6 +973,9 @@ class Connection:
                     data = {
                         'vehicle_remote': response.get('remote', {})
                     }
+                    # Check for errors
+                    if len(response.get('errors', [])) > 0:
+                        data['errors'] = response.get('errors', [])
                     return data
                 elif response.get('status_code', {}):
                     _LOGGER.warning(f'Could not fetch vehicle status, HTTP status code: {response.get("status_code")}')

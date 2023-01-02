@@ -284,6 +284,20 @@ class Vehicle:
         elif self._services.get('STATE', {}).get('active', False):
             data = await self._connection.getVehicleStatus(self.vin)
             if data:
+                # Check if errors were encountered
+                if 'errors' in data:
+                    for e in data.get('errors', []):
+                        _LOGGER.info(f"Could not fetch {e.get('type', '')}, error description: {e.get('description', '')}")
+                        # Use stored data for sections with errors
+                        if e.get('type', '') == "MILEAGE_LOAD_FAILED":
+                            data['vehicle_remote']['mileageInKm'] = self._states.get('vehicle_remote', {}).get('mileageInKm', {})
+                        if e.get('type', '') == "DOORS_LOAD_FAILED":
+                            data['vehicle_remote']['doors'] = self._states.get('vehicle_remote', {}).get('doors', {})
+                            data['vehicle_remote']['status'] = self._states.get('vehicle_remote', {}).get('status', {})
+                        if e.get('type', '') == "WINDOWS_LOAD_FAILED":
+                            data['vehicle_remote']['windows'] = self._states.get('vehicle_remote', {}).get('windows', {})
+                        if e.get('type', '') == "PARKING_LIGHTS_LOAD_FAILED":
+                            data['vehicle_remote']['lights'] = self._states.get('vehicle_remote', {}).get('lights', {})
                 self._states.update(data)
             else:
                 _LOGGER.debug('Could not fetch status report')
