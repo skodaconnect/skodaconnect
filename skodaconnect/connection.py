@@ -137,12 +137,6 @@ class Connection:
 
     async def _authorize(self, client='connect'):
         """"Login" function. Authorize a certain client type and get tokens."""
-        # Helper functions
-        def extract_csrf(req):
-            return re.compile('<meta name="_csrf" content="([^"]*)"/>').search(req).group(1)
-
-        def extract_guest_language_id(req):
-            return req.split('_')[1].lower()
 
         # Login/Authorization starts here
         try:
@@ -203,7 +197,7 @@ class Connection:
 
             # If we need to sign in (first token)
             if 'signin-service' in ref:
-                _LOGGER.debug("Got redirect to signin-service")
+                _LOGGER.debug("User is not logged on, use signin service")
                 location = await self._signin_service(req, authissuer, authorizationEndpoint, client)
             else:
                 # We are already logged on, shorter authorization flow
@@ -235,8 +229,12 @@ class Connection:
                         allow_redirects=False
                     )
                     if response.headers.get('Location', False) is False:
-                        _LOGGER.debug(f'Unexpected response: {await response.text()}')
-                        raise SkodaAuthenticationException('User appears unauthorized')
+                        if 'consent' in location:
+                            new_form = await self._parse_form(response)
+                            _LOGGER.info(f'Consented scopes: {new_form.get("internalAndAlreadyConsentedScopes", "")}, not consented: {new_form.get("consentedScopes", "")}')
+                            raise SkodaAuthenticationException(f'Missing consent for client "{client}" scopes: {new_form.get("consentedScopes", "")}')
+                        else:
+                            raise SkodaAuthenticationException(f'Unhandled error, redirect stopped at {location}')
                     location = response.headers.get('Location', None)
                     # Set a max limit on requests to prevent forever loop
                     maxDepth -= 1
@@ -257,23 +255,23 @@ class Connection:
             _LOGGER.debug('Received authorization code, exchange for tokens.')
             # Extract code and tokens
             jwt_auth_code = parse_qs(urlparse(location).fragment).get('code')[0]
-            jwt_id_token = parse_qs(urlparse(location).fragment).get('id_token')[0]
+            # Old token exchange commented below
+            #jwt_id_token = parse_qs(urlparse(location).fragment).get('id_token')[0]
             #tokenBody = {
             #    'auth_code': jwt_auth_code,
             #    'id_token':  jwt_id_token,
             #    'brand': BRAND
             #}
+            #tokenURL = 'https://tokenrefreshservice.apps.emea.vwapps.io/exchangeAuthCode'
             tokenBody = {
                 'authorizationCode': jwt_auth_code
             }
-            #tokenURL = 'https://tokenrefreshservice.apps.emea.vwapps.io/exchangeAuthCode'
             tokenURL = 'https://api.connect.skoda-auto.cz/api/v1/authentication/token?systemId='+CLIENT_LIST[client].get('SYSTEM_ID')
             _LOGGER.debug(f"Trying to authorize with {tokenBody}")
             newHeader = {
                 'Content-Type': "application/json; charset=UTF-8",
                 'user-agent': "okhttp/4.9.3"
             }
-            _LOGGER.debug(f"Headers: {newHeader}")
             req = await self._session.post(
                 url=tokenURL,
                 #headers=self._session_auth_headers,
@@ -316,40 +314,34 @@ class Connection:
                 _LOGGER.debug(f'Token for {client} verified OK.')
             else:
                 _LOGGER.warning(f'Token for {client} could not be verified, verification returned {verify}.')
-        except (SkodaEULAException):
-            _LOGGER.warning('Login failed, the terms and conditions might have been updated and need to be accepted. Login to https://www.skoda-connect.com and accept the new terms before trying again')
+        except (SkodaEULAException, SkodaAccountLockedException, SkodaAuthenticationException, SkodaException) as e:
+            _LOGGER.error(e)
             raise
-        except (SkodaAccountLockedException):
-            _LOGGER.warning('Your account is locked, probably because of too many incorrect login attempts. Make sure that your account is not in use somewhere with incorrect password')
+        except (TypeError):
+            _LOGGER.warning(f'Login failed for {self._session_auth_username}. The server might be temporarily unavailable, try again later. If the problem persists, verify your account at https://www.skoda-connect.com')
             raise
-        except (SkodaAuthenticationException):
-            _LOGGER.warning('Invalid credentials or invalid configuration. Make sure you have entered the correct credentials')
-            raise
-        except (SkodaException):
-            _LOGGER.error('An API error was encountered during login, try again later')
-            raise
-        #except (TypeError):
-        #    _LOGGER.warning(f'Login failed for {self._session_auth_username}. The server might be temporarily unavailable, try again later. If the problem persists, verify your account at https://www.skoda-connect.com')
         except Exception as error:
             _LOGGER.error(f'Login failed for {self._session_auth_username}, {error}')
-            return False
+            raise SkodaLoginFailedException(error)
         return True
 
     async def _signin_service(self, html, authissuer, authorizationEndpoint, client='technical'):
         """Method to signin to Skoda Connect portal."""
-        # Extract login form and extract attributes
+        # Parse form data and populate with email
         try:
-            response_data = await html.text()
-            responseSoup = BeautifulSoup(response_data, 'html.parser')
-            form_data = dict()
-            if responseSoup is None:
-                raise SkodaLoginFailedException('Login failed, server did not return a login form')
-            for t in responseSoup.find('form', id='emailPasswordForm').find_all('input', type='hidden'):
-                if self._session_fulldebug:
-                    _LOGGER.debug(f'Extracted form attribute: {t["name"], t["value"]}')
-                form_data[t['name']] = t['value']
-            form_data['email'] = self._session_auth_username
-            pe_url = authissuer+responseSoup.find('form', id='emailPasswordForm').get('action')
+            user_form = await self._parse_form(html)
+            # Expect first form to be HTML
+            if user_form.get('type', None) == 'html':
+                user_form['email'] = self._session_auth_username
+            else:
+                raise SkodaAuthenticationException('Expected HTML data for initial login form!')
+            if user_form.get('action', None) is not None:
+                post_url = authissuer + user_form.get('action')
+                user_form.pop('action', None)
+            else:
+                raise SkodaAuthenticationException('Could not find login URL!')
+            form_data = user_form
+            form_data.pop('type', None)
         except Exception as e:
             _LOGGER.error('Failed to extract user login form.')
             raise
@@ -358,76 +350,118 @@ class Connection:
         # https://identity.vwgroup.io/signin-service/v1/{CLIENT_ID}/login/identifier
         self._session_auth_headers['Referer'] = authorizationEndpoint
         self._session_auth_headers['Origin'] = authissuer
-        _LOGGER.debug(f"Start authorization for user {self._session_auth_username}")
+        _LOGGER.debug(f"Start login process for user {self._session_auth_username}")
         req = await self._session.post(
-            url = pe_url,
+            url = post_url,
             headers = self._session_auth_headers,
             data = form_data
         )
-        if req.status != 200:
-            raise SkodaException('Authorization request failed')
+        # Check valid response
         try:
-            response_data = await req.text()
-            responseSoup = BeautifulSoup(response_data, 'html.parser')
-            pwform = {}
-            credentials_form = responseSoup.find('form', id='credentialsForm')
-            all_scripts = responseSoup.find_all('script', {'src': False})
-            if credentials_form is not None:
-                _LOGGER.debug('Found HTML credentials form, extracting attributes')
-                for t in credentials_form.find_all('input', type='hidden'):
-                    if self._session_fulldebug:
-                        _LOGGER.debug(f'Extracted form attribute: {t["name"], t["value"]}')
-                    pwform[t['name']] = t['value']
-                    form_data = pwform
-                    post_action = responseSoup.find('form', id='credentialsForm').get('action')
-            elif all_scripts is not None:
-                _LOGGER.debug('Found dynamic credentials form, extracting attributes')
-                pattern = re.compile("templateModel: (.*?),\n")
-                for sc in all_scripts:
-                    if(pattern.search(sc.string)):
-                        import json
-                        data = pattern.search(sc.string)
-                        jsondata = json.loads(data.groups()[0])
-                        _LOGGER.debug(f'JSON: {jsondata}')
-                        if not jsondata.get('hmac', False):
-                            raise SkodaLoginFailedException('Failed to extract login hmac attribute')
-                        if not jsondata.get('postAction', False):
-                            raise SkodaLoginFailedException('Failed to extract login post action attribute')
-                        if jsondata.get('error', None) is not None:
-                            raise SkodaLoginFailedException(f'Login failed with error: {jsondata.get("error", None)}')
-                        form_data['hmac'] = jsondata.get('hmac', '')
-                        post_action = jsondata.get('postAction')
-            else:
-                raise SkodaLoginFailedException('Failed to extract login form data')
+            if req.status != 200:
+                raise SkodaException('Authorization request failed, service might be temporarily unavailable.')
+            if 'error' in str(req.url):
+                login_error = str(req.url).split("error=", 1)[1]
+                if login_error == 'validator.email.invalid':
+                    raise SkodaConfigException(f'Invalid email address provided: {self._session_auth_username}')
+                else:
+                    raise SkodaAuthenticationException(f'Login error: {login_error}')
+        except (SkodaAuthenticationException, SkodaConfigException) as e:
+            raise
+        except Exception as e:
+            _LOGGER.debug(f"Unhandled error {e}")
+            raise
+
+        # Parse response and process data before posting password
+        try:
+            pw_form = await self._parse_form(req)
+            if pw_form.get('error', None) is not None:
+                raise SkodaLoginFailedException(f'Login failed with error: {pw_form.get("error", None)}')
+            if 'registerCredentialsPath' in pw_form:
+                raise SkodaAuthenticationException('Registration is not completed for this account!')
+            if not pw_form.get('hmac', False):
+                raise SkodaLoginFailedException('Failed to extract login hmac attribute')
+            if not pw_form.get('postAction', pw_form.get('action', False)):
+                raise SkodaLoginFailedException('Failed to extract login post action attribute')
+            form_data['hmac'] = pw_form.get('hmac', '')
             form_data['password'] = self._session_auth_password
+            post_action = pw_form.get('postAction', pw_form.get('action', False))
         except (SkodaLoginFailedException) as e:
             raise
         except Exception as e:
-            raise SkodaAuthenticationException("Invalid username or service unavailable")
+            raise SkodaAuthenticationException(f"Login failed, error: {e}")
 
         # POST password
         # https://identity.vwgroup.io/signin-service/v1/{CLIENT_ID}/login/authenticate
-        self._session_auth_headers['Referer'] = pe_url
+        self._session_auth_headers['Referer'] = post_url
         self._session_auth_headers['Origin'] = authissuer
         _LOGGER.debug(f"Finalizing login")
 
         client_id = CLIENT_LIST[client].get('CLIENT_ID')
-        pp_url = authissuer+post_action
-        if not 'signin-service' in pp_url or not client_id in pp_url:
-            pp_url = authissuer+'/signin-service/v1/'+client_id+"/"+post_action
+        pw_post_url = authissuer+post_action
+        if not 'signin-service' in pw_post_url or not client_id in pw_post_url:
+            pw_post_url = authissuer+'/signin-service/v1/'+client_id+"/"+post_action
 
         if self._session_fulldebug:
-            _LOGGER.debug(f'Using login action url: "{pp_url}"')
+            _LOGGER.debug(f'Using login action url: "{pw_post_url}"')
         req = await self._session.post(
-            url=pp_url,
+            url=pw_post_url,
             headers=self._session_auth_headers,
             data = form_data,
             allow_redirects=False
         )
+
         return req.headers.get('Location', None)
 
+    async def _parse_form(self, html):
+        """Method to parse HTML form and return input values and action."""
+        # Extract form and extract attributes
+        try:
+            form_data = dict()
+            response_data = await html.text()
+            responseSoup = BeautifulSoup(response_data, 'html.parser')
+            if responseSoup is None:
+                raise SkodaLoginFailedException('HTML form extraction failed, server did not return valid HTML data')
+
+            # There are two possibilities, either hard coded HTML form or dynamic form built by JS
+            html_form = responseSoup.find('form')
+            js_scripts = responseSoup.find_all('script', {'src': False})
+
+            if html_form is not None:
+                # Our form is built by HTML, extract input fields
+                form_data['type'] = 'html'
+                _LOGGER.debug('Found HTML credentials form, extracting attributes')
+                for input in html_form.find_all('input', type='hidden'):
+
+                    if form_data.get(input['name'], False):
+                        form_data[input['name']] = form_data[input['name']]+' '+input['value']
+                    else:
+                        form_data[input['name']] = input['value']
+                action = responseSoup.find('form').get('action')
+                if action is not None:
+                    form_data['action'] = action
+            elif js_scripts is not None:
+                # Our form is dynamically built by javascript, extract JSON data
+                form_data['type'] = 'js'
+                _LOGGER.debug('Found dynamic credentials form, extracting attributes')
+                pattern = re.compile("templateModel: (.*?),\n")
+                for script in js_scripts:
+                    # Check all inline scripts and search for interesting data
+                    if(pattern.search(script.string)):
+                        import json
+                        data = pattern.search(script.string)
+                        form_data = json.loads(data.groups()[0])
+                        _LOGGER.debug(f'Script JSON data: {form_data}')
+            else:
+                raise SkodaLoginFailedException('Failed to extract login form data')
+            if self._session_fulldebug:
+                _LOGGER.debug(f'Extracted form attributes: {form_data}')
+            return form_data
+        except Exception as e:
+            raise SkodaAuthenticationException(f"Failed to extract login form data, error {e}")
+
     async def _getAPITokens(self):
-        """Method to acquire VW-Group API tokens."""
+        """Method to acquire VW-Group API tokens (Legacy API)."""
         try:
             # Check for valid 'connect' token
             token = self._session_tokens.get('connect', {}).get('id_token', None)
@@ -445,7 +479,7 @@ class Connection:
                     raise SkodaTokenExpiredException('Token is invalid for client "connect"')
 
             # https://mbboauth-1d.prd.ece.vwg-connect.com/mbbcoauth/mobile/oauth2/v1/token
-            tokenBody2 =  {
+            request_data =  {
                 'token': self._session_tokens['connect']['id_token'],
                 'grant_type': 'id_token',
                 'scope': 'sc2:fal'
@@ -460,7 +494,7 @@ class Connection:
                     'X-Client-Id': XCLIENT_ID,
                     'X-Platform': 'Android'
                 },
-                data = tokenBody2,
+                data = request_data,
                 allow_redirects=False
             )
             if req.status > 400:
@@ -488,9 +522,6 @@ class Connection:
 
             # Update headers for requests, defaults to using VWG token
             self._session_headers['Authorization'] = 'Bearer ' + self._session_tokens['vwg']['access_token']
-        #except Exception as error:
-        #    _LOGGER.error(f'Failed to fetch VW-Group API tokens, {error}')
-        #    return False
         except:
             raise
         return True
@@ -508,20 +539,22 @@ class Connection:
 
         for client in self._session_tokens:
             try:
-                # VW-Group token, only access token revokeable
                 if client == 'vwg':
-                    params = {
-                        'token': self._session_tokens[client]['access_token'],
-                        'token_type_hint': 'refresh_token'
-                    }
-                    revoke_url = 'https://mbboauth-1d.prd.ece.vwg-connect.com/mbbcoauth/mobile/oauth2/v1/revoke'
-                    if await self.post(revoke_url, data = params):
-                        _LOGGER.info(f'Revocation of token for client "{client}" successful')
-                        # Remove token info
-                        self._session_tokens[client] = {}
-                    else:
-                        _LOGGER.warning(f'Revocation of token for client "{client}" failed')
+                    # VW-Group token, access and refresh tokens revokeable
+                    for token in ['access_token', 'refresh_token']:
+                        params = {
+                            'token': self._session_tokens[client][token],
+                            'token_type_hint': token
+                        }
+                        revoke_url = 'https://mbboauth-1d.prd.ece.vwg-connect.com/mbbcoauth/mobile/oauth2/v1/revoke'
+                        if await self.post(revoke_url, data = params):
+                            _LOGGER.info(f'Revocation of {token} for client "{client}" successful')
+                            # Remove revoked token from storage
+                            self._session_tokens[client][token] = {}
+                        else:
+                            _LOGGER.warning(f'Revocation of {token} for client "{client}" failed')
                 elif client in ['connect', 'dcs', 'cabs', 'technical']:
+                    # "Skoda" tokens, only refresh token revokeable
                     params = {
                         'refreshToken': self._session_tokens[client].get('refresh_token'),
                     }
@@ -529,7 +562,7 @@ class Connection:
                     revoke_url = 'https://api.connect.skoda-auto.cz/api/v1/authentication/token/revoke?systemId='+CLIENT_LIST[client].get('SYSTEM_ID')
                     if await self.post(revoke_url, data = params):
                         _LOGGER.info(f'Revocation of token for client "{client}" successful')
-                        # Remove token info
+                        # Remove revoked token from storage
                         self._session_tokens[client] = {}
                     else:
                         _LOGGER.warning(f'Revocation of token for client "{client}" failed')
@@ -688,6 +721,9 @@ class Connection:
         # Check if user needs to update consent
         try:
             await self.set_token('connect')
+        except:
+            raise
+        try:
             consent = await self.getConsentInfo()
             if isinstance(consent, dict):
                 _LOGGER.debug(f'Consent returned {consent}')
