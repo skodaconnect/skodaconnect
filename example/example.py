@@ -144,14 +144,24 @@ async def main():
         print('#      Logging on to Skoda Connect     #')
         print('########################################')
         print(f"Initiating new session to Skoda Connect with {USERNAME} as username")
-        connection = Connection(session, USERNAME, PASSWORD, PRINTRESPONSE)
-        print("Attempting to login to the Skoda Connect service")
-        print(datetime.now())
-        if await connection.doLogin():
+        try:
+            connection = Connection(session, USERNAME, PASSWORD, PRINTRESPONSE)
+            print("Attempting to login to the Skoda Connect service")
+            print(datetime.now())
+            login_success = await connection.doLogin()
+        except Exception as e:
+            print("Login failed")
+            exit()
+
+        if login_success:
             print('Login success!')
             print(datetime.now())
             print('Fetching vehicles associated with account.')
-            await connection.get_vehicles()
+            try:
+                await connection.get_vehicles()
+            except Exception as e:
+                print(f'Error encountered when fetching vehicles: {e}')
+                exit()
 
             instruments = set()
             for vehicle in connection.vehicles:
@@ -159,15 +169,18 @@ async def main():
                 print('########################################')
                 print('#         Setting up dashboard         #')
                 print('########################################')
-                dashboard = vehicle.dashboard(mutable=True, miles=MILES)
+                try:
+                    dashboard = vehicle.dashboard(mutable=True, miles=MILES)
+                    for instrument in (
+                            instrument
+                            for instrument in dashboard.instruments
+                            if instrument.component in COMPONENTS
+                            and is_enabled(instrument.slug_attr)):
+                        instruments.add(instrument)
+                except Exception as e:
+                    print(f'Failed to load instruments: {e}')
+                    exit()
 
-                for instrument in (
-                        instrument
-                        for instrument in dashboard.instruments
-                        if instrument.component in COMPONENTS
-                        and is_enabled(instrument.slug_attr)):
-
-                    instruments.add(instrument)
             print('')
             print('########################################')
             print('#          Vehicles discovered         #')
