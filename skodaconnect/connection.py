@@ -81,7 +81,6 @@ class Connection:
             username: str, email address
             password: str, password
             fulldebug: bool, enable response debugs
-            tokens: dict, {client: {token_type: token, ...}}
         """
         self._session = session
         self._lock = asyncio.Lock()
@@ -99,21 +98,10 @@ class Connection:
         self._session_auth_username = username
         self._session_auth_password = password
         self._vehicles = []
-
         self._session_tokens = {}
-        # Try to restore tokens if supplied
-        if 'tokens' in optional:
-            _LOGGER.debug('Attempting restore of session tokens.')
-            for client in optional.get('tokens', {}):
-                try:
-                    self._session_tokens[client] = optional.get('tokens')[client]
-                    _LOGGER.info(f'Restored tokens for client "{client}"')
-                except Exception as e:
-                    _LOGGER.debug(f'Token restore failed for {client}, error {e}')
-                    self._session_tokens = {}
-        _LOGGER.info(f'Init Skoda Connect library, version {lib_version}')
-        _LOGGER.debug(f'Using service {self._session_base}')
 
+        _LOGGER.info(f'Unofficial Skoda Connect library, version {lib_version}')
+        _LOGGER.debug(f'Using service {self._session_base}')
 
     def _clear_cookies(self):
         self._session._cookie_jar._cookies.clear()
@@ -129,7 +117,32 @@ class Connection:
     def _getState(self):
         return self._getNonce()
 
-  # API login/logout/authorization
+  # API login/logout/authorization methods
+    async def restore_tokens(self, tokens):
+        # Try to restore tokens if supplied
+        for client in tokens:
+            try:
+                if client is not None:
+                    _LOGGER.info(f'Attempting restore for client "{client}".')
+                    # Validate the refresh token
+                    token = tokens[client].get('refresh_token', '')
+                    expire = await self.validate_token(token)
+                    if not expire:
+                        raise Exception("Token expired")
+                    else:
+                        self._session_tokens[client] = tokens[client]
+                        _LOGGER.debug(f'Restored tokens for client "{client}", refresh token valid until {expire}')
+            except Exception as e:
+                _LOGGER.debug(f'Token restore failed for {client}, error {e}')
+                _LOGGER.info('Restore tokens failed')
+                self._session_tokens = {}
+                return False
+        # Verify that the "technical" refresh_token has been restored, required client for most actions
+        if self._session_tokens.get('technical', {}).get('refresh_token'):
+            return True
+        else:
+            return False
+
     async def doLogin(self):
         """Login method, clean login"""
         _LOGGER.info('Initiating new login')
