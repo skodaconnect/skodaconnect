@@ -27,6 +27,28 @@ PRINTRESPONSE = False
 MILES = False
 INTERVAL = 20
 
+# If you wish to use stored tokens, this is an example on how to format data sent to restore_tokens method:
+TOKENS = {
+    'technical': {
+        'access_token': '...',
+        'refresh_token': '...',
+        'id_token': '...'
+    },
+    'connect': {
+        'access_token': '...',
+        'refresh_token': '...',
+        'id_token': '...'
+    },
+    'vwg': {
+        'access_token': '...',
+        'refresh_token': '...'
+    },
+    'cabs': None,   # Could be populated with access_token, refresh_token, id_token
+    'dcs': None,    # Could be populated with access_token, refresh_token, id_token
+}
+# Comment out the following line to use stored tokens above, set TOKENS=None to do fresh login
+TOKENS = None
+
 COMPONENTS = {
     'sensor': 'sensor',
     'binary_sensor': 'binary_sensor',
@@ -35,6 +57,7 @@ COMPONENTS = {
     'switch': 'switch',
 }
 
+# Resources in this list is "enabled"
 RESOURCES = [
 		"adblue_level",
         "aircon_at_unlock",
@@ -139,6 +162,7 @@ def is_enabled(attr):
 async def main():
     """Main method."""
     async with ClientSession(headers={'Connection': 'keep-alive'}) as session:
+        login_success = False
         print('')
         print('########################################')
         print('#      Logging on to Skoda Connect     #')
@@ -146,11 +170,16 @@ async def main():
         print(f"Initiating new session to Skoda Connect with {USERNAME} as username")
         try:
             connection = Connection(session, USERNAME, PASSWORD, PRINTRESPONSE)
-            print("Attempting to login to the Skoda Connect service")
-            print(datetime.now())
-            login_success = await connection.doLogin()
+            if TOKENS is not None:
+                print("Attempting restore of tokens")
+                if await connection.restore_tokens(TOKENS):
+                    print("Token restore succeeded")
+                    login_success = True
+            if not login_success:
+                print("Attempting to login to the Skoda Connect service")
+                login_success = await connection.doLogin()
         except Exception as e:
-            print("Login failed")
+            print(f"Login failed: {e}")
             exit()
 
         if login_success:
