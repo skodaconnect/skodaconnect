@@ -73,7 +73,16 @@ class Connection:
     """ Connection to Connect services """
   # Init connection class
     def __init__(self, session, username, password, fulldebug=False, **optional):
-        """ Initialize """
+        """
+        Init connection to Skoda Connect services
+
+        Arguments:
+            session: class, aiohttp session
+            username: str, email address
+            password: str, password
+            fulldebug: bool, enable response debugs
+            tokens: dict, {client: {token_type: token, ...}}
+        """
         self._session = session
         self._lock = asyncio.Lock()
         self._session_fulldebug = fulldebug
@@ -89,10 +98,19 @@ class Connection:
         self._session_first_update = False
         self._session_auth_username = username
         self._session_auth_password = password
-        self._session_tokens = {}
-
         self._vehicles = []
 
+        self._session_tokens = {}
+        # Try to restore tokens if supplied
+        if 'tokens' in optional:
+            _LOGGER.debug('Attempting restore of session tokens.')
+            for client in optional.get('tokens', {}):
+                try:
+                    self._session_tokens[client] = optional.get('tokens')[client]
+                    _LOGGER.info(f'Restored tokens for client "{client}"')
+                except Exception as e:
+                    _LOGGER.debug(f'Token restore failed for {client}, error {e}')
+                    self._session_tokens = {}
         _LOGGER.info(f'Init Skoda Connect library, version {lib_version}')
         _LOGGER.debug(f'Using service {self._session_base}')
 
@@ -511,7 +529,7 @@ class Connection:
                 self._session_tokens['vwg'] = {}
                 for key in token_data:
                     if '_token' in key:
-                        _LOGGER.debug(f"Saved vwg token {token_data[key]}")
+                        _LOGGER.debug(f"Saved vwg token {key}: {token_data[key]}")
                         self._session_tokens['vwg'][key] = token_data[key]
                 if 'error' in self._session_tokens['vwg']:
                     error = self._session_tokens['vwg'].get('error', '')
