@@ -209,6 +209,8 @@ class Connection:
                 while not location.startswith(APP_URI):
                     if location is None:
                         raise SkodaException('Login failed')
+                    if self._session_fulldebug:
+                        _LOGGER.debug(f'Process HTTP redirect URL "{location}"')
                     if 'error' in location:
                         error = parse_qs(urlparse(location).query).get('error', '')[0]
                         if error == 'login.error.throttled':
@@ -221,8 +223,7 @@ class Connection:
                         raise SkodaLoginFailedException(error)
                     if 'terms-and-conditions' in location:
                         raise SkodaEULAException('The terms and conditions must be accepted first at "https://www.skoda-connect.com/"')
-                    if self._session_fulldebug:
-                        _LOGGER.debug(f'Following redirect to "{location}"')
+
                     response = await self._session.get(
                         url=location,
                         headers=self._session_auth_headers,
@@ -314,7 +315,7 @@ class Connection:
                 _LOGGER.debug(f'Token for {client} verified OK.')
             else:
                 _LOGGER.warning(f'Token for {client} could not be verified, verification returned {verify}.')
-        except (SkodaEULAException, SkodaAccountLockedException, SkodaAuthenticationException, SkodaException) as e:
+        except (SkodaEULAException, SkodaAccountLockedException, SkodaAuthenticationException, SkodaException, SkodaLoginFailedException) as e:
             _LOGGER.error(e)
             raise
         except (TypeError):
@@ -375,6 +376,10 @@ class Connection:
         # Parse response and process data before posting password
         try:
             pw_form = await self._parse_form(req)
+            if pw_form.get('type', '') == 'html':
+                _LOGGER.debug('Expected dynamic HTML form')
+                if 'register' in pw_form.get('action', ''):
+                    raise SkodaLoginFailedException('The specified email is not registered')
             if pw_form.get('error', None) is not None:
                 raise SkodaLoginFailedException(f'Login failed with error: {pw_form.get("error", None)}')
             if 'registerCredentialsPath' in pw_form:
@@ -386,7 +391,7 @@ class Connection:
             form_data['hmac'] = pw_form.get('hmac', '')
             form_data['password'] = self._session_auth_password
             post_action = pw_form.get('postAction', pw_form.get('action', False))
-        except (SkodaLoginFailedException) as e:
+        except (SkodaLoginFailedException):
             raise
         except Exception as e:
             raise SkodaAuthenticationException(f"Login failed, error: {e}")
