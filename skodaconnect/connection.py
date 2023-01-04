@@ -29,6 +29,7 @@ from skodaconnect.exceptions import (
     SkodaAuthenticationException,
     SkodaAccountLockedException,
     SkodaTokenExpiredException,
+    SkodaTokenInvalidException,
     SkodaException,
     SkodaEULAException,
     SkodaThrottledException,
@@ -119,22 +120,35 @@ class Connection:
 
   # API login/logout/authorization methods
     async def restore_tokens(self, tokens):
-        # Try to restore tokens if supplied
+        # Try to restore refresh token, if supplied
         for client in tokens:
             try:
-                if client is not None:
-                    _LOGGER.info(f'Attempting restore for client "{client}".')
-                    # Validate the refresh token
-                    token = tokens[client].get('refresh_token', '')
+                if tokens[client] is not None:
+                    _LOGGER.info(f'Attempting restore of saved token for client "{client}".')
+                    # Validate the token
+                    token = tokens[client]
                     expire = await self.validate_token(token)
                     if not expire:
                         raise Exception("Token expired")
                     else:
-                        self._session_tokens[client] = tokens[client]
-                        _LOGGER.debug(f'Restored tokens for client "{client}", refresh token valid until {expire}')
+                        try:
+                            verify = await self.verify_token(token, client)
+                            if verify:
+                                self._session_tokens[client] = {
+                                    'refresh_token': tokens[client]
+                                }
+                                _LOGGER.debug(f'Restored token for client "{client}", refresh token valid until {expire}')
+                            else:
+                                raise SkodaTokenInvalidException('Token failed verification')
+                        except (SkodaTokenInvalidException) as e:
+                            _LOGGER.info(f'Token for client {client} is invalid: {e}')
+                            self._session_tokens.pop(client, None)
+                        except Exception as e:
+                            _LOGGER.debug(f'unhandled exception occured, error: {e}')
+                            self._session_tokens.pop(client, None)
             except Exception as e:
                 _LOGGER.debug(f'Token restore failed for {client}, error {e}')
-                _LOGGER.info('Restore tokens failed')
+                _LOGGER.info('Restore token failed')
                 self._session_tokens = {}
                 return False
         # Verify that the "technical" refresh_token has been restored, required client for most actions
@@ -142,6 +156,21 @@ class Connection:
             return True
         else:
             return False
+
+    async def save_tokens(self):
+        """Returns dictionary with valid refresh tokens for clients."""
+        tokens = {}
+        try:
+            for client in self._session_tokens:
+                # Validate the refresh token
+                token = self._session_tokens[client].get('refresh_token', None)
+                if token is not None:
+                    _LOGGER.debug(f'Validating refresh token for "{client}"')
+                    if await self.validate_token(token) is not False:
+                        tokens[client] = token
+        except:
+            return False
+        return tokens
 
     async def doLogin(self):
         """Login method, clean login"""
@@ -338,8 +367,8 @@ class Connection:
                 for key in self._session_tokens.get(client, {}):
                     _LOGGER.debug(f'Got {key} for client {CLIENT_LIST[client].get("CLIENT_ID","")}, token: "{self._session_tokens.get(client, {}).get(key, None)}"')
 
-            # Verify token, warn if problems are found
-            verify = await self.verify_token(self._session_tokens[client].get('id_token', ''))
+            # Verify refresh token, warn if problems are found
+            verify = await self.verify_token(self._session_tokens[client].get('refresh_token', None), client)
             if verify is False:
                 _LOGGER.warning(f'Token for {client} is invalid!')
             elif verify is True:
@@ -551,7 +580,7 @@ class Connection:
                         raise SkodaException(f'{error} - {error_description}')
                     else:
                         raise SkodaException(error)
-                if not await self.verify_token(self._session_tokens['vwg'].get('access_token', '')):
+                if not await self.verify_token(self._session_tokens['vwg'].get('refresh_token', None), 'vwg'):
                     _LOGGER.warning('VW-Group API token could not be verified!')
                 else:
                     _LOGGER.debug('VW-Group API token verified OK.')
@@ -1811,36 +1840,49 @@ class Connection:
             _LOGGER.info(f'Token validation failed, {e}')
         return False
 
-    async def verify_token(self, token):
-        """Function to verify a single token."""
+    async def verify_token(self, token, client):
+        """Function to verify a refresh token."""
+        if token is None:
+            raise SkodaTokenInvalidException('Invalid token "None"')
         try:
             req = None
+            decoded = None
             # Try old pyJWT syntax first
             try:
-                aud = jwt.decode(token, verify=False).get('aud', None)
+                decoded = jwt.decode(token, verify=False)
             except:
-                aud = None
+                pass
             # Try new pyJWT syntax if old fails
-            if aud is None:
+            if decoded is None:
                 try:
-                    aud = jwt.decode(token, options={'verify_signature': False}).get('aud', None)
+                    decoded = jwt.decode(token, options={'verify_signature': False})
                 except:
-                    raise Exception("Could not extract exp attribute")
+                    raise SkodaTokenInvalidException("Could not decode JWT token")
 
+            if decoded.get('typ', decoded.get('jtt', None)) not in ['RT', 'refresh_token']:
+                raise SkodaTokenInvalidException('Invalid refresh token')
+
+            aud = decoded.get('aud', None)
+            if aud is None:
+                if client == 'vwg':
+                    # Special handling for VW Group API refresh token
+                    aud = "mal.prd.ece.vwg-connect.com"
+                else:
+                    raise SkodaTokenInvalidException(f'Missing audience attribute for client "{client}" token')
             if not isinstance(aud, str):
                 aud = next(iter(aud))
-            _LOGGER.debug(f"Verifying token for {aud}")
-            # If audience indicates a client from https://identity.vwgroup.io
-            for client in CLIENT_LIST:
-                if self._session_fulldebug:
-                    _LOGGER.debug(f"Matching {aud} against {CLIENT_LIST[client].get('CLIENT_ID', '')}")
-                if aud == CLIENT_LIST[client].get('CLIENT_ID', ''):
-                    req = await self._session.get(url = 'https://identity.vwgroup.io/oidc/v1/keys')
-                    break
 
-            # If no match for "Skoda" clients, assume token is issued from https://mbboauth-1d.prd.ece.vwg-connect.com/mbbcoauth
-            if req is None:
+            _LOGGER.debug(f'Matching token audience {aud} to client ID for "{client}"')
+            if aud == CLIENT_LIST[client].get('CLIENT_ID', ''):
+                if self._session_fulldebug:
+                    _LOGGER.debug('Audience and client ID matches, fetching JWKs')
+                req = await self._session.get(url = 'https://identity.vwgroup.io/oidc/v1/keys')
+            elif aud == 'mal.prd.ece.vwg-connect.com' and client == 'vwg':
+                if self._session_fulldebug:
+                    _LOGGER.debug('Audience matches that of client ID, fetch MBB01 JWKs')
                 req = await self._session.get(url = 'https://mbboauth-1d.prd.ece.vwg-connect.com/mbbcoauth/public/jwk/v1')
+            else:
+                raise SkodaTokenInvalidException('Token audience does not match the client ID')
 
             # Fetch key list
             keys = await req.json()
@@ -1854,14 +1896,17 @@ class Connection:
             token_kid = jwt.get_unverified_header(token)['kid']
             if self._session_fulldebug:
                 try:
-                    _LOGGER.debug(f'Token Key ID is {token_kid}, match from public keys: {keys["keys"][token_kid]}')
+                    _LOGGER.debug(f'Token Key ID is {token_kid}, match from public keys: {pubkeys}')
                 except:
                     pass
             pubkey = pubkeys[token_kid]
-
             # Verify token with public key
             if jwt.decode(token, key=pubkey, algorithms=['RS256'], audience=aud):
+                if self._session_fulldebug:
+                    _LOGGER.debug('Successfully verified refresh token audience and signature')
                 return True
+        except (SkodaTokenInvalidException):
+            raise
         except ExpiredSignatureError:
             return False
         except Exception as error:
@@ -1875,33 +1920,38 @@ class Connection:
             _LOGGER.debug(f'Refreshing tokens for client "{client}"')
             if client == 'vwg':
                 # Special handling for VW-Group API token, "MBB"
-                body = {
-                    'grant_type': 'refresh_token',
-                    'scope': 'sc2:fal',
-                    'token': self._session_tokens[client]['refresh_token']
+                payload = {
+                    'data': {
+                        'grant_type': 'refresh_token',
+                        'scope': 'sc2:fal',
+                        'token': self._session_tokens[client]['refresh_token']
+                    }
                 }
                 url = 'https://mbboauth-1d.prd.ece.vwg-connect.com/mbbcoauth/mobile/oauth2/v1/token'
             else:
-                body = {
-                    'refreshToken': self._session_tokens[client]['refresh_token']
+                payload = {
+                    'json': {
+                        'refreshToken': self._session_tokens[client]['refresh_token']
+                    }
                 }
                 url = 'https://api.connect.skoda-auto.cz/api/v1/authentication/token/refresh?systemId='+CLIENT_LIST[client]['SYSTEM_ID']
             try:
                 response = await self._session.post(
                     url=url,
                     headers=TOKEN_HEADERS.get(client),
-                    data = body,
+                    **payload,
                 )
-            except:
+            except Exception as e:
+                _LOGGER.debug(f'Token refresh failed: {e}')
                 raise
 
             if response.status == 200:
                 tokens = await response.json()
                 if not 'error' in tokens:
                     # Get and store tokens in common naming format
-                    self._session_tokens[client]['access_token'] = tokens.get('access_token', tokens.get('accessToken', ''))
-                    self._session_tokens[client]['refresh_token'] = tokens.get('refresh_token', tokens.get('refreshToken', ''))
-                    self._session_tokens[client]['id_token'] = tokens.get('id_token', tokens.get('idToken', ''))
+                    self._session_tokens[client]['access_token'] = tokens.get('access_token', tokens.get('accessToken', None))
+                    self._session_tokens[client]['refresh_token'] = tokens.get('refresh_token', tokens.get('refreshToken', None))
+                    self._session_tokens[client]['id_token'] = tokens.get('id_token', tokens.get('idToken', None))
                 else:
                     error = tokens.get('error', '')
                     if 'error_description' in tokens:
@@ -1912,15 +1962,17 @@ class Connection:
                 return True
             elif response.status == 400:
                 error = await response.json()
+                _LOGGER.debug(error)
                 if error.get('error', {}) == 'invalid_grant':
                     _LOGGER.debug(f'API token refresh failed: {error.get("error_description", {})}')
                     if client == 'vwg':
                         return await self._getAPITokens()
+                else:
+                    _LOGGER.debug(f'Response JSON: {error}')
+                    raise SkodaException('Failed token refresh')
             else:
                 resp = await response.json()
                 _LOGGER.warning(f'Something went wrong when refreshing tokens for "{client}".')
-                _LOGGER.debug(f'Headers: {TOKEN_HEADERS.get("vwg")}')
-                _LOGGER.debug(f'Request Body: {body}')
                 _LOGGER.debug(f'Response JSON: {resp}')
         except Exception as error:
             _LOGGER.warning(f'Could not refresh tokens: {error}')
@@ -1948,12 +2000,15 @@ class Connection:
                     raise
             try:
                 # Validate access token for client, refresh if validation fails
-                valid = await self.validate_token(self._session_tokens.get(client, {}).get('access_token', ''))
+                valid = False
+                token = self._session_tokens.get(client, {}).get('access_token', False)
+                if token is not False:
+                    valid = await self.validate_token(token)
                 if not valid:
-                    _LOGGER.debug(f'Tokens for "{client}" are invalid')
+                    _LOGGER.debug(f'No valid access tokens for "{client}"')
                     # Try to refresh tokens for client
                     if await self.refresh_token(client) is not True:
-                        raise SkodaTokenExpiredException(f'Tokens for client {client} are invalid')
+                        raise SkodaTokenExpiredException(f'No valid tokens for client "{client}"')
                     else:
                         _LOGGER.debug(f'Tokens refreshed successfully for client "{client}"')
                         pass
@@ -1973,8 +2028,8 @@ class Connection:
                     self._session_headers['tokentype'] = 'IDK_SMARTLINK'
                 else:
                     self._session_headers['tokentype'] = 'MBB'
-            except:
-                raise SkodaException(f'Failed to set token for "{client}"')
+            except Exception as e:
+                raise SkodaException(f'Failed to set token for "{client}": {e}')
             return True
 
  #### Class helpers ####

@@ -27,24 +27,15 @@ PRINTRESPONSE = False
 MILES = False
 INTERVAL = 20
 
-# If you wish to use stored tokens, this is an example on how to format data sent to restore_tokens method:
+# If you wish to use stored tokens, this is an example on how to format data sent to restore_tokens method
+# Populate each 'client' as needed with the refresh_token as it can be used to fetch new access, id and refresh tokens
+# The known clients are: technical, connect, "vwg", cabs and dcs. The main client is "technical" and can be used to fetch the rest
 TOKENS = {
-    'technical': {
-        'access_token': '...',
-        'refresh_token': '...',
-        'id_token': '...'
-    },
-    'connect': {
-        'access_token': '...',
-        'refresh_token': '...',
-        'id_token': '...'
-    },
-    'vwg': {
-        'access_token': '...',
-        'refresh_token': '...'
-    },
-    'cabs': None,   # Could be populated with access_token, refresh_token, id_token
-    'dcs': None,    # Could be populated with access_token, refresh_token, id_token
+    'technical': 'TOKENDATA',
+    'connect': 'TOKENDATA',
+    'vwg': None,    # You can store and restore this refresh token but it's more robust to reauth the vwg client
+    'cabs': None,   # Not sure if this is used and in that case for what
+    'dcs': None,    # Smartlink
 }
 # Comment out the following line to use stored tokens above, set TOKENS=None to do fresh login
 TOKENS = None
@@ -57,7 +48,9 @@ COMPONENTS = {
     'switch': 'switch',
 }
 
-# Resources in this list is "enabled"
+# Set to true to enable all resources
+RESOURCES_ALL = True
+# OR set above to False and comment out resources in this list to disable them
 RESOURCES = [
 		"adblue_level",
         "aircon_at_unlock",
@@ -157,6 +150,8 @@ RESOURCES = [
 
 def is_enabled(attr):
     """Return true if the user has enabled the resource."""
+    if RESOURCES_ALL is True:
+        return True
     return attr in RESOURCES
 
 async def main():
@@ -351,6 +346,6 @@ async def main():
             #print(vehicle.timer_action_status)
 
 if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
+    loop = asyncio.new_event_loop()
     loop.run_until_complete(main())
 

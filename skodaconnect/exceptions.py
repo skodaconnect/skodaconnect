@@ -30,6 +30,14 @@ class SkodaTokenExpiredException(Exception):
         super(SkodaTokenExpiredException, self).__init__(status)
         self.status = status
 
+class SkodaTokenInvalidException(Exception):
+    """Raised when server reports that a token is invalid"""
+
+    def __init__(self, status):
+        """Initialize exception"""
+        super(SkodaTokenInvalidException, self).__init__(status)
+        self.status = status
+
 class SkodaException(Exception):
     """Raised when an unknown error occurs during API interaction"""
 

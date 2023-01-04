@@ -21,9 +21,9 @@ CLIENT_LIST = {
     },
     'cabs': {
         'CLIENT_ID':    '0f365c6e-8fff-41e0-8b02-2733ed1fe67f@apps_vw-dilab_com',       # ???
-        'SCOPE':        'openid profile phone we_connect_vehicles',
-        'TOKEN_TYPES':  'code id_token',
-        'SYSTEM_ID':    'CABS'
+        'SCOPE':        'openid profile phone we_connect_vehicles',                     # No idea what this is used for
+        'TOKEN_TYPES':  'code id_token',                                                # Identified from requests in app 5.2.7
+        'SYSTEM_ID':    'CABS'                                                          # tokentype=???
     },
     'dcs': {
         'CLIENT_ID':    '72f9d29d-aa2b-40c1-bebe-4c7683681d4c@apps_vw-dilab_com',       # Used by SMARTLINK Tokens, DCS??
@@ -33,9 +33,9 @@ CLIENT_LIST = {
     },
 }
 
-#XCLIENT_ID = '28cd30c6-dee7-4529-a0e6-b1e07ff90b79'
-#XCLIENT_ID = 'a83d7e44-c8b7-42b7-b8ca-e478270d2091'
-XCLIENT_ID = 'fef89b3d-a6e0-4525-91eb-a9436e6e469a'
+#XCLIENT_ID = '28cd30c6-dee7-4529-a0e6-b1e07ff90b79'                                    # Android app 3.x?
+#XCLIENT_ID = 'a83d7e44-c8b7-42b7-b8ca-e478270d2091'                                    # Used in Android app 4.x.x
+XCLIENT_ID = 'fef89b3d-a6e0-4525-91eb-a9436e6e469a'                                     # Used in Android app 5.2.7
 XAPPVERSION = '5.2.7'
 XAPPNAME = 'cz.skodaauto.connect'
 USER_AGENT = 'okhttp/4.9.3'
@@ -71,9 +71,6 @@ TOKEN_HEADERS = {
         'X-Client-Id': XCLIENT_ID,
         'Accept': 'application/json',
         'X-Platform': 'Android',
-        #'X-Language-Id': 'XX',
-        #'X-Country-Id': 'XX',
-        #'Accept-Language': 'XX',
         'Accept-Charset': 'UTF-8',
         'Content-Type': 'application/x-www-form-urlencoded',
         'Connection': 'keep-alive',
@@ -83,35 +80,35 @@ TOKEN_HEADERS = {
     'connect': {
         'Accept': 'application/json',
         'X-Platform': 'Android',
-        #'X-Language-Id': 'XX',
-        #'X-Country-Id': 'XX',
-        #'Accept-Language': 'XX',
         'Accept-Charset': 'UTF-8',
-        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Type': 'application/json',
         'Connection': 'keep-alive',
         'Accept-Encoding': 'gzip',
         'User-Agent': USER_AGENT,
     },
-    'skoda': {
+    'technical': {
         'Accept': 'application/json',
         'X-Platform': 'Android',
-        #'X-Language-Id': 'XX',
-        #'X-Country-Id': 'XX',
-        #'Accept-Language': 'XX',
         'Accept-Charset': 'UTF-8',
-        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Type': 'application/json',
         'Connection': 'keep-alive',
         'Accept-Encoding': 'gzip',
         'User-Agent': USER_AGENT,
     },
-    'smartlink': {
+    'dcs': {
         'Accept': 'application/json',
         'X-Platform': 'Android',
-        #'X-Language-Id': 'XX',
-        #'X-Country-Id': 'XX',
-        #'Accept-Language': 'XX',
         'Accept-Charset': 'UTF-8',
-        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Type': 'application/json',
+        'Connection': 'keep-alive',
+        'Accept-Encoding': 'gzip',
+        'User-Agent': USER_AGENT,
+    },
+    'cabs': {
+        'Accept': 'application/json',
+        'X-Platform': 'Android',
+        'Accept-Charset': 'UTF-8',
+        'Content-Type': 'application/json',
         'Connection': 'keep-alive',
         'Accept-Encoding': 'gzip',
         'User-Agent': USER_AGENT,
