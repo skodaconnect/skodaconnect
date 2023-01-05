@@ -187,6 +187,14 @@ async def main():
                 print(f'Error encountered when fetching vehicles: {e}')
                 exit()
 
+            # Need to get data before we know what sensors are available
+            print('Fetch latest data for all vehicles.')
+            try:
+                await connection.update_all()
+            except Exception as e:
+                print(f'Error encountered when fetching vehicle data: {e}')
+                exit()
+
             instruments = set()
             for vehicle in connection.vehicles:
                 print('')
