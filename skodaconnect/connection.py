@@ -1968,7 +1968,7 @@ class Connection:
             elif response.status == 400:
                 error = await response.json()
                 _LOGGER.debug(error)
-                if error.get('error', {}) == 'invalid_grant':
+                if error.get('error', {}) in ['invalid_grant', 'unsupported_grant_type']:
                     _LOGGER.debug(f'API token refresh failed: {error.get("error_description", {})}')
                     if client == 'vwg':
                         return await self._getAPITokens()
