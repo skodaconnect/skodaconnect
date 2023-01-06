@@ -423,7 +423,6 @@ class RequestHonkAndFlash(Switch):
             'last_timestamp': self.vehicle.honkandflash_action_timestamp
         }
 
-
 class RequestFlash(Switch):
     def __init__(self):
         super().__init__(attr="request_flash", name="Start flashing", icon="mdi:car-parking-lights")
@@ -451,7 +450,6 @@ class RequestFlash(Switch):
             'last_result': self.vehicle.honkandflash_action_status,
             'last_timestamp': self.vehicle.honkandflash_action_timestamp
         }
-
 
 class RequestUpdate(Switch):
     def __init__(self):
@@ -483,7 +481,6 @@ class RequestUpdate(Switch):
             'last_result': self.vehicle.refresh_action_status,
             'last_timestamp': self.vehicle.refresh_action_timestamp
         }
-
 
 class ElectricClimatisation(Switch):
     def __init__(self):
@@ -517,7 +514,6 @@ class ElectricClimatisation(Switch):
             attrs['last_timestamp'] = self.vehicle.climater_action_timestamp
         return attrs
 
-
 class AuxiliaryClimatisation(Switch):
     def __init__(self):
         super().__init__(attr="auxiliary_climatisation", name="Auxiliary Climatisation", icon="mdi:radiator")
@@ -548,7 +544,6 @@ class AuxiliaryClimatisation(Switch):
             'last_timestamp': self.vehicle.climater_action_timestamp
         }
 
-
 class Charging(Switch):
     def __init__(self):
         super().__init__(attr="charging", name="Charging", icon="mdi:battery")
@@ -572,6 +567,41 @@ class Charging(Switch):
     @property
     def attributes(self):
         return {
+            'last_result': self.vehicle.charger_action_status,
+            'last_timestamp': self.vehicle.charger_action_timestamp
+        }
+
+class MaxChargeCurrent(Switch):
+    def __init__(self):
+        super().__init__(attr="charge_max_ampere", name="Max Charge Current", icon="mdi:battery-charging-outline")
+
+    @property
+    def state(self):
+        # Check charge max ampere valuel. Return True if set to maximum
+        # Return False (Off) for all other values
+        value = self.vehicle.charge_max_ampere
+        if isinstance(value, str):
+            return True if value.lower() == 'maximum' else False
+        elif isinstance(value, int):
+            return True if value == 254 else False
+        return False
+
+    async def turn_on(self):
+        await self.vehicle.set_charger_current('Maximum')
+        await self.vehicle.update()
+
+    async def turn_off(self):
+        await self.vehicle.set_charger_current('Reduced')
+        await self.vehicle.update()
+
+    @property
+    def assumed_state(self):
+        return False
+
+    @property
+    def attributes(self):
+        return {
+            'charge_current': self.vehicle.charge_max_ampere,
             'last_result': self.vehicle.charger_action_status,
             'last_timestamp': self.vehicle.charger_action_timestamp
         }
@@ -828,7 +858,6 @@ class SeatHeatingRearRight(Switch):
             'last_timestamp': self.vehicle.aircon_action_timestamp
         }
 
-
 class AirConditionAtUnlock(Switch):
     def __init__(self):
         super().__init__(attr="aircon_at_unlock", name="Air-conditioning at unlock", icon="mdi:power-plug")
@@ -856,7 +885,6 @@ class AirConditionAtUnlock(Switch):
             'last_timestamp': self.vehicle.aircon_action_timestamp
         }
 
-
 class BatteryClimatisation(Switch):
     def __init__(self):
         super().__init__(attr="climatisation_without_external_power", name="Climatisation from battery", icon="mdi:power-plug")
@@ -883,7 +911,6 @@ class BatteryClimatisation(Switch):
             'last_result': self.vehicle.climater_action_status,
             'last_timestamp': self.vehicle.climater_action_timestamp
         }
-
 
 class PHeaterHeating(Switch):
     def __init__(self):
@@ -915,7 +942,6 @@ class PHeaterHeating(Switch):
             'last_result': self.vehicle.pheater_action_status,
             'last_timestamp': self.vehicle.pheater_action_timestamp
         }
-
 
 class PHeaterVentilation(Switch):
     def __init__(self):
@@ -981,7 +1007,6 @@ class DepartureTimer1(Switch):
     @property
     def attributes(self):
         return dict(self.vehicle.departure1)
-
 
 class DepartureTimer2(Switch):
     def __init__(self):
@@ -1161,6 +1186,7 @@ def create_instruments():
         #CombustionClimatisationClimate(),
         CarInfo(),
         Charging(),
+        MaxChargeCurrent(),
         RequestResults(),
         ChargingPower(),
         DepartureTimer1(),
@@ -1614,4 +1640,3 @@ class Dashboard:
             if instrument.setup(vehicle, **config)
         ]
         _LOGGER.debug("Supported instruments: " + ", ".join(str(inst.attr) for inst in self.instruments))
-
