@@ -57,7 +57,6 @@ class ConnectClient(APIClient):
         self.scope = SCOPES
         self.redirect_uri = APP_URI
         self.app_name = XAPPNAME
-
         # Set payload for authz request
         self.auth_params = {
             REQ_PARAMS: {
@@ -75,7 +74,13 @@ class ConnectClient(APIClient):
         }
 
     async def _exchange_code(self: APIClient, code: str) -> dict:
-        """Exchange authorization code for JWT tokens."""
+        """
+        Exchange authorization code for JWT tokens.
+        Parameters:
+            code: JWT authorization code
+        Returns:
+            dict with tokens
+        """
         try:
             token_resp = await self._request(
                 url = TOKEN_URL,
@@ -112,9 +117,10 @@ class ConnectClient(APIClient):
                 REFRESH_TOKEN: tokens.get(REFRESH_TOKEN, tokens.get(REFRESHTOKEN))
             }
         except:  # pylint: disable=broad-except, bare-except
+            # Return empty dict if unable to parse received tokens
             return {}
 
-    async def get_tokens(self: APIClient, code: str) -> dict:
+    async def get_tokens(self: APIClient, code: str) -> dict: # pylint: disable=arguments-differ
         """
         Exchange authorization code for JWT tokens.
         Parameters:
@@ -123,13 +129,13 @@ class ConnectClient(APIClient):
             dictionary with tokens.
         """
 
-    async def refresh_tokens(self: APIClient) -> bool:
+    async def refresh_tokens(self: APIClient) -> bool: # pylint: disable=arguments-differ
         """Refresh JWT tokens."""
 
-    async def revoke_token(self: APIClient, token: str) -> bool:
+    async def revoke_token(self: APIClient, token: str) -> bool: # pylint: disable=arguments-differ
         """Revoke a JWT (refresh) token."""
 
-    async def request_status(
+    async def request_status( # pylint: disable=arguments-differ
         self:       APIClient,
         vin:        str,
         section:    str,

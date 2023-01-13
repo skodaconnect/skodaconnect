@@ -50,7 +50,7 @@ class APIClient(ABC):
         self._session_debug = api_debug
         self._session_cookies = cookies
 
-        # Below are client specific variables
+        # Client specific variables, set through child class objects
         self.redirect_uri = str
         self.response_type = str
         self.client_id = str
@@ -64,7 +64,10 @@ class APIClient(ABC):
     @property
     def id_token(self: APIClient) -> Union(str, None):
         """Return Identity Token."""
-        return self._tokens.get(ID_TOKEN, None)
+        try:
+            return self._tokens.get(ID_TOKEN, None)
+        except: # pylint: disable=bare-except
+            return None
 
     @id_token.setter
     def id_token(self: APIClient, token: str) -> None:
@@ -81,7 +84,10 @@ class APIClient(ABC):
     @property
     def access_token(self: APIClient) -> Union(str, None):
         """Return Access Token."""
-        return self._tokens.get(ACCESS_TOKEN, None)
+        try:
+            return self._tokens.get(ACCESS_TOKEN, None)
+        except: # pylint: disable=bare-except
+            return None
 
     @access_token.setter
     def access_token(self: APIClient, token: str) -> None:
@@ -98,7 +104,10 @@ class APIClient(ABC):
     @property
     def refresh_token(self: APIClient) -> Union(str, None):
         """Return Refresh Token."""
-        return self._tokens.get(REFRESH_TOKEN, None)
+        try:
+            return self._tokens.get(REFRESH_TOKEN, None)
+        except: # pylint: disable=bare-except
+            return None
 
     @refresh_token.setter
     def refresh_token(self: APIClient, token: str) -> None:
@@ -112,6 +121,7 @@ class APIClient(ABC):
         if isinstance(token, str):
             self._tokens[REFRESH_TOKEN] = token
 
+    # Inherited methods, same for all children
     async def _request(
         self:       APIClient,
         url:        str,
@@ -362,7 +372,7 @@ class APIClient(ABC):
         except Exception as exc:
             raise Exception from exc
 
-    async def login(self: APIClient, email: str, password: str) -> bool:
+    async def auth(self: APIClient, email: str, password: str) -> bool:
         """Login/Authorize the client and return tokens."""
 
         oid_config = await self._get_oidconfig()
@@ -387,7 +397,6 @@ class APIClient(ABC):
                 redirect = False,
                 **self.auth_params,
             )
-            print(f"Go to LOGIN, response is: {auth_resp}")
             # Validate response
             status_code = auth_resp.get(STATUS, 0)
             location = auth_resp.get(LOCATION, None)
@@ -448,10 +457,11 @@ class APIClient(ABC):
             self.access_token = jwt_tokens.get(ACCESS_TOKEN, None)
             self.refresh_token = jwt_tokens.get(REFRESH_TOKEN, None)
             return True
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-except
             pass
         return False
 
+    # Abstract methods, differs between children
     @abstractmethod
     async def _exchange_code(self: APIClient, code: str) -> dict:
         """Exchange authorization code for JWT tokens."""
