@@ -35,6 +35,8 @@ def token_invalid(token):
             return True
         else:
             return False
+    except jwt.ExpiredSignatureError:
+        return False
     except:
         pass
     return False

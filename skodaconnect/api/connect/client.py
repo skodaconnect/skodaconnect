@@ -48,7 +48,7 @@ class ConnectClient(APIClient):
         http_session: ClientSession,
         api_debug: bool = False
     ) -> None:
-        """API Client 'Connect'."""
+        """Initialize API Client 'Connect'."""
         super().__init__(http_session, api_debug)
         # Set Client specifics
         self.response_type = GRANTS
@@ -78,7 +78,7 @@ class ConnectClient(APIClient):
         """Exchange authorization code for JWT tokens."""
         try:
             token_resp = await self._request(
-                url = TOKEN_URL, #+ "?systemId=" + self.system_id,
+                url = TOKEN_URL,
                 method = HTTP_POST,
                 headers = {
                     CONTENT: APP_JSON,

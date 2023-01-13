@@ -1,4 +1,4 @@
-"""Constants used for API Clients."""
+"""Constants used for all API Clients."""
 
 # Request/response related
 TIMEOUT = 20
@@ -15,10 +15,11 @@ TERMS = "terms-and-conditions"
 V1 = "v1"
 V2 = "v2"
 V3 = "v3"
-
 HTML = "html"
 JS = "js"
 TYPE = "type"
+
+# HTML form strings
 ACTION = "action"
 POST_ACTION = "postAction"
 EMAIL = "email"
@@ -26,6 +27,8 @@ PASSWORD = "password"
 HMAC = "hmac"
 CRED_PATH = "registerCredentialsPath"
 REGISTER = "register"
+
+# Used for tokens
 SYSID = "systemId"
 
 # Error strings
