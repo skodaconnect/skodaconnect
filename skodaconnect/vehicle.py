@@ -3003,7 +3003,7 @@ class Vehicle:
 
     @property
     def trip_last_average_fuel_consumption(self):
-        return int(self.trip_last_entry.get('averageFuelConsumption')) / 10
+        return int(self.trip_last_entry.get('averageFuelConsumption', 0)) / 10
 
     @property
     def is_trip_last_average_fuel_consumption_supported(self):
@@ -3013,7 +3013,7 @@ class Vehicle:
 
     @property
     def trip_longterm_average_fuel_consumption(self):
-        return int(self.trip_longterm_entry.get('averageFuelConsumption')) / 10
+        return int(self.trip_longterm_entry.get('averageFuelConsumption', 0)) / 10
 
     @property
     def is_trip_longterm_average_fuel_consumption_supported(self):
@@ -3023,7 +3023,7 @@ class Vehicle:
 
     @property
     def trip_last_average_auxillary_consumption(self):
-        return self.trip_last_entry.get('averageAuxiliaryConsumption')
+        return self.trip_last_entry.get('averageAuxiliaryConsumption', 0)
 
     @property
     def is_trip_last_average_auxillary_consumption_supported(self):
@@ -3033,7 +3033,7 @@ class Vehicle:
 
     @property
     def trip_longterm_average_auxillary_consumption(self):
-        return self.trip_longterm_entry.get('averageAuxiliaryConsumption')
+        return self.trip_longterm_entry.get('averageAuxiliaryConsumption', 0)
 
     @property
     def is_trip_longterm_average_auxillary_consumption_supported(self):
@@ -3043,7 +3043,7 @@ class Vehicle:
 
     @property
     def trip_last_average_aux_consumer_consumption(self):
-        value = self.trip_last_entry.get('averageAuxConsumerConsumption')
+        value = self.trip_last_entry.get('averageAuxConsumerConsumption', 0)
         return float(value / 10)
 
     @property
@@ -3054,7 +3054,7 @@ class Vehicle:
 
     @property
     def trip_longterm_average_aux_consumer_consumption(self):
-        value = self.trip_longterm_entry.get('averageAuxConsumerConsumption')
+        value = self.trip_longterm_entry.get('averageAuxConsumerConsumption', 0)
         return float(value / 10)
 
     @property
