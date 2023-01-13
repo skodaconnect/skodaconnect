@@ -394,7 +394,7 @@ class Connection:
         try:
             user_form = await self._parse_form(html)
             # Expect first form to be HTML
-            if user_form.get('type', None) == 'html':
+            if user_form.get('type', None) is not 'html':
                 user_form['email'] = self._session_auth_username
             else:
                 raise SkodaAuthenticationException('Expected HTML data for initial login form!')
@@ -1525,9 +1525,12 @@ class Connection:
             departuretimers = await self.getDeparturetimer(vin)
             timer = departuretimers.get('departuretimer', {}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', [])
             profile = departuretimers.get('departuretimer', {}).get('timersAndProfiles', {}).get('timerProfileList', {}).get('timerProfile', [])
-            setting = departuretimers.get('departuretimer', {}).get('timersAndProfiles', {}).get('timerBasicSetting', [])
-            # Set heater source default to electric
-            source = 'electric'
+            setting = departuretimers.get('departuretimer', {}).get('timersAndProfiles', {}).get('timerBasicSetting', {})
+            # Set heater source according to settings
+            source = departuretimers.get(
+                'departuretimer', {}).get(
+                    'timersAndProfiles', {}).get(
+                        'timerBasicSetting', {}).get('heaterSource', 'electric')
 
             # Construct Timer data
             timers = [{},{},{}]
@@ -1582,8 +1585,9 @@ class Connection:
             else:
                 raise SkodaException('Unknown action for departure timer')
 
-            # Set heatersource, if specified
-            source = data.get('heaterSource', data.get('schedule', {}).get('heaterSource', 'electric'))
+            # Set heatersource from data, if specified
+            if data.get('heaterSource', '') in ['automatic', 'electric']:
+                source = data.get('heaterSource')
 
             # Construct Profiles data
             enabled = None
@@ -1620,7 +1624,7 @@ class Connection:
             # Construct basic settings
             settings = {
                 'chargeMinLimit': int(setting['chargeMinLimit']),
-                'heaterSource': 'electric',
+                'heaterSource': source,
                 'targetTemperature': int(data['temp'])
             }
             body = {
