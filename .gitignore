@@ -8,3 +8,4 @@ skoda.conf
 example/example.py
 /.project
 /.pydevproject
+.vscode/
