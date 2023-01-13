@@ -394,7 +394,8 @@ class Connection:
         try:
             user_form = await self._parse_form(html)
             # Expect first form to be HTML
-            if user_form.get('type', None) is not 'html':
+            _LOGGER.debug(f"Checking type {user_form.get('type', None)}")
+            if user_form.get('type', None) is 'html':
                 user_form['email'] = self._session_auth_username
             else:
                 raise SkodaAuthenticationException('Expected HTML data for initial login form!')
