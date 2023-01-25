@@ -7,26 +7,35 @@ Models methods and properties needed for the different APIs.
 
 from __future__ import annotations
 from typing import Union, Optional
-from urllib.parse import parse_qs, urlparse
-from datetime import timedelta
+import hashlib
+import hmac
+from base64 import b64encode
+from urllib.parse import parse_qs, urlparse, urlencode, urljoin
+from datetime import timedelta, datetime, timezone
 from abc import ABC, abstractmethod
 import asyncio
 from aiohttp import ClientSession, ClientTimeout
 from skodaconnect.helpers.html import parse_form
-from skodaconnect.helpers.token import token_invalid
-from skodaconnect.strings.http import * # pylint: disable=unused-wildcard-import,wildcard-import
+from skodaconnect.helpers.token import token_valid, decode_token
 from skodaconnect.api.base.const import * # pylint: disable=unused-wildcard-import,wildcard-import
-from skodaconnect.strings.jwt import (
-    ACCESS_TOKEN,
-    ID_TOKEN,
-    REFRESH_TOKEN,
-    AUTHZ_ENDPOINT,
-    CODE,
-    CONSENT,
-    CONSENT_SCOPES,
-    ISSUER,
+from skodaconnect.strings.globals import (
+    ACCESS_TOKEN, ID_TOKEN, REFRESH_TOKEN, REVOKE, REFRESH,
+    ACCESSTOKEN, IDTOKEN, REFRESHTOKEN, AUTHZ_CODE,
+    AUTHZ_ENDPOINT, CODE, ISSUER, SYSID, SUBJECT,
+    CONSENT, CONSENT_SCOPES,
+    HTTP_GET, HTTP_POST, HTTP_OK, HTTP_EMPTY,
+    HTTP_MOVED, HTTP_REDIR, HTTP_OTHER,
+    STATUS, DATA, JSON, PARAMS,
+    LOCATION, URL, CONTENT, REFERER, ORIGIN,
+    APP_JSON, TYPE, HTML, ACTION, JS,
+    EMAIL, PASSWORD, APP_FORM, POST_ACTION, XREQ_WITH,
+    TIMEOUT,
+    OPENID_URL, SKODA_TOKEN, VIN,
+    REGISTER, TERMS, HMAC, CRED_PATH, SIGNIN_SERVICE, SSO, V1,
+    ERROR, ERROR_DESC, ERRORS, ERROR_DEFAULT,
+    MODELAPI, MODELURL, MODELAPPID, MODELAPIKEY,
+    SMALL, LARGE, IMAGESIZE, VIEW, DATE, SIGN, APPID, NEWLINE
 )
-from skodaconnect.strings.urls import OPENID_URL
 
 class APIClient(ABC):
     """Base class for API interactions."""
@@ -62,6 +71,15 @@ class APIClient(ABC):
 
     # Properties of class instance
     @property
+    def subject(self: APIClient) -> Union(str, None):
+        """Return subject claim from JWT access token."""
+        try:
+            token_claims = decode_token(self.access_token)
+            return token_claims.get(SUBJECT, None)
+        except: # pylint: disable=bare-except
+            return None
+
+    @property
     def id_token(self: APIClient) -> Union(str, None):
         """Return Identity Token."""
         try:
@@ -76,8 +94,8 @@ class APIClient(ABC):
         Parameters:
             token: token string
         """
-        if token_invalid(token):
-            raise Exception("Invalid token")
+        if not token_valid(token):
+            raise Exception("Invalid id token")
         if isinstance(token, str):
             self._tokens[ID_TOKEN] = token
 
@@ -96,8 +114,8 @@ class APIClient(ABC):
         Parameters:
             token: token string
         """
-        if token_invalid(token):
-            raise Exception("Invalid token")
+        if not token_valid(token):
+            raise Exception("Invalid access token")
         if isinstance(token, str):
             self._tokens[ACCESS_TOKEN] = token
 
@@ -116,8 +134,8 @@ class APIClient(ABC):
         Parameters:
             token: token string
         """
-        if token_invalid(token):
-            raise Exception("Invalid token")
+        if not token_valid(token):
+            raise Exception("Invalid refresh token")
         if isinstance(token, str):
             self._tokens[REFRESH_TOKEN] = token
 
@@ -155,8 +173,6 @@ class APIClient(ABC):
             URL: None
         }
         try:
-            print(f"HTTP Headers {headers}")
-            print(f"HTTP Payload: {payload}")
             async with self._session.request(
                 method = method,
                 url = url,
@@ -169,12 +185,6 @@ class APIClient(ABC):
                 **payload
             ) as response:
                 response.raise_for_status()
-                # Update cookie jar
-#                if self._session_cookies != '':
-#                    self._session_cookies.update(response.cookies)
-#                else:
-#                    self._session_cookies = response.cookies
-
                 data[STATUS] = response.status
                 data[URL] = str(response.url)
                 if response.status in [HTTP_MOVED, HTTP_REDIR, HTTP_OTHER]:
@@ -185,9 +195,8 @@ class APIClient(ABC):
                     else:
                         data[DATA] = await response.text()
         except Exception as exc: # pylint: disable=broad-except
-            print(f"Request exception: {exc}")
             data[STATUS] = 0
-            data[DATA] = str(exc)
+            data[ERROR] = str(exc)
         return data
 
     async def _get_oidconfig(self: APIClient) -> Union(dict, bool):
@@ -255,7 +264,6 @@ class APIClient(ABC):
             url = email_resp.get(URL, "")
             if email_resp.get(STATUS, 0) is not HTTP_OK:
                 raise Exception("Authentication failed.")
-            print(type(url))
             if ERROR in url:
                 login_error = str(url).split("error=", 1)[1]
                 raise Exception(login_error)
@@ -374,7 +382,6 @@ class APIClient(ABC):
 
     async def auth(self: APIClient, email: str, password: str) -> bool:
         """Login/Authorize the client and return tokens."""
-
         oid_config = await self._get_oidconfig()
         # Validate returned config
         if oid_config is False:
@@ -383,14 +390,12 @@ class APIClient(ABC):
             raise Exception("Config 'authorization_endpoint' is missing.")
         if ISSUER not in oid_config:
             raise Exception("Config 'issuer' is missing.")
-        print(oid_config)
         auth_endpoint = oid_config.get(AUTHZ_ENDPOINT, None)
         auth_issuer = oid_config.get(ISSUER, None)
 
         # Send first auth request to authorization endpoint
         try:
             # Send GET and expect 302 code and location
-            print(self.auth_headers)
             auth_resp = await self._request(
                 url = auth_endpoint,
                 headers = self.auth_headers,
@@ -453,31 +458,147 @@ class APIClient(ABC):
         # Exchange authorization code for JWT tokens
         try:
             jwt_tokens = await self._exchange_code(authz_code)
+            if not isinstance(jwt_tokens, dict):
+                raise Exception("Token exchange failed.")
+            else:
+                if jwt_tokens.get(ERROR, False):
+                    raise Exception(f"Exchange error: {jwt_tokens.get(ERROR)}")
             self.id_token = jwt_tokens.get(ID_TOKEN, None)
             self.access_token = jwt_tokens.get(ACCESS_TOKEN, None)
             self.refresh_token = jwt_tokens.get(REFRESH_TOKEN, None)
             return True
         except Exception as exc:  # pylint: disable=broad-except
-            pass
+            print(f"Exception {exc}")
         return False
 
+    async def skoda_token(
+        self: APIClient,
+        code: str,
+        action: str = CODE,
+        ) -> dict:
+        """
+        Exchange authorization code for JWT tokens.
+        Skoda specific Token service.
+        Parameters:
+            code: JWT authorization code or refresh token
+            action: code, revoke or refresh
+        Returns:
+            dict with tokens
+        """
+        try:
+            if action in [REVOKE, REFRESH]:
+                parts = [SKODA_TOKEN, action]
+                token_url = "/".join(parts)
+                token_payload = {
+                    JSON: {REFRESHTOKEN: code},
+                    PARAMS: {SYSID: self.system_id}
+                }
+            else:
+                token_url = SKODA_TOKEN
+                token_payload = {
+                    JSON: {AUTHZ_CODE: code},
+                    PARAMS: {SYSID: self.system_id}
+                }
+            token_resp = await self._request(
+                url = token_url,
+                method = HTTP_POST,
+                headers = {
+                    CONTENT: APP_JSON,
+                },
+                redirect = False,
+                **token_payload
+            )
+            # Validate response
+            if token_resp.get(STATUS) not in [HTTP_OK, HTTP_EMPTY]:
+                raise Exception("Token exchange failed.")
+            # Return true if REVOKE action resulted in HTTP OK
+            if action is REVOKE:
+                return True
+            tokens = token_resp.get(DATA)
+            # Check that all tokens are received, else throw exception
+            if not all(token in tokens for token in [
+                IDTOKEN, ACCESSTOKEN, REFRESHTOKEN
+            ]):
+                raise Exception("Missing token in response.")
+            # Relevant checks passed, return tokens in dict
+            return {
+                ID_TOKEN: tokens.get(ID_TOKEN,
+                    tokens.get(IDTOKEN)),
+                ACCESS_TOKEN: tokens.get(ACCESS_TOKEN,
+                    tokens.get(ACCESSTOKEN)),
+                REFRESH_TOKEN: tokens.get(REFRESH_TOKEN,
+                    tokens.get(REFRESHTOKEN))
+            }
+        except:  # pylint: disable=broad-except, bare-except
+            # Return false if failed
+            return False
+
+    async def model_image(
+        self: APIClient,
+        vin: str,
+        size: str = LARGE
+        ) -> Union(str, None):
+        """
+        Get model image url for vehicle.
+        Parameters:
+            vin: Vehicle vin number
+            size: Type of image, small or large
+        """
+        try:
+            # Construct message to be encrypted
+            date = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%mZ")
+            if size not in [SMALL, LARGE]:
+                raise Exception("Incorrect model image size")
+
+            # Prepare request parameters
+            req_params = {
+                VIN: vin,
+                VIEW: IMAGESIZE[size],
+                DATE: date
+            }
+            parameters = urlencode(req_params, safe = ":")
+            # Construct message to sign
+            msg = MODELAPPID + NEWLINE + MODELAPI
+            sign_parts = [msg, parameters]
+            to_sign = "?".join(sign_parts)
+
+            # Construct hmac SHA-256 key object and base64 encode the message
+            digest = hmac.new(
+                MODELAPIKEY,
+                msg = to_sign.encode(),
+                digestmod = hashlib.sha256
+            ).digest()
+            key = b64encode(digest).decode()
+
+            # Add signing key and app id to parameters and POST data
+            req_params[APPID] = MODELAPPID
+            req_params[SIGN] = key
+            base_url = urljoin(MODELURL, MODELAPI)
+            req_url = base_url + "?" + urlencode(req_params)
+            response = await self._request(
+                url = req_url,
+                redirect = False,
+            )
+            # Make sure that we got redirect and location for image
+            if response.get(LOCATION, False):
+                return response.get(LOCATION).split('?')[0]
+        except: # pylint: disable=bare-except
+            pass
+        return None
+
     # Abstract methods, differs between children
+    @abstractmethod
+    async def _api_call(self: APIClient, **data) -> any:
+        """Applies client specific headers etc. for API call."""
+
     @abstractmethod
     async def _exchange_code(self: APIClient, code: str) -> dict:
         """Exchange authorization code for JWT tokens."""
 
     @abstractmethod
-    async def get_tokens(self: APIClient) -> any:
-        """Get JWT tokens."""
+    async def _revoke_token(self: APIClient) -> any:
+        """Revoke JWT token."""
 
     @abstractmethod
     async def refresh_tokens(self: APIClient) -> any:
         """Refresh JWT tokens."""
-
-    @abstractmethod
-    async def revoke_token(self: APIClient) -> any:
-        """Revoke JWT token."""
-
-    @abstractmethod
-    async def request_status(self: APIClient) -> any:
-        """Get status of ongoing API request."""

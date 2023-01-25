@@ -13,6 +13,7 @@ SCOPES = "openid profile address cars email birthdate badge mbb phone " + \
 GRANTS = "code id_token"
 SYSTEM_ID = "CONNECT"
 
-IDTOKEN = "idToken"
-ACCESSTOKEN = "accessToken"
-REFRESHTOKEN = "refreshToken"
+CUST_URL = "https://customer-profile.apps.emea.vwapps.io/v2/customers"
+MBB_STATUS = "mbbStatusData"
+PERSONAL_DATA = "personalData"
+CAR_DATA = "realCarData"

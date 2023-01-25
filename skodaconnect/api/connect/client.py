@@ -6,40 +6,30 @@ Handles API calls and tokens.
 """
 
 from __future__ import annotations
-#from typing import Union, Optional
 from aiohttp import ClientSession
-from skodaconnect.api.base.base import APIClient
-from skodaconnect.api.base.const import (
-    REQ_PARAMS,
-    STATUS,
-    SYSID,
-    ERROR,
-    DATA,
-)
+from skodaconnect.api.base.client import APIClient
 from skodaconnect.api.connect.const import (
     APP_URI, CLIENT, GRANTS, SCOPES, SYSTEM_ID, XAPPNAME,
-    IDTOKEN, ACCESSTOKEN, REFRESHTOKEN
+    CUST_URL, MBB_STATUS, PERSONAL_DATA, CAR_DATA,
 )
+from skodaconnect.helpers.token import decode_token
 from skodaconnect.helpers.html import get_nonce, get_state
-from skodaconnect.strings.jwt import * # pylint: disable=unused-wildcard-import, wildcard-import
-from skodaconnect.strings.urls import * # pylint: disable=unused-wildcard-import, wildcard-import
-from skodaconnect.strings.http import (
-    CONTENT,
-    APP_JSON,
+from skodaconnect.strings.globals import (
+    CONTENT, APP_JSON, PARAMS, DATA, STATUS,
     HTTP_OK,
-    HTTP_POST,
-    #HTTP_GET,
-    #HTTP_OTHER,
-    #HTTP_REDIR,
-    #HTTP_MOVED,
-    XREQ_WITH
+    NONCE, STATE, REDIR_URI, RES_TYPE, CLIENT_ID, SCOPE, SUBJECT,
+    REFRESH, REVOKE,
+    ID_TOKEN, ACCESS_TOKEN, REFRESH_TOKEN, TOKENTYPE,
+    HTTP_ERROR, HTTP_ERRORS, HTTP_GET,
+    ERROR,
+    XREQ_WITH, AUTHZ, BEARER
 )
 
 class ConnectClient(APIClient):
     """
     'Connect' API Client used for communication with Skoda Connect.
     Used mainly for requests related to user/personal data for account.
-    Also used for fetching 'CABS' token.
+    Used as super class for 'CABS' and 'MBB' clients.
     API customer-profile.apps.emea.vwapps.io.
     """
 
@@ -59,7 +49,7 @@ class ConnectClient(APIClient):
         self.app_name = XAPPNAME
         # Set payload for authz request
         self.auth_params = {
-            REQ_PARAMS: {
+            PARAMS: {
                 REDIR_URI: self.redirect_uri,
                 NONCE: get_nonce(),
                 STATE: get_state(),
@@ -73,6 +63,41 @@ class ConnectClient(APIClient):
             XREQ_WITH: self.app_name,
         }
 
+    async def _api_call( # pylint: disable=arguments-differ
+        self: APIClient,
+        url: str,
+        method: str = HTTP_GET,
+        headers: str = None,
+        payload: any = None
+    ) -> any:
+        """Execute API call with common settings."""
+        # Set token type for request
+        sysid = "IDK_" + self.system_id
+        # Set Authorization bearer
+        authz_parts = [BEARER, self.access_token]
+        req_headers =  {
+            CONTENT: APP_JSON,
+            AUTHZ: " ".join(authz_parts),
+            TOKENTYPE: sysid
+        }
+        # Update with headers specified in parameters
+        if headers is not None:
+            req_headers.update(headers)
+
+        if payload is None:
+            return await self._request(
+                url = url,
+                method = method,
+                headers = req_headers,
+            )
+        else:
+            return await self._request(
+                url = url,
+                method = method,
+                headers = req_headers,
+                **payload
+            )
+
     async def _exchange_code(self: APIClient, code: str) -> dict:
         """
         Exchange authorization code for JWT tokens.
@@ -82,70 +107,81 @@ class ConnectClient(APIClient):
             dict with tokens
         """
         try:
-            token_resp = await self._request(
-                url = TOKEN_URL,
-                method = HTTP_POST,
-                headers = {
-                    CONTENT: APP_JSON,
-                },
-                json = {
-                    AUTHZ_CODE: code
-                },
-                params = {
-                    SYSID: self.system_id
-                },
-                redirect = False
-            )
-            tokens = token_resp.get(DATA, {})
-            # Validate response
-            if token_resp.get(STATUS) is not HTTP_OK:
-                raise Exception("Token exchange failed.")
-            if token_resp.get(ERROR, False):
-                raise Exception(token_resp.get(ERROR))
-            if not all(token in tokens for token in [
-                IDTOKEN, ACCESSTOKEN, REFRESHTOKEN
-            ]):
-                raise Exception("Missing token in response.")
-        except Exception as exc:
-            raise Exception from exc
-
-        try:
-            print(f"Return with {tokens}")
-            return {
-                ID_TOKEN: tokens.get(ID_TOKEN, tokens.get(IDTOKEN)),
-                ACCESS_TOKEN: tokens.get(ACCESS_TOKEN, tokens.get(ACCESSTOKEN)),
-                REFRESH_TOKEN: tokens.get(REFRESH_TOKEN, tokens.get(REFRESHTOKEN))
-            }
+            tokens = await self.skoda_token(code = code)
+            return tokens
         except:  # pylint: disable=broad-except, bare-except
             # Return empty dict if unable to parse received tokens
-            return {}
+            return {ERROR: "No tokens"}
 
-    async def get_tokens(self: APIClient, code: str) -> dict: # pylint: disable=arguments-differ
-        """
-        Exchange authorization code for JWT tokens.
-        Parameters:
-            code: authorization code
-        Returns:
-            dictionary with tokens.
-        """
+    async def _revoke_token(self: APIClient) -> bool: # pylint: disable=arguments-differ
+        """Revoke JWT (refresh) token."""
+        try:
+            return await self.skoda_token(
+                code = self.refresh_token,
+                action = REVOKE,
+            )
+        except:  # pylint: disable=broad-except, bare-except
+            return False
 
     async def refresh_tokens(self: APIClient) -> bool: # pylint: disable=arguments-differ
         """Refresh JWT tokens."""
+        try:
+            tokens =  await self.skoda_token(
+                code = self.refresh_token,
+                action = REFRESH,
+            )
+            # Validate response
+            if tokens is False or isinstance(tokens, dict) is False:
+                raise Exception("Token refresh failed.")
+            else:
+                # Revoke old refresh token
+                await self._revoke_token()
+                # Set new tokens
+                self.id_token = tokens.get(ID_TOKEN)
+                self.access_token = tokens.get(ACCESS_TOKEN)
+                self.refresh_token = tokens.get(REFRESH_TOKEN)
+                return True
+        except: # pylint: disable=bare-except
+            return False
 
-    async def revoke_token(self: APIClient, token: str) -> bool: # pylint: disable=arguments-differ
-        """Revoke a JWT (refresh) token."""
+# API endpoints
+    async def personal_data(self: APIClient) -> dict:
+        """Personal data"""
+        try:
+            token_claims = decode_token(self.access_token)
+            subject = token_claims.get(SUBJECT, "")
+            url_parts = [CUST_URL, subject, PERSONAL_DATA]
+            req_url = "/".join(url_parts)
+            response = await self._api_call(url = req_url)
+            if response.get(STATUS) is not HTTP_OK:
+                raise Exception(HTTP_ERRORS.get(STATUS, HTTP_ERROR))
+            else:
+                return response.get(DATA)
+        except Exception as exc: # pylint: disable=broad-except
+            return {ERROR: exc}
 
-    async def request_status( # pylint: disable=arguments-differ
-        self:       APIClient,
-        vin:        str,
-        section:    str,
-        req_id:     int
-    ) -> str:
-        """
-        Fetch status of ongoing request.
-        Parameters:
-            vin: Vehicle vin number
-            function: The 'endpoint'
-            req_id: Request ID
-        Returns status text string
-        """
+    async def mbb_status(self: APIClient) -> dict:
+        """Get MBB status of user."""
+        try:
+            url_parts = [CUST_URL, self.subject, MBB_STATUS]
+            req_url = "/".join(url_parts)
+            response = await self._api_call(url = req_url)
+            if response.get(STATUS) is not HTTP_OK:
+                raise Exception(HTTP_ERRORS.get(STATUS, HTTP_ERROR))
+            else:
+                return response.get(DATA)
+        except Exception as exc: # pylint: disable=broad-except
+            return {ERROR: exc}
+
+    async def car_data(self: APIClient) -> dict:
+        """Get car information from profile."""
+        try:
+            url_parts = [CUST_URL, self.subject, CAR_DATA]
+            req_url = "/".join(url_parts)
+            response = await self._api_call(url = req_url)
+            if response.get(STATUS) is not HTTP_OK:
+                raise Exception(HTTP_ERRORS.get(STATUS, HTTP_ERROR))
+            else:
+                return response.get(DATA)
+        except Exception as exc: # pylint: disable=broad-except
+            return {ERROR: exc}
