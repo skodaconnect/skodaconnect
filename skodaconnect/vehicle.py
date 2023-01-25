@@ -1265,8 +1265,8 @@ class Vehicle:
     async def set_refresh(self):
         """Wake up vehicle and update status data."""
         if not self._services.get('statusreport_v1', {}).get('active', False):
-           _LOGGER.info('Data refresh is not supported.')
-           raise SkodaInvalidRequestException('Data refresh is not supported.')
+            _LOGGER.info('Data refresh is not supported.')
+            raise SkodaInvalidRequestException('Data refresh is not supported.')
         if self._requests['refresh'].get('id', False):
             timestamp = self._requests.get('refresh', {}).get('timestamp', datetime.now() - timedelta(minutes=5))
             expired = datetime.now() - timedelta(minutes=3)
