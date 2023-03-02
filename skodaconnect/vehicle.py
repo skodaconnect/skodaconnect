@@ -3325,7 +3325,7 @@ class Vehicle:
     @property
     def is_request_in_progress_supported(self):
         """Request in progress is supported for Skoda Connect."""
-        if 'ONLINE' in self._connectivities:
+        if any(conn in self._connectivities for conn in ['ONLINE', 'REMOTE']):
             return True
 
     @property
