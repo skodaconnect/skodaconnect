@@ -2,6 +2,13 @@
 ![PyPi](https://img.shields.io/pypi/v/skodaconnect?label=latest%20pypi)
 ![Downloads PyPi](https://img.shields.io/pypi/dm/skodaconnect)
 
+# **Contributors needed**
+Keeping up with changes made from VAG group to the API requires coders familiar with the code and structure for reverse engineering the changes into this code. Contributions in the form of raised issues and pull requests are much needed in order to maintain the functionality for all different models of Skoda cars.
+Up until now I have maintained this code after lendy007 and I have had my own interest in it since I've been using it for controlling my own Skoda. My Skoda Connect subscription is now expired and I won't be renewing it because I'm switching from my current Skoda to another car in the near future. This means that this project needs you, someone familiar with Python and an interest in keeping this code alive, in order to not stop working after the next VAG update.
+Please contact me on the Discord or through email if this person is you.
+
+/TheFarfar (Farfar)
+
 # Skoda Connect
 **UNOFFICIAL** library for communicating with Skoda Connect.
 Fork of https://github.com/robinostlund/volkswagencarnet,
