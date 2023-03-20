@@ -1100,38 +1100,19 @@ class Connection:
                 )
             )
             data = {}
-            if short.get('tripData', False) and long.get('tripData', False) and cyclic.get('tripData', False):
+            if short.get('tripData', False):
                 data['tripstatistics'] = short.get('tripData', {})
-                data['longtermstatistics'] = long.get('tripData', {})
-                data['cyclicstatistics'] = cyclic.get('tripData', {})
-                return data
-            elif short.get('tripData', False) and long.get('tripData', False):
-                data['tripstatistics'] = short.get('tripData', {})
-                data['longtermstatistics'] = long.get('tripData', {})
-                return data
-            elif short.get('tripData', False) and cyclic.get('tripData', False):
-                data['tripstatistics'] = short.get('tripData', {})
-                data['cyclicstatistics'] = cyclic.get('tripData', {})
-                return data
-            elif cyclic.get('tripData', False) and long.get('tripData', False):
-                data['cyclicstatistics'] = cyclic.get('tripData', {})
-                data['longtermstatistics'] = long.get('tripData', {})
-                return data
-            elif short.get('tripData', False):
-                data['tripstatistics'] = short.get('tripData', {})
-            elif long.get('tripData', False):
-                data['longtermstatistics'] = long.get('tripData', {})
-            elif cyclic.get('tripData', False):
-                data['cyclicstatistics'] = cyclic.get('tripData', {})
-                return data
-            elif short.get('status_code', False):
-                _LOGGER.warning(f'Could not fetch trip statistics, HTTP status code: {short.get("status_code")}')
-            elif long.get('status_code', False):
-                _LOGGER.warning(f'Could not fetch longtermin trip statistics, HTTP status code: {long.get("status_code")}')
-            elif cyclic.get('status_code', False):
-                _LOGGER.warning(f'Could not fetch cyclic trip statistics, HTTP status code: {cyclic.get("status_code")}')
             else:
-                _LOGGER.info(f'Unhandled error while trying to fetch trip statistics')
+                _LOGGER.warning(f'Could not fetch shortterm trip statistics, HTTP status code: {short.get("status_code", "none")}')
+            if long.get('tripData', False):
+                data['longtermstatistics'] = long.get('tripData', {})
+            else:
+                _LOGGER.warning(f'Could not fetch longterm trip statistics, HTTP status code: {long.get("status_code", "none")}')
+            if cyclic.get('tripData', False):
+                data['cyclicstatistics'] = cyclic.get('tripData', {})
+            else:
+                _LOGGER.warning(f'Could not fetch cyclic trip statistics, HTTP status code: {cyclic.get("status_code", "none")}')
+            return data
         except Exception as error:
             _LOGGER.warning(f'Could not fetch trip statistics, error: {error}')
         return False
