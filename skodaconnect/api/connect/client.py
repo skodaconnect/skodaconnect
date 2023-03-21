@@ -25,6 +25,7 @@ from skodaconnect.strings.globals import (
     XREQ_WITH, AUTHZ, BEARER
 )
 
+
 class ConnectClient(APIClient):
     """
     'Connect' API Client used for communication with Skoda Connect.
@@ -34,9 +35,9 @@ class ConnectClient(APIClient):
     """
 
     def __init__(
-        self: APIClient,
-        http_session: ClientSession,
-        api_debug: bool = False
+            self: APIClient,
+            http_session: ClientSession,
+            api_debug: bool = False
     ) -> None:
         """Initialize API Client 'Connect'."""
         super().__init__(http_session, api_debug)
@@ -63,19 +64,19 @@ class ConnectClient(APIClient):
             XREQ_WITH: self.app_name,
         }
 
-    async def _api_call( # pylint: disable=arguments-differ
-        self: APIClient,
-        url: str,
-        method: str = HTTP_GET,
-        headers: str = None,
-        payload: any = None
+    async def _api_call(  # pylint: disable=arguments-differ
+            self: APIClient,
+            url: str,
+            method: str = HTTP_GET,
+            headers: str = None,
+            payload: any = None
     ) -> any:
         """Execute API call with common settings."""
         # Set token type for request
         sysid = "IDK_" + self.system_id
         # Set Authorization bearer
         authz_parts = [BEARER, self.access_token]
-        req_headers =  {
+        req_headers = {
             CONTENT: APP_JSON,
             AUTHZ: " ".join(authz_parts),
             TOKENTYPE: sysid
@@ -86,15 +87,15 @@ class ConnectClient(APIClient):
 
         if payload is None:
             return await self._request(
-                url = url,
-                method = method,
-                headers = req_headers,
+                url=url,
+                method=method,
+                headers=req_headers,
             )
         else:
             return await self._request(
-                url = url,
-                method = method,
-                headers = req_headers,
+                url=url,
+                method=method,
+                headers=req_headers,
                 **payload
             )
 
@@ -107,28 +108,28 @@ class ConnectClient(APIClient):
             dict with tokens
         """
         try:
-            tokens = await self.skoda_token(code = code)
+            tokens = await self.skoda_token(code=code)
             return tokens
         except:  # pylint: disable=broad-except, bare-except
             # Return empty dict if unable to parse received tokens
             return {ERROR: "No tokens"}
 
-    async def _revoke_token(self: APIClient) -> bool: # pylint: disable=arguments-differ
+    async def _revoke_token(self: APIClient) -> bool:  # pylint: disable=arguments-differ
         """Revoke JWT (refresh) token."""
         try:
             return await self.skoda_token(
-                code = self.refresh_token,
-                action = REVOKE,
+                code=self.refresh_token,
+                action=REVOKE,
             )
         except:  # pylint: disable=broad-except, bare-except
             return False
 
-    async def refresh_tokens(self: APIClient) -> bool: # pylint: disable=arguments-differ
+    async def refresh_tokens(self: APIClient) -> bool:  # pylint: disable=arguments-differ
         """Refresh JWT tokens."""
         try:
-            tokens =  await self.skoda_token(
-                code = self.refresh_token,
-                action = REFRESH,
+            tokens = await self.skoda_token(
+                code=self.refresh_token,
+                action=REFRESH,
             )
             # Validate response
             if tokens is False or isinstance(tokens, dict) is False:
@@ -141,10 +142,10 @@ class ConnectClient(APIClient):
                 self.access_token = tokens.get(ACCESS_TOKEN)
                 self.refresh_token = tokens.get(REFRESH_TOKEN)
                 return True
-        except: # pylint: disable=bare-except
+        except:  # pylint: disable=bare-except
             return False
 
-# API endpoints
+    # API endpoints
     async def personal_data(self: APIClient) -> dict:
         """Personal data"""
         try:
@@ -152,12 +153,12 @@ class ConnectClient(APIClient):
             subject = token_claims.get(SUBJECT, "")
             url_parts = [CUST_URL, subject, PERSONAL_DATA]
             req_url = "/".join(url_parts)
-            response = await self._api_call(url = req_url)
+            response = await self._api_call(url=req_url)
             if response.get(STATUS) is not HTTP_OK:
                 raise Exception(HTTP_ERRORS.get(STATUS, HTTP_ERROR))
             else:
                 return response.get(DATA)
-        except Exception as exc: # pylint: disable=broad-except
+        except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}
 
     async def mbb_status(self: APIClient) -> dict:
@@ -165,12 +166,12 @@ class ConnectClient(APIClient):
         try:
             url_parts = [CUST_URL, self.subject, MBB_STATUS]
             req_url = "/".join(url_parts)
-            response = await self._api_call(url = req_url)
+            response = await self._api_call(url=req_url)
             if response.get(STATUS) is not HTTP_OK:
                 raise Exception(HTTP_ERRORS.get(STATUS, HTTP_ERROR))
             else:
                 return response.get(DATA)
-        except Exception as exc: # pylint: disable=broad-except
+        except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}
 
     async def car_data(self: APIClient) -> dict:
@@ -178,10 +179,10 @@ class ConnectClient(APIClient):
         try:
             url_parts = [CUST_URL, self.subject, CAR_DATA]
             req_url = "/".join(url_parts)
-            response = await self._api_call(url = req_url)
+            response = await self._api_call(url=req_url)
             if response.get(STATUS) is not HTTP_OK:
                 raise Exception(HTTP_ERRORS.get(STATUS, HTTP_ERROR))
             else:
                 return response.get(DATA)
-        except Exception as exc: # pylint: disable=broad-except
+        except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}

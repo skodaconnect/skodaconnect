@@ -17,7 +17,7 @@ import asyncio
 from aiohttp import ClientSession, ClientTimeout
 from skodaconnect.helpers.html import parse_form
 from skodaconnect.helpers.token import token_valid, decode_token
-from skodaconnect.api.base.const import * # pylint: disable=unused-wildcard-import,wildcard-import
+from skodaconnect.api.base.const import *  # pylint: disable=unused-wildcard-import,wildcard-import
 from skodaconnect.strings.globals import (
     ACCESS_TOKEN, ID_TOKEN, REFRESH_TOKEN, REVOKE, REFRESH,
     ACCESSTOKEN, IDTOKEN, REFRESHTOKEN, AUTHZ_CODE,
@@ -37,14 +37,15 @@ from skodaconnect.strings.globals import (
     SMALL, LARGE, IMAGESIZE, VIEW, DATE, SIGN, APPID, NEWLINE
 )
 
+
 class APIClient(ABC):
     """Base class for API interactions."""
 
     def __init__(
-        self:           APIClient,
-        http_session:   ClientSession,
-        cookies:        any = "",
-        api_debug:      bool = False,
+            self: APIClient,
+            http_session: ClientSession,
+            cookies: any = "",
+            api_debug: bool = False,
     ) -> None:
         """
         Init API Client
@@ -76,7 +77,7 @@ class APIClient(ABC):
         try:
             token_claims = decode_token(self.access_token)
             return token_claims.get(SUBJECT, None)
-        except: # pylint: disable=bare-except
+        except:  # pylint: disable=bare-except
             return None
 
     @property
@@ -84,7 +85,7 @@ class APIClient(ABC):
         """Return Identity Token."""
         try:
             return self._tokens.get(ID_TOKEN, None)
-        except: # pylint: disable=bare-except
+        except:  # pylint: disable=bare-except
             return None
 
     @id_token.setter
@@ -104,7 +105,7 @@ class APIClient(ABC):
         """Return Access Token."""
         try:
             return self._tokens.get(ACCESS_TOKEN, None)
-        except: # pylint: disable=bare-except
+        except:  # pylint: disable=bare-except
             return None
 
     @access_token.setter
@@ -124,7 +125,7 @@ class APIClient(ABC):
         """Return Refresh Token."""
         try:
             return self._tokens.get(REFRESH_TOKEN, None)
-        except: # pylint: disable=bare-except
+        except:  # pylint: disable=bare-except
             return None
 
     @refresh_token.setter
@@ -141,12 +142,12 @@ class APIClient(ABC):
 
     # Inherited methods, same for all children
     async def _request(
-        self:       APIClient,
-        url:        str,
-        headers:    Optional[dict] = None,
-        method:     str = HTTP_GET,
-        redirect:   bool = True,
-        **payload:  dict,
+            self: APIClient,
+            url: str,
+            headers: Optional[dict] = None,
+            method: str = HTTP_GET,
+            redirect: bool = True,
+            **payload: dict,
     ) -> dict:
         """
         API GET HTTP call.
@@ -174,15 +175,15 @@ class APIClient(ABC):
         }
         try:
             async with self._session.request(
-                method = method,
-                url = url,
-                headers = headers,
-                timeout = ClientTimeout(total = \
-                    timedelta(seconds = TIMEOUT).seconds),
-#                cookies = self._session_cookies,
-                allow_redirects = redirect,
-                raise_for_status = False,
-                **payload
+                    method=method,
+                    url=url,
+                    headers=headers,
+                    timeout=ClientTimeout(total=
+                                          timedelta(seconds=TIMEOUT).seconds),
+                    #                cookies = self._session_cookies,
+                    allow_redirects=redirect,
+                    raise_for_status=False,
+                    **payload
             ) as response:
                 response.raise_for_status()
                 data[STATUS] = response.status
@@ -191,10 +192,10 @@ class APIClient(ABC):
                     data[LOCATION] = response.headers.get(LOCATION, None)
                 else:
                     if response.headers.get(CONTENT, None) == APP_JSON:
-                        data[DATA] =  await response.json()
+                        data[DATA] = await response.json()
                     else:
                         data[DATA] = await response.text()
-        except Exception as exc: # pylint: disable=broad-except
+        except Exception as exc:  # pylint: disable=broad-except
             data[STATUS] = 0
             data[ERROR] = str(exc)
         return data
@@ -204,21 +205,21 @@ class APIClient(ABC):
         try:
             # Fetch OpenID configuration
             oid_resp = await self._request(
-                url = OPENID_URL
+                url=OPENID_URL
             )
             if oid_resp.get(STATUS) is HTTP_OK:
                 return oid_resp.get(DATA, None)
-        except Exception: # pylint: disable=broad-except
+        except Exception:  # pylint: disable=broad-except
             pass
         return False
 
     async def _signin(
-        self: APIClient,
-        html: str,
-        username: str,
-        password: str,
-        issuer: str,
-        endpoint: str
+            self: APIClient,
+            html: str,
+            username: str,
+            password: str,
+            issuer: str,
+            endpoint: str
     ) -> Union(str, bool):
         """
         POST login credentials to signin form. Return authz redirect URL.
@@ -251,15 +252,15 @@ class APIClient(ABC):
         # POST login form data and validate response
         try:
             email_resp = await self._request(
-                url = post_url,
-                headers = {
+                url=post_url,
+                headers={
                     CONTENT: APP_FORM,
                     XREQ_WITH: self.app_name,
                     REFERER: endpoint,
                     ORIGIN: issuer
                 },
-                method = HTTP_POST,
-                data = form_data
+                method=HTTP_POST,
+                data=form_data
             )
             url = email_resp.get(URL, "")
             if email_resp.get(STATUS, 0) is not HTTP_OK:
@@ -309,16 +310,16 @@ class APIClient(ABC):
                 pw_post = "/".join(parts)
 
             pw_resp = await self._request(
-                url = pw_post,
-                headers = {
+                url=pw_post,
+                headers={
                     CONTENT: APP_FORM,
                     XREQ_WITH: self.app_name,
                     REFERER: post_url,
                     ORIGIN: issuer
                 },
-                method = HTTP_POST,
-                data = form_data,
-                redirect = False
+                method=HTTP_POST,
+                data=form_data,
+                redirect=False
             )
             location = pw_resp.get(LOCATION, "")
             if SSO not in location:
@@ -344,15 +345,15 @@ class APIClient(ABC):
                 if ERROR in redirect_url:
                     error = parse_qs(
                         urlparse(redirect_url).query).get(ERROR, ''
-                    )[0]
+                                                          )[0]
                     raise Exception(ERRORS.get(error, ERROR_DEFAULT))
                 if TERMS in redirect_url:
                     raise Exception("Accept EULA in MySkoda app on Android.")
 
                 # Follow next redirect and error check response
                 response = await self._request(
-                    url = redirect_url,
-                    redirect = False
+                    url=redirect_url,
+                    redirect=False
                 )
                 if not response.get(LOCATION, False):
                     if CONSENT in redirect_url:
@@ -366,7 +367,7 @@ class APIClient(ABC):
                 max_depth -= 1
                 if max_depth == 0:
                     raise Exception("Too many redirects")
-        except Exception as exc: # pylint: disable=broad-except
+        except Exception as exc:  # pylint: disable=broad-except
             # When redirect_uri is reached an Exception will occur
             # since the URL will be non http:// or https://
             if not CODE in redirect_url:
@@ -397,9 +398,9 @@ class APIClient(ABC):
         try:
             # Send GET and expect 302 code and location
             auth_resp = await self._request(
-                url = auth_endpoint,
-                headers = self.auth_headers,
-                redirect = False,
+                url=auth_endpoint,
+                headers=self.auth_headers,
+                redirect=False,
                 **self.auth_params,
             )
             # Validate response
@@ -427,18 +428,18 @@ class APIClient(ABC):
             if SIGNIN_SERVICE in location:
                 # Follow first redirect to get HTML data
                 html_resp = await self._request(
-                    url = location,
-                    headers = self.auth_headers,
-                    redirect = False
+                    url=location,
+                    headers=self.auth_headers,
+                    redirect=False
                 )
                 if html_resp.get(STATUS, 0) is not HTTP_OK:
                     raise Exception("Failed fetching login form.")
                 authz_url = await self._signin(
                     html_resp.get(DATA, None),
-                    username = email,
-                    password = password,
-                    issuer = auth_issuer,
-                    endpoint = auth_endpoint
+                    username=email,
+                    password=password,
+                    issuer=auth_issuer,
+                    endpoint=auth_endpoint
                 )
             else:
                 authz_url = location
@@ -472,10 +473,10 @@ class APIClient(ABC):
         return False
 
     async def skoda_token(
-        self: APIClient,
-        code: str,
-        action: str = CODE,
-        ) -> dict:
+            self: APIClient,
+            code: str,
+            action: str = CODE,
+    ) -> dict:
         """
         Exchange authorization code for JWT tokens.
         Skoda specific Token service.
@@ -500,12 +501,12 @@ class APIClient(ABC):
                     PARAMS: {SYSID: self.system_id}
                 }
             token_resp = await self._request(
-                url = token_url,
-                method = HTTP_POST,
-                headers = {
+                url=token_url,
+                method=HTTP_POST,
+                headers={
                     CONTENT: APP_JSON,
                 },
-                redirect = False,
+                redirect=False,
                 **token_payload
             )
             # Validate response
@@ -523,21 +524,21 @@ class APIClient(ABC):
             # Relevant checks passed, return tokens in dict
             return {
                 ID_TOKEN: tokens.get(ID_TOKEN,
-                    tokens.get(IDTOKEN)),
+                                     tokens.get(IDTOKEN)),
                 ACCESS_TOKEN: tokens.get(ACCESS_TOKEN,
-                    tokens.get(ACCESSTOKEN)),
+                                         tokens.get(ACCESSTOKEN)),
                 REFRESH_TOKEN: tokens.get(REFRESH_TOKEN,
-                    tokens.get(REFRESHTOKEN))
+                                          tokens.get(REFRESHTOKEN))
             }
         except:  # pylint: disable=broad-except, bare-except
             # Return false if failed
             return False
 
     async def model_image(
-        self: APIClient,
-        vin: str,
-        size: str = LARGE
-        ) -> Union(str, None):
+            self: APIClient,
+            vin: str,
+            size: str = LARGE
+    ) -> Union(str, None):
         """
         Get model image url for vehicle.
         Parameters:
@@ -556,7 +557,7 @@ class APIClient(ABC):
                 VIEW: IMAGESIZE[size],
                 DATE: date
             }
-            parameters = urlencode(req_params, safe = ":")
+            parameters = urlencode(req_params, safe=":")
             # Construct message to sign
             msg = MODELAPPID + NEWLINE + MODELAPI
             sign_parts = [msg, parameters]
@@ -565,8 +566,8 @@ class APIClient(ABC):
             # Construct hmac SHA-256 key object and base64 encode the message
             digest = hmac.new(
                 MODELAPIKEY,
-                msg = to_sign.encode(),
-                digestmod = hashlib.sha256
+                msg=to_sign.encode(),
+                digestmod=hashlib.sha256
             ).digest()
             key = b64encode(digest).decode()
 
@@ -576,13 +577,13 @@ class APIClient(ABC):
             base_url = urljoin(MODELURL, MODELAPI)
             req_url = base_url + "?" + urlencode(req_params)
             response = await self._request(
-                url = req_url,
-                redirect = False,
+                url=req_url,
+                redirect=False,
             )
             # Make sure that we got redirect and location for image
             if response.get(LOCATION, False):
                 return response.get(LOCATION).split('?')[0]
-        except: # pylint: disable=bare-except
+        except:  # pylint: disable=bare-except
             pass
         return None
 
