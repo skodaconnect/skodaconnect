@@ -1093,23 +1093,26 @@ class Connection:
                     f'fs-car/bs/tripstatistics/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/tripdata/longTerm?newest'
                 )
             )
+            cyclic = await self.get(
+                urljoin(
+                    self._session_auth_ref_url[vin],
+                    f'fs-car/bs/tripstatistics/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/tripdata/cyclic?newest'
+                )
+            )
             data = {}
-            if short.get('tripData', False) and long.get('tripData', False):
+            if short.get('tripData', False):
                 data['tripstatistics'] = short.get('tripData', {})
-                data['longtermstatistics'] = long.get('tripData', {})
-                return data
-            elif short.get('tripData', False):
-                data['tripstatistics'] = short.get('tripData', {})
-                return data
-            elif long.get('tripData', False):
-                data['longtermstatistics'] = long.get('tripData', {})
-                return data
-            elif short.get('status_code', False):
-                _LOGGER.warning(f'Could not fetch trip statistics, HTTP status code: {short.get("status_code")}')
-            elif long.get('status_code', False):
-                _LOGGER.warning(f'Could not fetch trip statistics, HTTP status code: {long.get("status_code")}')
             else:
-                _LOGGER.info(f'Unhandled error while trying to fetch trip statistics')
+                _LOGGER.warning(f'Could not fetch shortterm trip statistics, HTTP status code: {short.get("status_code", "none")}')
+            if long.get('tripData', False):
+                data['longtermstatistics'] = long.get('tripData', {})
+            else:
+                _LOGGER.warning(f'Could not fetch longterm trip statistics, HTTP status code: {long.get("status_code", "none")}')
+            if cyclic.get('tripData', False):
+                data['cyclicstatistics'] = cyclic.get('tripData', {})
+            else:
+                _LOGGER.warning(f'Could not fetch cyclic trip statistics, HTTP status code: {cyclic.get("status_code", "none")}')
+            return data
         except Exception as error:
             _LOGGER.warning(f'Could not fetch trip statistics, error: {error}')
         return False
