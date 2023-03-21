@@ -22,6 +22,10 @@ BASE_URL = "https://api.connect.skoda-auto.cz/api"
 VEHICLE_URL = "https://api.connect.skoda-auto.cz/api/v2/vehicles" #/{VIN}
 
 CHARGING = "charging"
+CHARGECONFIG = "chargingSettings"
+CHARGEAMPERE = "maxChargeCurrentAc"
+CHARGEUNLOCK = "autoUnlockPlugWhenCharged"
+CHARGETARGET = "targetStateOfChargeInPercent"
 AIRCON = "air-conditioning"
 CAR_STATUS = "vehicle-status"
 POSITION = "position"
@@ -31,3 +35,4 @@ VEHICLES = "vehicles"
 
 START = "start"
 STOP = "stop"
+UPDATE= "UpdateSettings"

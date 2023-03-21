@@ -1,7 +1,9 @@
 
 .eggs/
+.settings/
 build/
 dist/
+env/
 skodaconnect.egg-info/
 __pycache__/
 skoda.conf

@@ -21,7 +21,8 @@ from skodaconnect.api.technical.const import (
     APP_URI, CLIENT, GRANTS, SCOPES, SYSTEM_ID, XAPPNAME, OPREQS,
     BASE_URL, VEHICLES, GARAGE, USERS,
     CHARGING, AIRCON, CAR_STATUS, POSITION,
-    START, STOP
+    START, STOP, UPDATE,
+    CHARGECONFIG, CHARGEAMPERE, CHARGEUNLOCK, CHARGETARGET
 )
 from skodaconnect.helpers.token import decode_token
 from skodaconnect.helpers.html import get_nonce, get_state
@@ -445,7 +446,7 @@ class TechnicalClient(APIClient):
         except Exception as exc: # pylint: disable=broad-except
             return {ERROR: exc}
 
-    async def start_charging(
+    async def charging_start(
         self: APIClient,
         vin: str,
     ) -> str:
@@ -469,7 +470,7 @@ class TechnicalClient(APIClient):
         except Exception as exc: # pylint: disable=broad-except
             return {ERROR: exc}
 
-    async def stop_charging(
+    async def charging_stop(
         self: APIClient,
         vin: str,
     ) -> str:
@@ -493,19 +494,32 @@ class TechnicalClient(APIClient):
         except Exception as exc: # pylint: disable=broad-except
             return {ERROR: exc}
 
-    async def set_charging(
+    async def charging_config(
         self: APIClient,
         vin: str,
+        data: dict
     ) -> str:
         """
         Method to stop charging car.
         Parameters:
             vin: Vehicle VIN number
+            data: the 'chargingSettings' dict
+        Returns:
+            dict with request result
         """
         try:
+            # Validate settings
+            if not CHARGECONFIG in data:
+                raise Exception("Missing settings for set request")
+            else:
+                if not all(setting in data[CHARGECONFIG] for setting in [
+                    CHARGEAMPERE, CHARGETARGET, CHARGEUNLOCK
+                ]):
+                    raise Exception("Missing settings for set request")
             req_payload = {
                 DATA: {
-                    TYPE: STOP.capitalize()
+                    **data,
+                    TYPE: UPDATE
                 },
                 PARAMS: {
                     VIN: vin
