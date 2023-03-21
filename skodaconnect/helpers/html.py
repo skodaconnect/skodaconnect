@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Helper function to parse HTML form data.
+Helper functions to parse HTML form data.
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ import secrets
 import string
 from bs4 import BeautifulSoup
 
+
 def get_nonce() -> str:
     """Returns a 'nonce' string."""
     chars = string.ascii_letters + string.digits
@@ -21,9 +22,11 @@ def get_nonce() -> str:
     sha256.update(text.encode())
     return b64encode(sha256.digest()).decode("utf-8")[:-1]
 
+
 def get_state() -> str:
     """Returns a 'state' string, same as a nonce."""
     return get_nonce()
+
 
 def parse_form(html: str) -> dict:
     """Method to parse HTML form and return input values and action."""
@@ -41,10 +44,10 @@ def parse_form(html: str) -> dict:
         # If form is built by HTML, extract input fields
         if html_form is not None:
             form_data["type"] = "html"
-            for field in html_form.find_all("input", type = "hidden"):
+            for field in html_form.find_all("input", type="hidden"):
                 if form_data.get(field["name"], False):
                     form_data[field["name"]] = form_data[field["name"]] + \
-                        " " + field["value"]
+                                               " " + field["value"]
                 else:
                     form_data[field["name"]] = field["value"]
             action = html_soup.find("form").get("action", None)
