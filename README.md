@@ -19,6 +19,8 @@ This is an API library for Skoda connected cars.
 The library is reverse engineered by intercepting HTTP requests from
 MySkoda app, there is no official API. Use at your own risk.
 If the Skoda API changes, this library may stop working without warning.
+Version 1.x is in maintenance only.
+All feature requests and major changes will be for version 2.0 (under development)
 
 ## Information
 
