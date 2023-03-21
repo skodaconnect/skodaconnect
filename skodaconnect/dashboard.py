@@ -1197,6 +1197,7 @@ def create_instruments():
             name="Odometer",
             icon="mdi:speedometer",
             unit="km",
+            device_class="distance"
         ),
         Sensor(
             attr="battery_level",
@@ -1265,6 +1266,7 @@ def create_instruments():
             name="Charging time left",
             icon="mdi:battery-charging-100",
             unit="h",
+            device_class="duration"
         ),
         Sensor(
             attr="charge_rate",
@@ -1277,18 +1279,21 @@ def create_instruments():
             name="Electric range",
             icon="mdi:car-electric",
             unit="km",
+            device_class="distance"
         ),
         Sensor(
             attr="combustion_range",
             name="Combustion range",
             icon="mdi:car",
             unit="km",
+            device_class="distance"
         ),
         Sensor(
             attr="combined_range",
             name="Combined range",
             icon="mdi:car",
             unit="km",
+            device_class="distance"
         ),
         Sensor(
             attr="charge_max_ampere",
@@ -1309,6 +1314,7 @@ def create_instruments():
             name="Climatisation time left",
             icon="mdi:clock",
             unit="h",
+            device_class="duration"
         ),
         Sensor(
             attr="trip_last_average_speed",
