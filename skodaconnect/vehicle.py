@@ -1538,8 +1538,10 @@ class Vehicle:
             last_connected_utc = self.attrs.get('vehicle_remote', {}).get('capturedAt', None)
             if isinstance(last_connected_utc, datetime):
                 last_connected = last_connected_utc.astimezone().replace(tzinfo=None)
-            else:
+            elif isinstance(last_connected_utc, str):
                 last_connected = datetime.strptime(last_connected_utc,'%Y-%m-%dT%H:%M:%S.%fZ').astimezone().replace(tzinfo=None).replace(microsecond=0)
+            else:
+                return None
         return last_connected.isoformat()
 
     @property
