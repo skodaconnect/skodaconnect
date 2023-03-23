@@ -11,3 +11,4 @@ example/example.py
 /.project
 /.pydevproject
 .vscode/
+.venv/
