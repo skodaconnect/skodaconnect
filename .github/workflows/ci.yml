@@ -2,8 +2,10 @@ name: pre-commit
 
 on:
   pull_request:
+    branches: [2.0-dev]
+    types: [opened, synchronize]
   push:
-    branches: [main, 2.0-dev]
+    branches: [2.0-dev]
 
 jobs:
   pre-commit:
