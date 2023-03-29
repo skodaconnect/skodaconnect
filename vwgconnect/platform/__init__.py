@@ -1,5 +1,5 @@
 """Imports"""
-import vwgconnect.platform.base.client
-import vwgconnect.platform.connect.client
-import vwgconnect.platform.skoda.client
-import vwgconnect.platform.mbb.client
+from .base import APIClient
+from .connect import ConnectClient as Connect
+from .skoda import TechnicalClient as Skoda
+from .mbb import MBBClient as MBB

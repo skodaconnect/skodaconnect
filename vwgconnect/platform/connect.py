@@ -7,8 +7,9 @@ Handles API calls and tokens.
 
 from __future__ import annotations
 from aiohttp import ClientSession
-from vwgconnect.platform.base.client import APIClient
-from vwgconnect.platform.connect.const import (
+
+from vwgconnect.platform.base import APIClient
+from vwgconnect.platform.connectconst import (
     APP_URI,
     CLIENT,
     GRANTS,
@@ -20,9 +21,9 @@ from vwgconnect.platform.connect.const import (
     PERSONAL_DATA,
     CAR_DATA,
 )
-from vwgconnect.helpers.token import decode_token
-from vwgconnect.helpers.html import get_nonce, get_state
-from vwgconnect.strings.globals import (
+from vwgconnect.helper.token import decode_token
+from vwgconnect.helper.html import get_nonce, get_state
+from vwgconnect.string.globals import (
     CONTENT,
     APP_JSON,
     PARAMS,

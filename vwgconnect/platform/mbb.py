@@ -8,9 +8,9 @@ Handles API calls and tokens.
 from __future__ import annotations
 from typing import Union
 from aiohttp import ClientSession
-from vwgconnect.platform.connect.client import ConnectClient
-from vwgconnect.helpers.token import token_valid
-from vwgconnect.platform.mbb.const import (
+from vwgconnect.platform.connect import ConnectClient
+from vwgconnect.helper.token import token_valid
+from vwgconnect.platform.mbbconst import (
     SCOPES,
     XCLIENT,
     MBBOAUTH2,
@@ -43,7 +43,7 @@ from vwgconnect.platform.mbb.const import (
     SETSETTINGS,
     MAXCURRENT,
 )
-from vwgconnect.strings.globals import (
+from vwgconnect.string.globals import (
     DATA,
     TOKEN,
     GRANT_TYPE,

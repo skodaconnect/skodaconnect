@@ -1,8 +1,9 @@
 """TESTING"""
 import asyncio
 import aiohttp
-from vwgconnect.platform.mbb.client import MBBClient
-from vwgconnect.platform.skoda.client import TechnicalClient
+
+from vwgconnect.platform import MBB, Skoda
+from vwgconnect.vehicle import SkodaCar, MBBCar
 
 
 async def main():
@@ -11,7 +12,7 @@ async def main():
     email = ""
     password = ""
     mysess = aiohttp.ClientSession()
-    conn_client = MBBClient(mysess)
+    conn_client = MBB(mysess)
     result1 = await conn_client.auth(email, password)
     if result1:
         print("CONNECT LOGIN SUCCESS!")
@@ -47,7 +48,7 @@ async def main():
     print()
     print(await conn_client.position(vin=vin, base="https://fal-3a.prd.eu.dp.vwg-connect.com"))
     print()
-    tech = TechnicalClient(mysess)
+    tech = Skoda(mysess)
     await tech.auth(email, password)
     print(await tech.model_image(vin=vin, size="large"))
     print()

@@ -15,10 +15,9 @@ from datetime import timedelta, datetime, timezone
 from abc import ABC, abstractmethod
 import asyncio
 from aiohttp import ClientSession, ClientTimeout
-from vwgconnect.helpers.html import parse_form
-from vwgconnect.helpers.token import token_valid, decode_token
-from vwgconnect.platform.base.const import *  # pylint: disable=unused-wildcard-import,wildcard-import
-from vwgconnect.strings.globals import (
+from vwgconnect.helper.html import parse_form
+from vwgconnect.helper.token import token_valid, decode_token
+from vwgconnect.string.globals import (
     ACCESS_TOKEN,
     ID_TOKEN,
     REFRESH_TOKEN,

@@ -6,8 +6,7 @@ import aiohttp
 import os
 
 # from vwgconnect.platform.mbb.client import MBBClient
-from vwgconnect.platform.mbb.client import MBBClient
-from vwgconnect.platform.skoda.client import TechnicalClient
+from vwgconnect.platform import Skoda, MBB
 
 
 async def main():
@@ -27,7 +26,7 @@ async def main():
     For Enyaq both Connect and Technical classes are needed.
     """
     # Create a new API client
-    mbb_client = MBBClient(mysess)
+    mbb_client = MBB(mysess)
 
     mbb_auth_result = await mbb_client.auth(email, password)
     if mbb_auth_result:
@@ -71,7 +70,7 @@ async def main():
     print()
 
     # Create a new API client for the "Technical" API
-    tech_client = TechnicalClient(mysess)
+    tech_client = Skoda(mysess)
     tech_auth_result = await tech_client.auth(email, password)
     if tech_auth_result:
         print("CONNECT LOGIN SUCCESS!")
