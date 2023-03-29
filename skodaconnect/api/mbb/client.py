@@ -11,22 +11,70 @@ from aiohttp import ClientSession
 from skodaconnect.api.connect.client import ConnectClient
 from skodaconnect.helpers.token import token_valid
 from skodaconnect.api.mbb.const import (
-    SCOPES, XCLIENT, MBBOAUTH2,
-    GARAGE_URL, HOME_URL, BASE_URL, OPER_LIST, TRIP_URL, POS_URL,
-    STATUS_URL, TIMER_URL, CLIMATE_URL, CHARGE_URL,
-    AUX_URL, HNF_URL, LOCK_URL,
-    BRAND, COUNTRY, SHORTTERM, LONGTERM, CYCLIC, NEWEST, LIST,
-    XNAME, XVERSION, REQUESTS, JOBSTATUS, APP_LOCKXML, APP_RSJSON,
-    SETSETTINGS, MAXCURRENT
+    SCOPES,
+    XCLIENT,
+    MBBOAUTH2,
+    GARAGE_URL,
+    HOME_URL,
+    BASE_URL,
+    OPER_LIST,
+    TRIP_URL,
+    POS_URL,
+    STATUS_URL,
+    TIMER_URL,
+    CLIMATE_URL,
+    CHARGE_URL,
+    AUX_URL,
+    HNF_URL,
+    LOCK_URL,
+    BRAND,
+    COUNTRY,
+    SHORTTERM,
+    LONGTERM,
+    CYCLIC,
+    NEWEST,
+    LIST,
+    XNAME,
+    XVERSION,
+    REQUESTS,
+    JOBSTATUS,
+    APP_LOCKXML,
+    APP_RSJSON,
+    SETSETTINGS,
+    MAXCURRENT,
 )
 from skodaconnect.strings.globals import (
-    DATA, TOKEN, GRANT_TYPE, SCOPE, ACTIONS,
-    HTTP_GET, HTTP_POST, HTTP_OK, HTTP_THROTTLED, HTTP_ERRORS,
-    STATUS, ERROR, ACTION,
-    ID_TOKEN, ACCESS_TOKEN, REFRESH_TOKEN, XCLIENT_ID,
-    REVOKE, V1, TOKENHINT, BEARER,
-    ACCEPT, APP_JSON, CONTENT, AUTHZ, XAPP_NAME, XAPP_VER,
-    TYPE, SETTINGS, START, STOP
+    DATA,
+    TOKEN,
+    GRANT_TYPE,
+    SCOPE,
+    ACTIONS,
+    HTTP_GET,
+    HTTP_POST,
+    HTTP_OK,
+    HTTP_THROTTLED,
+    HTTP_ERRORS,
+    STATUS,
+    ERROR,
+    ACTION,
+    ID_TOKEN,
+    ACCESS_TOKEN,
+    REFRESH_TOKEN,
+    XCLIENT_ID,
+    REVOKE,
+    V1,
+    TOKENHINT,
+    BEARER,
+    ACCEPT,
+    APP_JSON,
+    CONTENT,
+    AUTHZ,
+    XAPP_NAME,
+    XAPP_VER,
+    TYPE,
+    SETTINGS,
+    START,
+    STOP,
 )
 
 
@@ -40,11 +88,7 @@ class MBBClient(ConnectClient):
         volkswagen.de
     """
 
-    def __init__(
-            self: ConnectClient,
-            http_session: ClientSession,
-            api_debug: bool = False
-    ) -> None:
+    def __init__(self: ConnectClient, http_session: ClientSession, api_debug: bool = False) -> None:
         """
         Initialize API Client 'MBB'.
         Parameters:
@@ -98,11 +142,11 @@ class MBBClient(ConnectClient):
             self._mbb_tokens[REFRESH_TOKEN] = token
 
     async def _mbb_api_call(  # pylint: disable=arguments-differ
-            self: ConnectClient,
-            url: str,
-            method: str = HTTP_GET,
-            headers: str = None,
-            payload: any = None
+        self: ConnectClient,
+        url: str,
+        method: str = HTTP_GET,
+        headers: str = None,
+        payload: any = None,
     ) -> any:
         """
         Applies client specific headers and executes API call.
@@ -121,7 +165,7 @@ class MBBClient(ConnectClient):
             CONTENT: APP_JSON,
             AUTHZ: " ".join(authz_parts),
             XAPP_NAME: XNAME,
-            XAPP_VER: XVERSION
+            XAPP_VER: XVERSION,
         }
         # Merge with headers specified in parameters
         if headers is not None:
@@ -135,12 +179,7 @@ class MBBClient(ConnectClient):
                 headers=req_headers,
             )
         else:
-            return await self._request(
-                url=url,
-                method=method,
-                headers=req_headers,
-                **payload
-            )
+            return await self._request(url=url, method=method, headers=req_headers, **payload)
 
     async def get_mbb_tokens(self: ConnectClient) -> bool:
         """
@@ -155,15 +194,9 @@ class MBBClient(ConnectClient):
             token_resp = await self._request(
                 url=token_url,
                 method=HTTP_POST,
-                headers={
-                    XCLIENT_ID: XCLIENT
-                },
-                data={
-                    TOKEN: self.id_token,
-                    GRANT_TYPE: ID_TOKEN,
-                    SCOPE: SCOPES
-                },
-                redirect=False
+                headers={XCLIENT_ID: XCLIENT},
+                data={TOKEN: self.id_token, GRANT_TYPE: ID_TOKEN, SCOPE: SCOPES},
+                redirect=False,
             )
             if token_resp.get(STATUS) is HTTP_OK:
                 tokens = token_resp.get(DATA, {})
@@ -192,13 +225,7 @@ class MBBClient(ConnectClient):
                 token = self.mbb_access_token
             else:
                 token = self.mbb_refresh_token
-            revoke_resp = await self._request(
-                url=revoke_url,
-                data={
-                    TOKEN: token,
-                    TOKENHINT: typ
-                }
-            )
+            revoke_resp = await self._request(url=revoke_url, data={TOKEN: token, TOKENHINT: typ})
             if revoke_resp.get(STATUS, 0) == HTTP_OK:
                 return True
         except:  # pylint: disable=bare-except
@@ -216,11 +243,7 @@ class MBBClient(ConnectClient):
             token_url = "/".join(url_parts)
             token_resp = await self._request(
                 url=token_url,
-                data={
-                    TOKEN: self.mbb_refresh_token,
-                    GRANT_TYPE: REFRESH_TOKEN,
-                    SCOPE: SCOPES
-                }
+                data={TOKEN: self.mbb_refresh_token, GRANT_TYPE: REFRESH_TOKEN, SCOPE: SCOPES},
             )
             if token_resp.get(STATUS) is HTTP_OK:
                 tokens = token_resp.get(DATA, {})
@@ -249,12 +272,7 @@ class MBBClient(ConnectClient):
     async def garage(self: ConnectClient) -> dict:
         """Return garage information"""
         try:
-            response = await self._mbb_api_call(
-                GARAGE_URL.format(
-                    BRAND=BRAND,
-                    COUNTRY=COUNTRY
-                )
-            )
+            response = await self._mbb_api_call(GARAGE_URL.format(BRAND=BRAND, COUNTRY=COUNTRY))
             if response.get(STATUS, 0) is HTTP_OK:
                 return response.get(DATA, {})
         except Exception as exc:  # pylint: disable=broad-except
@@ -265,78 +283,47 @@ class MBBClient(ConnectClient):
         """Return home region, API base URL, for vehicle."""
         try:
             req_url = HOME_URL.format(VIN=vin)
-            response = await self._mbb_api_call(
-                req_url
-            )
+            response = await self._mbb_api_call(req_url)
             if response.get(STATUS, 0) is HTTP_OK:
                 return response.get(DATA, {})
         except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}
 
-    async def operation_list(
-            self: ConnectClient,
-            vin: str,
-            base: str = BASE_URL
-    ) -> dict:
+    async def operation_list(self: ConnectClient, vin: str, base: str = BASE_URL) -> dict:
         """Get operationlist for VIN, supported/licensed functions."""
         try:
             endpoint = OPER_LIST.format(VIN=vin)
             url_parts = [base, endpoint]
-            response = await self._mbb_api_call(
-                "/".join(url_parts)
-            )
+            response = await self._mbb_api_call("/".join(url_parts))
             if response.get(STATUS, 0) is HTTP_OK:
                 return response.get(DATA, {})
         except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}
 
-    async def position(
-            self: ConnectClient,
-            vin: str,
-            base: str = BASE_URL
-    ) -> dict:
+    async def position(self: ConnectClient, vin: str, base: str = BASE_URL) -> dict:
         """Return dict with vehicle status."""
         try:
-            endpoint = POS_URL.format(
-                BRAND=BRAND,
-                COUNTRY=COUNTRY,
-                VIN=vin
-            )
+            endpoint = POS_URL.format(BRAND=BRAND, COUNTRY=COUNTRY, VIN=vin)
             url_parts = [base, endpoint]
-            response = await self._mbb_api_call(
-                url="/".join(url_parts)
-            )
+            response = await self._mbb_api_call(url="/".join(url_parts))
             if response.get(STATUS, 0) is HTTP_OK:
                 return response.get(DATA, {})
         except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}
 
-    async def status(
-            self: ConnectClient,
-            vin: str,
-            base: str = BASE_URL
-    ) -> dict:
+    async def status(self: ConnectClient, vin: str, base: str = BASE_URL) -> dict:
         """Return dict with vehicle status."""
         try:
-            endpoint = STATUS_URL.format(
-                BRAND=BRAND,
-                COUNTRY=COUNTRY,
-                VIN=vin
-            )
+            endpoint = STATUS_URL.format(BRAND=BRAND, COUNTRY=COUNTRY, VIN=vin)
             url_parts = [base, endpoint, STATUS]
-            response = await self._mbb_api_call(
-                url="/".join(url_parts)
-            )
+            response = await self._mbb_api_call(url="/".join(url_parts))
             if response.get(STATUS, 0) is HTTP_OK:
                 return response.get(DATA, {})
         except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}
 
     async def status_request(
-            self: ConnectClient,
-            vin: str,
-            reqid: str,
-            base: str = BASE_URL
+        self: ConnectClient, vin: str, reqid: str, base: str = BASE_URL
     ) -> dict:
         """
         Return information about vehicle status refresh request.
@@ -346,26 +333,20 @@ class MBBClient(ConnectClient):
             base: home region of vehicle
         """
         try:
-            endpoint = STATUS_URL.format(
-                BRAND=BRAND,
-                COUNTRY=COUNTRY,
-                VIN=vin
-            )
+            endpoint = STATUS_URL.format(BRAND=BRAND, COUNTRY=COUNTRY, VIN=vin)
             url_parts = [base, endpoint, REQUESTS, reqid, JOBSTATUS]
-            response = await self._mbb_api_call(
-                url="/".join(url_parts)
-            )
+            response = await self._mbb_api_call(url="/".join(url_parts))
             if response.get(STATUS, 0) is HTTP_OK:
                 return response.get(DATA, {})
         except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}
 
     async def trip_stats(
-            self: ConnectClient,
-            vin: str,
-            base: str = BASE_URL,
-            period: str = SHORTTERM,
-            typ: str = NEWEST,
+        self: ConnectClient,
+        vin: str,
+        base: str = BASE_URL,
+        period: str = SHORTTERM,
+        typ: str = NEWEST,
     ) -> dict:
         """Return dict with vehicle status."""
         try:
@@ -373,47 +354,28 @@ class MBBClient(ConnectClient):
                 raise Exception("Invalid type for trip statistics")
             if period not in [SHORTTERM, LONGTERM, CYCLIC]:
                 raise Exception("Invalid period for trip statistics")
-            endpoint = TRIP_URL.format(
-                BRAND=BRAND,
-                COUNTRY=COUNTRY,
-                VIN=vin
-            )
+            endpoint = TRIP_URL.format(BRAND=BRAND, COUNTRY=COUNTRY, VIN=vin)
             url_parts = [base, endpoint, period]
             req_url = "/".join(url_parts) + "?" + typ
-            response = await self._mbb_api_call(
-                url=req_url
-            )
+            response = await self._mbb_api_call(url=req_url)
             if response.get(STATUS, 0) is HTTP_OK:
                 return response.get(DATA, {})
         except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}
 
-    async def timers(
-            self: ConnectClient,
-            vin: str,
-            base: str = BASE_URL
-    ) -> dict:
+    async def timers(self: ConnectClient, vin: str, base: str = BASE_URL) -> dict:
         """Return dict with vehicle departure timer settings."""
         try:
-            endpoint = TIMER_URL.format(
-                BRAND=BRAND,
-                COUNTRY=COUNTRY,
-                VIN=vin
-            )
+            endpoint = TIMER_URL.format(BRAND=BRAND, COUNTRY=COUNTRY, VIN=vin)
             url_parts = [base, endpoint]
-            response = await self._mbb_api_call(
-                url="/".join(url_parts)
-            )
+            response = await self._mbb_api_call(url="/".join(url_parts))
             if response.get(STATUS, 0) is HTTP_OK:
                 return response.get(DATA, {})
         except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}
 
     async def timer_request(
-            self: ConnectClient,
-            vin: str,
-            reqid: str,
-            base: str = BASE_URL
+        self: ConnectClient, vin: str, reqid: str, base: str = BASE_URL
     ) -> dict:
         """
         Return information about dparture timer operation request.
@@ -423,46 +385,27 @@ class MBBClient(ConnectClient):
             base: home region of vehicle
         """
         try:
-            endpoint = TIMER_URL.format(
-                BRAND=BRAND,
-                COUNTRY=COUNTRY,
-                VIN=vin
-            )
+            endpoint = TIMER_URL.format(BRAND=BRAND, COUNTRY=COUNTRY, VIN=vin)
             url_parts = [base, endpoint, ACTIONS, reqid]
-            response = await self._mbb_api_call(
-                url="/".join(url_parts)
-            )
+            response = await self._mbb_api_call(url="/".join(url_parts))
             if response.get(STATUS, 0) is HTTP_OK:
                 return response.get(DATA, {})
         except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}
 
-    async def aircon_status(
-            self: ConnectClient,
-            vin: str,
-            base: str = BASE_URL
-    ) -> dict:
+    async def aircon_status(self: ConnectClient, vin: str, base: str = BASE_URL) -> dict:
         """Return dict with vehicle departure timer settings."""
         try:
-            endpoint = CLIMATE_URL.format(
-                BRAND=BRAND,
-                COUNTRY=COUNTRY,
-                VIN=vin
-            )
+            endpoint = CLIMATE_URL.format(BRAND=BRAND, COUNTRY=COUNTRY, VIN=vin)
             url_parts = [base, endpoint]
-            response = await self._mbb_api_call(
-                url="/".join(url_parts)
-            )
+            response = await self._mbb_api_call(url="/".join(url_parts))
             if response.get(STATUS, 0) is HTTP_OK:
                 return response.get(DATA, {})
         except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}
 
     async def aircon_request(
-            self: ConnectClient,
-            vin: str,
-            reqid: str,
-            base: str = BASE_URL
+        self: ConnectClient, vin: str, reqid: str, base: str = BASE_URL
     ) -> dict:
         """
         Return information about climatisation operation request.
@@ -472,46 +415,27 @@ class MBBClient(ConnectClient):
             base: home region of vehicle
         """
         try:
-            endpoint = CLIMATE_URL.format(
-                BRAND=BRAND,
-                COUNTRY=COUNTRY,
-                VIN=vin
-            )
+            endpoint = CLIMATE_URL.format(BRAND=BRAND, COUNTRY=COUNTRY, VIN=vin)
             url_parts = [base, endpoint, ACTIONS, reqid]
-            response = await self._mbb_api_call(
-                url="/".join(url_parts)
-            )
+            response = await self._mbb_api_call(url="/".join(url_parts))
             if response.get(STATUS, 0) is HTTP_OK:
                 return response.get(DATA, {})
         except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}
 
-    async def charging_status(
-            self: ConnectClient,
-            vin: str,
-            base: str = BASE_URL
-    ) -> dict:
+    async def charging_status(self: ConnectClient, vin: str, base: str = BASE_URL) -> dict:
         """Return dict with vehicle departure timer settings."""
         try:
-            endpoint = CHARGE_URL.format(
-                BRAND=BRAND,
-                COUNTRY=COUNTRY,
-                VIN=vin
-            )
+            endpoint = CHARGE_URL.format(BRAND=BRAND, COUNTRY=COUNTRY, VIN=vin)
             url_parts = [base, endpoint]
-            response = await self._mbb_api_call(
-                url="/".join(url_parts)
-            )
+            response = await self._mbb_api_call(url="/".join(url_parts))
             if response.get(STATUS, 0) is HTTP_OK:
                 return response.get(DATA, {})
         except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}
 
     async def charging_request(
-            self: ConnectClient,
-            vin: str,
-            reqid: str,
-            base: str = BASE_URL
+        self: ConnectClient, vin: str, reqid: str, base: str = BASE_URL
     ) -> dict:
         """
         Return information about charging operation request.
@@ -521,46 +445,27 @@ class MBBClient(ConnectClient):
             base: home region of vehicle
         """
         try:
-            endpoint = CHARGE_URL.format(
-                BRAND=BRAND,
-                COUNTRY=COUNTRY,
-                VIN=vin
-            )
+            endpoint = CHARGE_URL.format(BRAND=BRAND, COUNTRY=COUNTRY, VIN=vin)
             url_parts = [base, endpoint, ACTIONS, reqid]
-            response = await self._mbb_api_call(
-                url="/".join(url_parts)
-            )
+            response = await self._mbb_api_call(url="/".join(url_parts))
             if response.get(STATUS, 0) is HTTP_OK:
                 return response.get(DATA, {})
         except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}
 
-    async def aux_heater(
-            self: ConnectClient,
-            vin: str,
-            base: str = BASE_URL
-    ) -> dict:
+    async def aux_heater(self: ConnectClient, vin: str, base: str = BASE_URL) -> dict:
         """Return dict with vehicle departure timer settings."""
         try:
-            endpoint = AUX_URL.format(
-                BRAND=BRAND,
-                COUNTRY=COUNTRY,
-                VIN=vin
-            )
+            endpoint = AUX_URL.format(BRAND=BRAND, COUNTRY=COUNTRY, VIN=vin)
             url_parts = [base, endpoint, STATUS]
-            response = await self._mbb_api_call(
-                url="/".join(url_parts)
-            )
+            response = await self._mbb_api_call(url="/".join(url_parts))
             if response.get(STATUS, 0) is HTTP_OK:
                 return response.get(DATA, {})
         except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}
 
     async def aux_heater_request(
-            self: ConnectClient,
-            vin: str,
-            reqid: str,
-            base: str = BASE_URL
+        self: ConnectClient, vin: str, reqid: str, base: str = BASE_URL
     ) -> dict:
         """
         Return information about charging operation request.
@@ -570,27 +475,16 @@ class MBBClient(ConnectClient):
             base: home region of vehicle
         """
         try:
-            endpoint = AUX_URL.format(
-                BRAND=BRAND,
-                COUNTRY=COUNTRY,
-                VIN=vin
-            )
+            endpoint = AUX_URL.format(BRAND=BRAND, COUNTRY=COUNTRY, VIN=vin)
             url_parts = [base, endpoint, REQUESTS, reqid, STATUS]
-            response = await self._mbb_api_call(
-                url="/".join(url_parts)
-            )
+            response = await self._mbb_api_call(url="/".join(url_parts))
             if response.get(STATUS, 0) is HTTP_OK:
                 return response.get(DATA, {})
         except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}
 
     # Methods for setting vehicle data
-    async def _mbb_set(
-            self: ConnectClient,
-            url: str,
-            payload: dict,
-            headers: dict = None
-    ) -> dict:
+    async def _mbb_set(self: ConnectClient, url: str, payload: dict, headers: dict = None) -> dict:
         """
         Method to POST settings to 'MBB' API.
         Parameters:
@@ -600,10 +494,7 @@ class MBBClient(ConnectClient):
         """
         try:
             response = await self._mbb_api_call(
-                url=url,
-                method=HTTP_POST,
-                headers=headers,
-                **payload
+                url=url, method=HTTP_POST, headers=headers, **payload
             )
             if response.get(STATUS, 0) is HTTP_OK:
                 return response.get(DATA, {})
@@ -613,11 +504,7 @@ class MBBClient(ConnectClient):
             return {ERROR: exc}
 
     async def _set_charger(
-            self: ConnectClient,
-            vin: str,
-            payload: dict,
-            headers: dict = None,
-            base: str = BASE_URL
+        self: ConnectClient, vin: str, payload: dict, headers: dict = None, base: str = BASE_URL
     ) -> str:
         """
         Method to set vehicle charger settings.
@@ -628,11 +515,7 @@ class MBBClient(ConnectClient):
             base: Vehicle home region URL
         """
         try:
-            endpoint = CHARGE_URL.format(
-                BRAND=BRAND,
-                COUNTRY=COUNTRY,
-                VIN=vin
-            )
+            endpoint = CHARGE_URL.format(BRAND=BRAND, COUNTRY=COUNTRY, VIN=vin)
             url_parts = [base, endpoint, ACTIONS]
             return await self._mbb_set(
                 url="/".join(url_parts),
@@ -643,11 +526,7 @@ class MBBClient(ConnectClient):
             return {ERROR: exc}
 
     async def _set_aircon(
-            self: ConnectClient,
-            vin: str,
-            payload: dict,
-            headers: dict = None,
-            base: str = BASE_URL
+        self: ConnectClient, vin: str, payload: dict, headers: dict = None, base: str = BASE_URL
     ) -> str:
         """
         Method to set vehicle charger settings.
@@ -658,11 +537,7 @@ class MBBClient(ConnectClient):
             base: Vehicle home region URL
         """
         try:
-            endpoint = CLIMATE_URL.format(
-                BRAND=BRAND,
-                COUNTRY=COUNTRY,
-                VIN=vin
-            )
+            endpoint = CLIMATE_URL.format(BRAND=BRAND, COUNTRY=COUNTRY, VIN=vin)
             url_parts = [base, endpoint, ACTIONS]
             return await self._mbb_set(
                 url="/".join(url_parts),
@@ -673,11 +548,7 @@ class MBBClient(ConnectClient):
             return {ERROR: exc}
 
     async def _set_timer(
-            self: ConnectClient,
-            vin: str,
-            payload: dict,
-            headers: dict = None,
-            base: str = BASE_URL
+        self: ConnectClient, vin: str, payload: dict, headers: dict = None, base: str = BASE_URL
     ) -> str:
         """
         Method to set vehicle departure schedule settings.
@@ -688,11 +559,7 @@ class MBBClient(ConnectClient):
             base: Vehicle home region URL
         """
         try:
-            endpoint = TIMER_URL.format(
-                BRAND=BRAND,
-                COUNTRY=COUNTRY,
-                VIN=vin
-            )
+            endpoint = TIMER_URL.format(BRAND=BRAND, COUNTRY=COUNTRY, VIN=vin)
             url_parts = [base, endpoint, ACTIONS]
             return await self._mbb_set(
                 url="/".join(url_parts),
@@ -703,11 +570,7 @@ class MBBClient(ConnectClient):
             return {ERROR: exc}
 
     async def _set_honkandflash(
-            self: ConnectClient,
-            vin: str,
-            payload: dict,
-            headers: dict = None,
-            base: str = BASE_URL
+        self: ConnectClient, vin: str, payload: dict, headers: dict = None, base: str = BASE_URL
     ) -> str:
         """
         Method to activate vehicle honk and/or flash.
@@ -718,11 +581,7 @@ class MBBClient(ConnectClient):
             base: Vehicle home region URL
         """
         try:
-            endpoint = HNF_URL.format(
-                BRAND=BRAND,
-                COUNTRY=COUNTRY,
-                VIN=vin
-            )
+            endpoint = HNF_URL.format(BRAND=BRAND, COUNTRY=COUNTRY, VIN=vin)
             url_parts = [base, endpoint]
             return await self._mbb_set(
                 url="/".join(url_parts),
@@ -733,11 +592,7 @@ class MBBClient(ConnectClient):
             return {ERROR: exc}
 
     async def _set_lock(
-            self: ConnectClient,
-            vin: str,
-            payload: dict,
-            headers: dict = None,
-            base: str = BASE_URL
+        self: ConnectClient, vin: str, payload: dict, headers: dict = None, base: str = BASE_URL
     ) -> str:
         """
         Method to lock or unlock vehicle.
@@ -748,15 +603,9 @@ class MBBClient(ConnectClient):
             base: Vehicle home region URL
         """
         try:
-            endpoint = LOCK_URL.format(
-                BRAND=BRAND,
-                COUNTRY=COUNTRY,
-                VIN=vin
-            )
+            endpoint = LOCK_URL.format(BRAND=BRAND, COUNTRY=COUNTRY, VIN=vin)
             req_headers = headers
-            extra_header = {
-                CONTENT: APP_LOCKXML
-            }
+            extra_header = {CONTENT: APP_LOCKXML}
             req_headers.update(extra_header)
             url_parts = [base, endpoint, ACTIONS]
             return await self._mbb_set(
@@ -768,11 +617,7 @@ class MBBClient(ConnectClient):
             return {ERROR: exc}
 
     async def _set_aux_heater(
-            self: ConnectClient,
-            vin: str,
-            payload: dict,
-            headers: dict = None,
-            base: str = BASE_URL
+        self: ConnectClient, vin: str, payload: dict, headers: dict = None, base: str = BASE_URL
     ) -> str:
         """
         Method to start/stop parking heater.
@@ -783,15 +628,9 @@ class MBBClient(ConnectClient):
             base: Vehicle home region URL
         """
         try:
-            endpoint = LOCK_URL.format(
-                BRAND=BRAND,
-                COUNTRY=COUNTRY,
-                VIN=vin
-            )
+            endpoint = LOCK_URL.format(BRAND=BRAND, COUNTRY=COUNTRY, VIN=vin)
             req_headers = headers
-            extra_header = {
-                CONTENT: APP_RSJSON
-            }
+            extra_header = {CONTENT: APP_RSJSON}
             req_headers.update(extra_header)
             url_parts = [base, endpoint, ACTIONS]
             return await self._mbb_set(
@@ -803,11 +642,7 @@ class MBBClient(ConnectClient):
             return {ERROR: exc}
 
     # Vehicle operation methods
-    async def vehicle_refresh(
-            self: ConnectClient,
-            vin: str,
-            base: str = BASE_URL
-    ) -> str:
+    async def vehicle_refresh(self: ConnectClient, vin: str, base: str = BASE_URL) -> str:
         """
         Method to request data refresh from car.
         Parameters:
@@ -815,27 +650,14 @@ class MBBClient(ConnectClient):
             base: Vehicle home region URL
         """
         try:
-            endpoint = LOCK_URL.format(
-                BRAND=BRAND,
-                COUNTRY=COUNTRY,
-                VIN=vin
-            )
-            req_payload = {
-                DATA: None
-            }
+            endpoint = LOCK_URL.format(BRAND=BRAND, COUNTRY=COUNTRY, VIN=vin)
+            req_payload = {DATA: None}
             url_parts = [base, endpoint, REQUESTS]
-            return await self._mbb_set(
-                url="/".join(url_parts),
-                payload=req_payload
-            )
+            return await self._mbb_set(url="/".join(url_parts), payload=req_payload)
         except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}
 
-    async def start_charging(
-            self: ConnectClient,
-            vin: str,
-            base: str = BASE_URL
-    ) -> str:
+    async def start_charging(self: ConnectClient, vin: str, base: str = BASE_URL) -> str:
         """
         Method to start charging car.
         Parameters:
@@ -843,23 +665,12 @@ class MBBClient(ConnectClient):
             base: Vehicle home region URL
         """
         try:
-            req_payload = {
-                DATA: {
-                    ACTION: {TYPE: START}}
-            }
-            return await self._set_charger(
-                vin=vin,
-                payload=req_payload,
-                base=base
-            )
+            req_payload = {DATA: {ACTION: {TYPE: START}}}
+            return await self._set_charger(vin=vin, payload=req_payload, base=base)
         except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}
 
-    async def stop_charging(
-            self: ConnectClient,
-            vin: str,
-            base: str = BASE_URL
-    ) -> str:
+    async def stop_charging(self: ConnectClient, vin: str, base: str = BASE_URL) -> str:
         """
         Method to stop charging car.
         Parameters:
@@ -867,23 +678,13 @@ class MBBClient(ConnectClient):
             base: Vehicle home region URL
         """
         try:
-            req_payload = {
-                DATA: {
-                    ACTION: {TYPE: STOP}}
-            }
-            return await self._set_charger(
-                vin=vin,
-                payload=req_payload,
-                base=base
-            )
+            req_payload = {DATA: {ACTION: {TYPE: STOP}}}
+            return await self._set_charger(vin=vin, payload=req_payload, base=base)
         except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}
 
     async def charge_current(
-            self: ConnectClient,
-            vin: str,
-            value: int,
-            base: str = BASE_URL
+        self: ConnectClient, vin: str, value: int, base: str = BASE_URL
     ) -> str:
         """
         Method to set charger maximum current.
@@ -897,18 +698,7 @@ class MBBClient(ConnectClient):
         try:
             if int(value) not in range(1, 254):
                 raise Exception("Invalid value for charger current")
-            req_payload = {
-                DATA: {
-                    ACTION: {
-                        SETTINGS: {MAXCURRENT: int(value)},
-                        TYPE: SETSETTINGS
-                    }
-                }
-            }
-            return await self._set_charger(
-                vin=vin,
-                payload=req_payload,
-                base=base
-            )
+            req_payload = {DATA: {ACTION: {SETTINGS: {MAXCURRENT: int(value)}, TYPE: SETSETTINGS}}}
+            return await self._set_charger(vin=vin, payload=req_payload, base=base)
         except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}

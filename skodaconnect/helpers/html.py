@@ -17,7 +17,7 @@ from bs4 import BeautifulSoup
 def get_nonce() -> str:
     """Returns a 'nonce' string."""
     chars = string.ascii_letters + string.digits
-    text = ''.join(secrets.choice(chars) for i in range(10))
+    text = "".join(secrets.choice(chars) for i in range(10))
     sha256 = hashlib.sha256()
     sha256.update(text.encode())
     return b64encode(sha256.digest()).decode("utf-8")[:-1]
@@ -46,8 +46,7 @@ def parse_form(html: str) -> dict:
             form_data["type"] = "html"
             for field in html_form.find_all("input", type="hidden"):
                 if form_data.get(field["name"], False):
-                    form_data[field["name"]] = form_data[field["name"]] + \
-                                               " " + field["value"]
+                    form_data[field["name"]] = form_data[field["name"]] + " " + field["value"]
                 else:
                     form_data[field["name"]] = field["value"]
             action = html_soup.find("form").get("action", None)
@@ -64,7 +63,7 @@ def parse_form(html: str) -> dict:
                     data = pattern.search(script.string)
                     form_data = json.loads(data.groups()[0])
         else:
-            raise Exception('Failed to extract login form data')
+            raise Exception("Failed to extract login form data")
         return form_data
     except Exception as exc:
         return {"error": str(exc)}

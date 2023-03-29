@@ -19,22 +19,75 @@ from skodaconnect.helpers.html import parse_form
 from skodaconnect.helpers.token import token_valid, decode_token
 from skodaconnect.api.base.const import *  # pylint: disable=unused-wildcard-import,wildcard-import
 from skodaconnect.strings.globals import (
-    ACCESS_TOKEN, ID_TOKEN, REFRESH_TOKEN, REVOKE, REFRESH,
-    ACCESSTOKEN, IDTOKEN, REFRESHTOKEN, AUTHZ_CODE,
-    AUTHZ_ENDPOINT, CODE, ISSUER, SYSID, SUBJECT,
-    CONSENT, CONSENT_SCOPES,
-    HTTP_GET, HTTP_POST, HTTP_OK, HTTP_EMPTY,
-    HTTP_MOVED, HTTP_REDIR, HTTP_OTHER,
-    STATUS, DATA, JSON, PARAMS,
-    LOCATION, URL, CONTENT, REFERER, ORIGIN,
-    APP_JSON, TYPE, HTML, ACTION, JS,
-    EMAIL, PASSWORD, APP_FORM, POST_ACTION, XREQ_WITH,
+    ACCESS_TOKEN,
+    ID_TOKEN,
+    REFRESH_TOKEN,
+    REVOKE,
+    REFRESH,
+    ACCESSTOKEN,
+    IDTOKEN,
+    REFRESHTOKEN,
+    AUTHZ_CODE,
+    AUTHZ_ENDPOINT,
+    CODE,
+    ISSUER,
+    SYSID,
+    SUBJECT,
+    CONSENT,
+    CONSENT_SCOPES,
+    HTTP_GET,
+    HTTP_POST,
+    HTTP_OK,
+    HTTP_EMPTY,
+    HTTP_MOVED,
+    HTTP_REDIR,
+    HTTP_OTHER,
+    STATUS,
+    DATA,
+    JSON,
+    PARAMS,
+    LOCATION,
+    URL,
+    CONTENT,
+    REFERER,
+    ORIGIN,
+    APP_JSON,
+    TYPE,
+    HTML,
+    ACTION,
+    JS,
+    EMAIL,
+    PASSWORD,
+    APP_FORM,
+    POST_ACTION,
+    XREQ_WITH,
     TIMEOUT,
-    OPENID_URL, SKODA_TOKEN, VIN,
-    REGISTER, TERMS, HMAC, CRED_PATH, SIGNIN_SERVICE, SSO, V1,
-    ERROR, ERROR_DESC, ERRORS, ERROR_DEFAULT,
-    MODELAPI, MODELURL, MODELAPPID, MODELAPIKEY,
-    SMALL, LARGE, IMAGESIZE, VIEW, DATE, SIGN, APPID, NEWLINE
+    OPENID_URL,
+    SKODA_TOKEN,
+    VIN,
+    REGISTER,
+    TERMS,
+    HMAC,
+    CRED_PATH,
+    SIGNIN_SERVICE,
+    SSO,
+    V1,
+    ERROR,
+    ERROR_DESC,
+    ERRORS,
+    ERROR_DEFAULT,
+    MODELAPI,
+    MODELURL,
+    MODELAPPID,
+    MODELAPIKEY,
+    SMALL,
+    LARGE,
+    IMAGESIZE,
+    VIEW,
+    DATE,
+    SIGN,
+    APPID,
+    NEWLINE,
 )
 
 
@@ -42,10 +95,10 @@ class APIClient(ABC):
     """Base class for API interactions."""
 
     def __init__(
-            self: APIClient,
-            http_session: ClientSession,
-            cookies: any = "",
-            api_debug: bool = False,
+        self: APIClient,
+        http_session: ClientSession,
+        cookies: any = "",
+        api_debug: bool = False,
     ) -> None:
         """
         Init API Client
@@ -142,12 +195,12 @@ class APIClient(ABC):
 
     # Inherited methods, same for all children
     async def _request(
-            self: APIClient,
-            url: str,
-            headers: Optional[dict] = None,
-            method: str = HTTP_GET,
-            redirect: bool = True,
-            **payload: dict,
+        self: APIClient,
+        url: str,
+        headers: Optional[dict] = None,
+        method: str = HTTP_GET,
+        redirect: bool = True,
+        **payload: dict,
     ) -> dict:
         """
         API GET HTTP call.
@@ -167,23 +220,17 @@ class APIClient(ABC):
                 location:   HTTP location header if exists
                 url:    HTTP URL
         """
-        data = {
-            STATUS: 0,
-            DATA: None,
-            LOCATION: None,
-            URL: None
-        }
+        data = {STATUS: 0, DATA: None, LOCATION: None, URL: None}
         try:
             async with self._session.request(
-                    method=method,
-                    url=url,
-                    headers=headers,
-                    timeout=ClientTimeout(total=
-                                          timedelta(seconds=TIMEOUT).seconds),
-                    #                cookies = self._session_cookies,
-                    allow_redirects=redirect,
-                    raise_for_status=False,
-                    **payload
+                method=method,
+                url=url,
+                headers=headers,
+                timeout=ClientTimeout(total=timedelta(seconds=TIMEOUT).seconds),
+                #                cookies = self._session_cookies,
+                allow_redirects=redirect,
+                raise_for_status=False,
+                **payload,
             ) as response:
                 response.raise_for_status()
                 data[STATUS] = response.status
@@ -204,9 +251,7 @@ class APIClient(ABC):
         """Fetch OpenID Configuration. Return dict with config."""
         try:
             # Fetch OpenID configuration
-            oid_resp = await self._request(
-                url=OPENID_URL
-            )
+            oid_resp = await self._request(url=OPENID_URL)
             if oid_resp.get(STATUS) is HTTP_OK:
                 return oid_resp.get(DATA, None)
         except Exception:  # pylint: disable=broad-except
@@ -214,12 +259,7 @@ class APIClient(ABC):
         return False
 
     async def _signin(
-            self: APIClient,
-            html: str,
-            username: str,
-            password: str,
-            issuer: str,
-            endpoint: str
+        self: APIClient, html: str, username: str, password: str, issuer: str, endpoint: str
     ) -> Union(str, bool):
         """
         POST login credentials to signin form. Return authz redirect URL.
@@ -239,7 +279,7 @@ class APIClient(ABC):
             if form_data.get(TYPE, None) is not HTML:
                 raise Exception("Expected HTML data for login form!")
             if form_data.get(ACTION, None) is None:
-                raise Exception('Could not extract login URL.')
+                raise Exception("Could not extract login URL.")
 
             # Populate login form data
             form_data[EMAIL] = username
@@ -257,10 +297,10 @@ class APIClient(ABC):
                     CONTENT: APP_FORM,
                     XREQ_WITH: self.app_name,
                     REFERER: endpoint,
-                    ORIGIN: issuer
+                    ORIGIN: issuer,
                 },
                 method=HTTP_POST,
-                data=form_data
+                data=form_data,
             )
             url = email_resp.get(URL, "")
             if email_resp.get(STATUS, 0) is not HTTP_OK:
@@ -300,13 +340,7 @@ class APIClient(ABC):
         try:
             pw_post = issuer + pw_action
             if not SIGNIN_SERVICE in pw_post or not self.client_id in pw_post:
-                parts = [
-                    issuer,
-                    SIGNIN_SERVICE,
-                    V1,
-                    self.client_id,
-                    pw_action
-                ]
+                parts = [issuer, SIGNIN_SERVICE, V1, self.client_id, pw_action]
                 pw_post = "/".join(parts)
 
             pw_resp = await self._request(
@@ -315,11 +349,11 @@ class APIClient(ABC):
                     CONTENT: APP_FORM,
                     XREQ_WITH: self.app_name,
                     REFERER: post_url,
-                    ORIGIN: issuer
+                    ORIGIN: issuer,
                 },
                 method=HTTP_POST,
                 data=form_data,
-                redirect=False
+                redirect=False,
             )
             location = pw_resp.get(LOCATION, "")
             if SSO not in location:
@@ -341,25 +375,22 @@ class APIClient(ABC):
             while not redirect_url.startswith(self.redirect_uri):
                 # Validate URL first so there's no errors
                 if redirect_url is None:
-                    raise Exception('Login failed')
+                    raise Exception("Login failed")
                 if ERROR in redirect_url:
-                    error = parse_qs(
-                        urlparse(redirect_url).query).get(ERROR, ''
-                                                          )[0]
+                    error = parse_qs(urlparse(redirect_url).query).get(ERROR, "")[0]
                     raise Exception(ERRORS.get(error, ERROR_DEFAULT))
                 if TERMS in redirect_url:
                     raise Exception("Accept EULA in MySkoda app on Android.")
 
                 # Follow next redirect and error check response
-                response = await self._request(
-                    url=redirect_url,
-                    redirect=False
-                )
+                response = await self._request(url=redirect_url, redirect=False)
                 if not response.get(LOCATION, False):
                     if CONSENT in redirect_url:
                         form = await parse_form(response.get(DATA, ""))
-                        raise Exception(f"Missing consent for scopes: \
-                            {form.get(CONSENT_SCOPES, '')}")
+                        raise Exception(
+                            f"Missing consent for scopes: \
+                            {form.get(CONSENT_SCOPES, '')}"
+                        )
                     raise Exception(f"Unhandled error at {redirect_url}")
                 redirect_url = response.get(LOCATION, None)
 
@@ -412,13 +443,9 @@ class APIClient(ABC):
             # Parse if there's an error in response
             if ERROR in location:
                 if ERROR_DESC in location:
-                    error = parse_qs(
-                        urlparse(location).query
-                    ).get(ERROR_DESC, None)[0]
+                    error = parse_qs(urlparse(location).query).get(ERROR_DESC, None)[0]
                 else:
-                    error = parse_qs(
-                        urlparse(location).query
-                    ).get(ERROR, None)[0]
+                    error = parse_qs(urlparse(location).query).get(ERROR, None)[0]
                 raise Exception(f"Could not login: '{error}'")
         except Exception as exc:
             raise Exception("Unable to login") from exc
@@ -428,9 +455,7 @@ class APIClient(ABC):
             if SIGNIN_SERVICE in location:
                 # Follow first redirect to get HTML data
                 html_resp = await self._request(
-                    url=location,
-                    headers=self.auth_headers,
-                    redirect=False
+                    url=location, headers=self.auth_headers, redirect=False
                 )
                 if html_resp.get(STATUS, 0) is not HTTP_OK:
                     raise Exception("Failed fetching login form.")
@@ -439,7 +464,7 @@ class APIClient(ABC):
                     username=email,
                     password=password,
                     issuer=auth_issuer,
-                    endpoint=auth_endpoint
+                    endpoint=auth_endpoint,
                 )
             else:
                 authz_url = location
@@ -447,7 +472,7 @@ class APIClient(ABC):
             raise Exception("Signin failed") from exc
 
         # Expect our url at this point to be towards /oidc/v1/oauth/sso...
-        if not 'oauth/sso' in authz_url:
+        if not "oauth/sso" in authz_url:
             raise Exception("Unexpected redirect, authorization failed,")
 
         # We are already logged on, shorter authorization flow
@@ -473,9 +498,9 @@ class APIClient(ABC):
         return False
 
     async def skoda_token(
-            self: APIClient,
-            code: str,
-            action: str = CODE,
+        self: APIClient,
+        code: str,
+        action: str = CODE,
     ) -> dict:
         """
         Exchange authorization code for JWT tokens.
@@ -490,16 +515,10 @@ class APIClient(ABC):
             if action in [REVOKE, REFRESH]:
                 parts = [SKODA_TOKEN, action]
                 token_url = "/".join(parts)
-                token_payload = {
-                    JSON: {REFRESHTOKEN: code},
-                    PARAMS: {SYSID: self.system_id}
-                }
+                token_payload = {JSON: {REFRESHTOKEN: code}, PARAMS: {SYSID: self.system_id}}
             else:
                 token_url = SKODA_TOKEN
-                token_payload = {
-                    JSON: {AUTHZ_CODE: code},
-                    PARAMS: {SYSID: self.system_id}
-                }
+                token_payload = {JSON: {AUTHZ_CODE: code}, PARAMS: {SYSID: self.system_id}}
             token_resp = await self._request(
                 url=token_url,
                 method=HTTP_POST,
@@ -507,7 +526,7 @@ class APIClient(ABC):
                     CONTENT: APP_JSON,
                 },
                 redirect=False,
-                **token_payload
+                **token_payload,
             )
             # Validate response
             if token_resp.get(STATUS) not in [HTTP_OK, HTTP_EMPTY]:
@@ -517,28 +536,19 @@ class APIClient(ABC):
                 return True
             tokens = token_resp.get(DATA)
             # Check that all tokens are received, else throw exception
-            if not all(token in tokens for token in [
-                IDTOKEN, ACCESSTOKEN, REFRESHTOKEN
-            ]):
+            if not all(token in tokens for token in [IDTOKEN, ACCESSTOKEN, REFRESHTOKEN]):
                 raise Exception("Missing token in response.")
             # Relevant checks passed, return tokens in dict
             return {
-                ID_TOKEN: tokens.get(ID_TOKEN,
-                                     tokens.get(IDTOKEN)),
-                ACCESS_TOKEN: tokens.get(ACCESS_TOKEN,
-                                         tokens.get(ACCESSTOKEN)),
-                REFRESH_TOKEN: tokens.get(REFRESH_TOKEN,
-                                          tokens.get(REFRESHTOKEN))
+                ID_TOKEN: tokens.get(ID_TOKEN, tokens.get(IDTOKEN)),
+                ACCESS_TOKEN: tokens.get(ACCESS_TOKEN, tokens.get(ACCESSTOKEN)),
+                REFRESH_TOKEN: tokens.get(REFRESH_TOKEN, tokens.get(REFRESHTOKEN)),
             }
         except:  # pylint: disable=broad-except, bare-except
             # Return false if failed
             return False
 
-    async def model_image(
-            self: APIClient,
-            vin: str,
-            size: str = LARGE
-    ) -> Union(str, None):
+    async def model_image(self: APIClient, vin: str, size: str = LARGE) -> Union(str, None):
         """
         Get model image url for vehicle.
         Parameters:
@@ -552,11 +562,7 @@ class APIClient(ABC):
                 raise Exception("Incorrect model image size")
 
             # Prepare request parameters
-            req_params = {
-                VIN: vin,
-                VIEW: IMAGESIZE[size],
-                DATE: date
-            }
+            req_params = {VIN: vin, VIEW: IMAGESIZE[size], DATE: date}
             parameters = urlencode(req_params, safe=":")
             # Construct message to sign
             msg = MODELAPPID + NEWLINE + MODELAPI
@@ -564,11 +570,7 @@ class APIClient(ABC):
             to_sign = "?".join(sign_parts)
 
             # Construct hmac SHA-256 key object and base64 encode the message
-            digest = hmac.new(
-                MODELAPIKEY,
-                msg=to_sign.encode(),
-                digestmod=hashlib.sha256
-            ).digest()
+            digest = hmac.new(MODELAPIKEY, msg=to_sign.encode(), digestmod=hashlib.sha256).digest()
             key = b64encode(digest).decode()
 
             # Add signing key and app id to parameters and POST data
@@ -582,7 +584,7 @@ class APIClient(ABC):
             )
             # Make sure that we got redirect and location for image
             if response.get(LOCATION, False):
-                return response.get(LOCATION).split('?')[0]
+                return response.get(LOCATION).split("?")[0]
         except:  # pylint: disable=bare-except
             pass
         return None

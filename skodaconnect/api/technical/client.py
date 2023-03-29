@@ -9,23 +9,68 @@ from __future__ import annotations
 from aiohttp import ClientSession
 from skodaconnect.api.base.client import APIClient
 from skodaconnect.strings.globals import (
-    PARAMS, IDENTITIES, SETTINGS, TIMERS, PARK_POS, MODE,
-    NONCE, STATE, REDIR_URI, RES_TYPE, CLIENT_ID, SCOPE,
-    REFRESH, REVOKE, SUBJECT,
-    ID_TOKEN, ACCESS_TOKEN, REFRESH_TOKEN, TOKENTYPE,
-    ERROR, STATUS, DATA, HTTP_OK, HTTP_GET, HTTP_POST,
-    XREQ_WITH, BEARER, CONTENT, APP_JSON, AUTHZ,
-    V1, V3, VIN, TYPE
+    PARAMS,
+    IDENTITIES,
+    SETTINGS,
+    TIMERS,
+    PARK_POS,
+    MODE,
+    NONCE,
+    STATE,
+    REDIR_URI,
+    RES_TYPE,
+    CLIENT_ID,
+    SCOPE,
+    REFRESH,
+    REVOKE,
+    SUBJECT,
+    ID_TOKEN,
+    ACCESS_TOKEN,
+    REFRESH_TOKEN,
+    TOKENTYPE,
+    ERROR,
+    STATUS,
+    DATA,
+    HTTP_OK,
+    HTTP_GET,
+    HTTP_POST,
+    XREQ_WITH,
+    BEARER,
+    CONTENT,
+    APP_JSON,
+    AUTHZ,
+    V1,
+    V3,
+    VIN,
+    TYPE,
 )
 from skodaconnect.api.technical.const import (
-    APP_URI, CLIENT, GRANTS, SCOPES, SYSTEM_ID, XAPPNAME, OPREQS,
-    BASE_URL, VEHICLES, GARAGE, USERS,
-    CHARGING, AIRCON, CAR_STATUS, POSITION,
-    START, STOP, UPDATE,
-    CHARGECONFIG, CHARGEAMPERE, CHARGEUNLOCK, CHARGETARGET
+    APP_URI,
+    CLIENT,
+    GRANTS,
+    SCOPES,
+    SYSTEM_ID,
+    XAPPNAME,
+    OPREQS,
+    BASE_URL,
+    VEHICLES,
+    GARAGE,
+    USERS,
+    CHARGING,
+    AIRCON,
+    CAR_STATUS,
+    POSITION,
+    START,
+    STOP,
+    UPDATE,
+    CHARGECONFIG,
+    CHARGEAMPERE,
+    CHARGEUNLOCK,
+    CHARGETARGET,
 )
 from skodaconnect.helpers.token import decode_token
 from skodaconnect.helpers.html import get_nonce, get_state
+
 
 class TechnicalClient(APIClient):
     """
@@ -35,11 +80,7 @@ class TechnicalClient(APIClient):
         api.connect.skoda-auto.cz.
     """
 
-    def __init__(
-        self: APIClient,
-        http_session: ClientSession,
-        api_debug: bool = False
-    ) -> None:
+    def __init__(self: APIClient, http_session: ClientSession, api_debug: bool = False) -> None:
         """Initialize API Client 'Technical'."""
         super().__init__(http_session, api_debug)
         # Set Client specifics
@@ -57,7 +98,7 @@ class TechnicalClient(APIClient):
                 STATE: get_state(),
                 RES_TYPE: self.response_type,
                 CLIENT_ID: self.client_id,
-                SCOPE: self.scope
+                SCOPE: self.scope,
             }
         }
         # Set headers to send with authz request
@@ -65,40 +106,27 @@ class TechnicalClient(APIClient):
             XREQ_WITH: self.app_name,
         }
 
-    async def _api_call( # pylint: disable=arguments-differ
-        self: APIClient,
-        url: str,
-        method: str = HTTP_GET,
-        headers: str = None,
-        payload: any = None
+    async def _api_call(  # pylint: disable=arguments-differ
+        self: APIClient, url: str, method: str = HTTP_GET, headers: str = None, payload: any = None
     ) -> any:
         """Execute API call with common settings."""
         # Set token type for request
         sysid = "IDK_" + self.system_id
         # Set Authorization bearer
         authz_parts = [BEARER, self.access_token]
-        req_headers =  {
-            CONTENT: APP_JSON,
-            AUTHZ: " ".join(authz_parts),
-            TOKENTYPE: sysid
-        }
+        req_headers = {CONTENT: APP_JSON, AUTHZ: " ".join(authz_parts), TOKENTYPE: sysid}
         # Update with headers specified in parameters
         if headers is not None:
             req_headers.update(headers)
 
         if payload is None:
             return await self._request(
-                url = url,
-                method = method,
-                headers = req_headers,
+                url=url,
+                method=method,
+                headers=req_headers,
             )
         else:
-            return await self._request(
-                url = url,
-                method = method,
-                headers = req_headers,
-                **payload
-            )
+            return await self._request(url=url, method=method, headers=req_headers, **payload)
 
     async def _exchange_code(self: APIClient, code: str) -> dict:
         """
@@ -109,28 +137,28 @@ class TechnicalClient(APIClient):
             dict with tokens
         """
         try:
-            tokens = await self.skoda_token(code = code)
+            tokens = await self.skoda_token(code=code)
             return tokens
         except:  # pylint: disable=broad-except, bare-except
             # Return empty dict if unable to parse received tokens
             return {ERROR: "No tokens"}
 
-    async def _revoke_token(self: APIClient) -> bool: # pylint: disable=arguments-differ
+    async def _revoke_token(self: APIClient) -> bool:  # pylint: disable=arguments-differ
         """Revoke JWT (refresh) token."""
         try:
             return await self.skoda_token(
-                code = self.refresh_token,
-                action = REVOKE,
+                code=self.refresh_token,
+                action=REVOKE,
             )
         except:  # pylint: disable=broad-except, bare-except
             return False
 
-    async def refresh_tokens(self: APIClient) -> bool: # pylint: disable=arguments-differ
+    async def refresh_tokens(self: APIClient) -> bool:  # pylint: disable=arguments-differ
         """Refresh JWT tokens."""
         try:
-            tokens =  await self.skoda_token(
-                code = self.refresh_token,
-                action = REFRESH,
+            tokens = await self.skoda_token(
+                code=self.refresh_token,
+                action=REFRESH,
             )
             # Validate response
             if tokens is False or isinstance(tokens, dict) is False:
@@ -143,14 +171,11 @@ class TechnicalClient(APIClient):
                 self.access_token = tokens.get(ACCESS_TOKEN)
                 self.refresh_token = tokens.get(REFRESH_TOKEN)
                 return True
-        except: # pylint: disable=bare-except
+        except:  # pylint: disable=bare-except
             return False
 
-    async def request_status( # pylint: disable=arguments-differ
-        self:       APIClient,
-        vin:        str,
-        section:    str,
-        req_id:     int
+    async def request_status(  # pylint: disable=arguments-differ
+        self: APIClient, vin: str, section: str, req_id: int
     ) -> str:
         """
         Fetch status of ongoing request.
@@ -161,7 +186,7 @@ class TechnicalClient(APIClient):
         Returns status text string
         """
 
-# API endpoints
+    # API endpoints
     # Methods for fetching user data
     async def identities(self: APIClient) -> dict:
         """Return user identity information"""
@@ -172,24 +197,20 @@ class TechnicalClient(APIClient):
             # Construct URL with user id between the other URL parts
             url_parts = [BASE_URL, V1, USERS, subject, IDENTITIES]
             req_url = "/".join(url_parts)
-            response = await self._api_call(
-                url = req_url
-            )
+            response = await self._api_call(url=req_url)
             if response.get(STATUS, 0) is HTTP_OK:
                 return response.get(DATA, {})
-        except Exception as exc: # pylint: disable=broad-except
+        except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}
 
     async def garage(self: APIClient) -> dict:
         """Return garage information"""
         try:
             url_parts = [BASE_URL, V3, GARAGE]
-            response = await self._api_call(
-                "/".join(url_parts)
-            )
+            response = await self._api_call("/".join(url_parts))
             if response.get(STATUS, 0) is HTTP_OK:
                 return response.get(DATA, {})
-        except Exception as exc: # pylint: disable=broad-except
+        except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}
 
     # Methods for fetching vehicle data
@@ -204,12 +225,12 @@ class TechnicalClient(APIClient):
         try:
             url_parts = [BASE_URL, V3, GARAGE, VEHICLES, vin]
             req_url = "/".join(url_parts)
-            response = await self._request(url = req_url)
+            response = await self._request(url=req_url)
             if response.get(STATUS, 0) is HTTP_OK:
                 return response.get(DATA, {})
             elif response.get(ERROR, False):
                 return response
-        except Exception as exc: # pylint: disable=broad-except
+        except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}
 
     async def position(self: APIClient, vin: str) -> dict:
@@ -223,10 +244,10 @@ class TechnicalClient(APIClient):
         try:
             url_parts = [BASE_URL, V1, POSITION, VEHICLES, vin, PARK_POS]
             req_url = "/".join(url_parts)
-            response = await self._api_call(url = req_url)
+            response = await self._api_call(url=req_url)
             if response.get(STATUS, 0) is HTTP_OK:
                 return response.get(DATA, {})
-        except Exception as exc: # pylint: disable=broad-except
+        except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}
 
     async def status(self: APIClient, vin: str) -> dict:
@@ -238,13 +259,12 @@ class TechnicalClient(APIClient):
             dict: status data
         """
         try:
-
             url_parts = [BASE_URL, V1, CAR_STATUS, vin]
             req_url = "/".join(url_parts)
-            response = await self._api_call(url = req_url)
+            response = await self._api_call(url=req_url)
             if response.get(STATUS, 0) is HTTP_OK:
                 return response.get(DATA, {})
-        except Exception as exc: # pylint: disable=broad-except
+        except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}
 
     async def _get_charging(self: APIClient, idx: str, typ: str = STATUS) -> dict:
@@ -265,10 +285,10 @@ class TechnicalClient(APIClient):
             else:
                 url_parts = [BASE_URL, V1, CHARGING, idx, typ]
             req_url = "/".join(url_parts)
-            response = await self._api_call(url = req_url)
+            response = await self._api_call(url=req_url)
             if response.get(STATUS, 0) is HTTP_OK:
                 return response.get(DATA, {})
-        except Exception as exc: # pylint: disable=broad-except
+        except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}
 
     async def charging_mode(self: APIClient, vin: str) -> dict:
@@ -281,7 +301,7 @@ class TechnicalClient(APIClient):
         """
         try:
             return await self._get_charging(vin, MODE)
-        except Exception as exc: # pylint: disable=broad-except
+        except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}
 
     async def charging_status(self: APIClient, vin: str) -> dict:
@@ -294,7 +314,7 @@ class TechnicalClient(APIClient):
         """
         try:
             return await self._get_charging(vin, STATUS)
-        except Exception as exc: # pylint: disable=broad-except
+        except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}
 
     async def charging_settings(self: APIClient, vin: str) -> dict:
@@ -307,7 +327,7 @@ class TechnicalClient(APIClient):
         """
         try:
             return await self._get_charging(vin, SETTINGS)
-        except Exception as exc: # pylint: disable=broad-except
+        except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}
 
     async def charging_request(self: APIClient, req_id: str) -> dict:
@@ -320,7 +340,7 @@ class TechnicalClient(APIClient):
         """
         try:
             return await self._get_charging(req_id, OPREQS)
-        except Exception as exc: # pylint: disable=broad-except
+        except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}
 
     async def _get_aircon(self: APIClient, idx: str, typ: str = STATUS) -> dict:
@@ -340,10 +360,10 @@ class TechnicalClient(APIClient):
             else:
                 url_parts = [BASE_URL, V1, AIRCON, idx, typ]
             req_url = "/".join(url_parts)
-            response = await self._api_call(url = req_url)
+            response = await self._api_call(url=req_url)
             if response.get(STATUS, 0) is HTTP_OK:
                 return response.get(DATA, {})
-        except Exception as exc: # pylint: disable=broad-except
+        except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}
 
     async def aircon_status(self: APIClient, vin: str) -> dict:
@@ -356,7 +376,7 @@ class TechnicalClient(APIClient):
         """
         try:
             return await self._get_aircon(vin, STATUS)
-        except Exception as exc: # pylint: disable=broad-except
+        except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}
 
     async def aircon_settings(self: APIClient, vin: str) -> dict:
@@ -369,7 +389,7 @@ class TechnicalClient(APIClient):
         """
         try:
             return await self._get_aircon(vin, SETTINGS)
-        except Exception as exc: # pylint: disable=broad-except
+        except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}
 
     async def aircon_timers(self: APIClient, vin: str) -> dict:
@@ -382,7 +402,7 @@ class TechnicalClient(APIClient):
         """
         try:
             return await self._get_aircon(vin, TIMERS)
-        except Exception as exc: # pylint: disable=broad-except
+        except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}
 
     async def aircon_request(self: APIClient, req_id: str) -> dict:
@@ -395,16 +415,11 @@ class TechnicalClient(APIClient):
         """
         try:
             return await self._get_aircon(req_id, OPREQS)
-        except Exception as exc: # pylint: disable=broad-except
+        except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}
 
     # Methods for setting vehicle data
-    async def _set(
-        self: APIClient,
-        url: str,
-        payload: dict,
-        headers: dict = None
-    ) -> dict:
+    async def _set(self: APIClient, url: str, payload: dict, headers: dict = None) -> dict:
         """
         Method to POST settings to API.
         Parameters:
@@ -413,15 +428,10 @@ class TechnicalClient(APIClient):
             payload: Json/Parameters/Data to POST
         """
         try:
-            response = await self._api_call(
-                url = url,
-                method = HTTP_POST,
-                headers = headers,
-                **payload
-            )
+            response = await self._api_call(url=url, method=HTTP_POST, headers=headers, **payload)
             if response.get(STATUS, 0) is HTTP_OK:
                 return response.get(DATA, {})
-        except Exception as exc: # pylint: disable=broad-except
+        except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}
 
     async def _set_charger(
@@ -439,11 +449,11 @@ class TechnicalClient(APIClient):
         try:
             url_parts = [BASE_URL, V1, CHARGING, OPREQS]
             return await self._set(
-                url = "/".join(url_parts),
-                payload = payload,
-                headers = headers,
+                url="/".join(url_parts),
+                payload=payload,
+                headers=headers,
             )
-        except Exception as exc: # pylint: disable=broad-except
+        except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}
 
     async def charging_start(
@@ -456,18 +466,9 @@ class TechnicalClient(APIClient):
             vin: Vehicle VIN number
         """
         try:
-            req_payload = {
-                DATA: {
-                    TYPE: START.capitalize()
-                },
-                PARAMS: {
-                    VIN: vin
-                }
-            }
-            return await self._set_charger(
-                payload = req_payload
-            )
-        except Exception as exc: # pylint: disable=broad-except
+            req_payload = {DATA: {TYPE: START.capitalize()}, PARAMS: {VIN: vin}}
+            return await self._set_charger(payload=req_payload)
+        except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}
 
     async def charging_stop(
@@ -480,25 +481,12 @@ class TechnicalClient(APIClient):
             vin: Vehicle VIN number
         """
         try:
-            req_payload = {
-                DATA: {
-                    TYPE: STOP.capitalize()
-                },
-                PARAMS: {
-                    VIN: vin
-                }
-            }
-            return await self._set_charger(
-                payload = req_payload
-            )
-        except Exception as exc: # pylint: disable=broad-except
+            req_payload = {DATA: {TYPE: STOP.capitalize()}, PARAMS: {VIN: vin}}
+            return await self._set_charger(payload=req_payload)
+        except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}
 
-    async def charging_config(
-        self: APIClient,
-        vin: str,
-        data: dict
-    ) -> str:
+    async def charging_config(self: APIClient, vin: str, data: dict) -> str:
         """
         Method to stop charging car.
         Parameters:
@@ -512,21 +500,12 @@ class TechnicalClient(APIClient):
             if not CHARGECONFIG in data:
                 raise Exception("Missing settings for set request")
             else:
-                if not all(setting in data[CHARGECONFIG] for setting in [
-                    CHARGEAMPERE, CHARGETARGET, CHARGEUNLOCK
-                ]):
+                if not all(
+                    setting in data[CHARGECONFIG]
+                    for setting in [CHARGEAMPERE, CHARGETARGET, CHARGEUNLOCK]
+                ):
                     raise Exception("Missing settings for set request")
-            req_payload = {
-                DATA: {
-                    **data,
-                    TYPE: UPDATE
-                },
-                PARAMS: {
-                    VIN: vin
-                }
-            }
-            return await self._set_charger(
-                payload = req_payload
-            )
-        except Exception as exc: # pylint: disable=broad-except
+            req_payload = {DATA: {**data, TYPE: UPDATE}, PARAMS: {VIN: vin}}
+            return await self._set_charger(payload=req_payload)
+        except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}

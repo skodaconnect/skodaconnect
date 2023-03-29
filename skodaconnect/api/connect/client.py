@@ -9,20 +9,46 @@ from __future__ import annotations
 from aiohttp import ClientSession
 from skodaconnect.api.base.client import APIClient
 from skodaconnect.api.connect.const import (
-    APP_URI, CLIENT, GRANTS, SCOPES, SYSTEM_ID, XAPPNAME,
-    CUST_URL, MBB_STATUS, PERSONAL_DATA, CAR_DATA,
+    APP_URI,
+    CLIENT,
+    GRANTS,
+    SCOPES,
+    SYSTEM_ID,
+    XAPPNAME,
+    CUST_URL,
+    MBB_STATUS,
+    PERSONAL_DATA,
+    CAR_DATA,
 )
 from skodaconnect.helpers.token import decode_token
 from skodaconnect.helpers.html import get_nonce, get_state
 from skodaconnect.strings.globals import (
-    CONTENT, APP_JSON, PARAMS, DATA, STATUS,
+    CONTENT,
+    APP_JSON,
+    PARAMS,
+    DATA,
+    STATUS,
     HTTP_OK,
-    NONCE, STATE, REDIR_URI, RES_TYPE, CLIENT_ID, SCOPE, SUBJECT,
-    REFRESH, REVOKE,
-    ID_TOKEN, ACCESS_TOKEN, REFRESH_TOKEN, TOKENTYPE,
-    HTTP_ERROR, HTTP_ERRORS, HTTP_GET,
+    NONCE,
+    STATE,
+    REDIR_URI,
+    RES_TYPE,
+    CLIENT_ID,
+    SCOPE,
+    SUBJECT,
+    REFRESH,
+    REVOKE,
+    ID_TOKEN,
+    ACCESS_TOKEN,
+    REFRESH_TOKEN,
+    TOKENTYPE,
+    HTTP_ERROR,
+    HTTP_ERRORS,
+    HTTP_GET,
     ERROR,
-    XREQ_WITH, AUTHZ, BEARER
+    XREQ_WITH,
+    AUTHZ,
+    BEARER,
 )
 
 
@@ -34,11 +60,7 @@ class ConnectClient(APIClient):
     API customer-profile.apps.emea.vwapps.io.
     """
 
-    def __init__(
-            self: APIClient,
-            http_session: ClientSession,
-            api_debug: bool = False
-    ) -> None:
+    def __init__(self: APIClient, http_session: ClientSession, api_debug: bool = False) -> None:
         """Initialize API Client 'Connect'."""
         super().__init__(http_session, api_debug)
         # Set Client specifics
@@ -56,7 +78,7 @@ class ConnectClient(APIClient):
                 STATE: get_state(),
                 RES_TYPE: self.response_type,
                 CLIENT_ID: self.client_id,
-                SCOPE: self.scope
+                SCOPE: self.scope,
             }
         }
         # Set headers to send with authz request
@@ -65,22 +87,14 @@ class ConnectClient(APIClient):
         }
 
     async def _api_call(  # pylint: disable=arguments-differ
-            self: APIClient,
-            url: str,
-            method: str = HTTP_GET,
-            headers: str = None,
-            payload: any = None
+        self: APIClient, url: str, method: str = HTTP_GET, headers: str = None, payload: any = None
     ) -> any:
         """Execute API call with common settings."""
         # Set token type for request
         sysid = "IDK_" + self.system_id
         # Set Authorization bearer
         authz_parts = [BEARER, self.access_token]
-        req_headers = {
-            CONTENT: APP_JSON,
-            AUTHZ: " ".join(authz_parts),
-            TOKENTYPE: sysid
-        }
+        req_headers = {CONTENT: APP_JSON, AUTHZ: " ".join(authz_parts), TOKENTYPE: sysid}
         # Update with headers specified in parameters
         if headers is not None:
             req_headers.update(headers)
@@ -92,12 +106,7 @@ class ConnectClient(APIClient):
                 headers=req_headers,
             )
         else:
-            return await self._request(
-                url=url,
-                method=method,
-                headers=req_headers,
-                **payload
-            )
+            return await self._request(url=url, method=method, headers=req_headers, **payload)
 
     async def _exchange_code(self: APIClient, code: str) -> dict:
         """

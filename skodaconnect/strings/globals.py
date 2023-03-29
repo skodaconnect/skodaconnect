@@ -84,7 +84,7 @@ HTTP_ERRORS = {
     HTTP_THROTTLED: "Too many requests.",
     HTTP_INTSRVERR: "Service temporarily unavailable.",
     HTTP_BADGW: "Server error. Try again later.",
-    HTTP_UNAVAILABLE: "Server error. Try again later."
+    HTTP_UNAVAILABLE: "Server error. Try again later.",
 }
 HTTP_ERROR = "Unexpected response."
 # HTTP Payload related
@@ -129,16 +129,13 @@ SKODA_TOKEN = "https://api.connect.skoda-auto.cz/api/v1/authentication/token"
 # Constants related to model image
 SMALL = "small"
 LARGE = "large"
-MODELVIEWL = 'w1080'                               # image size large
-MODELVIEWS = 'main'                                # image size small
-IMAGESIZE = {
-    SMALL: MODELVIEWS,
-    LARGE: MODELVIEWL
-}
-MODELAPPID = 'ModcwpMobile'                        # Client ID
-MODELAPIKEY = b'P{+!!H:+I#6)SJS_?[_wh6puD#UH*%l:'  # Key used to sign message
-MODELAPI = 'ms/GetMODCWPImage'                     # API base path
-MODELURL = 'https://iaservices.skoda-auto.com'     # API host
+MODELVIEWL = "w1080"  # image size large
+MODELVIEWS = "main"  # image size small
+IMAGESIZE = {SMALL: MODELVIEWS, LARGE: MODELVIEWL}
+MODELAPPID = "ModcwpMobile"  # Client ID
+MODELAPIKEY = b"P{+!!H:+I#6)SJS_?[_wh6puD#UH*%l:"  # Key used to sign message
+MODELAPI = "ms/GetMODCWPImage"  # API base path
+MODELURL = "https://iaservices.skoda-auto.com"  # API host
 
 VIEW = "view"
 DATE = "date"
