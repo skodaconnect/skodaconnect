@@ -4,8 +4,10 @@
 import asyncio
 import aiohttp
 import os
-from skodaconnect.api.mbb.client import MBBClient
-from skodaconnect.api.technical.client import TechnicalClient
+
+# from vwgconnect.platform.mbb.client import MBBClient
+from vwgconnect.platform.mbb.client import MBBClient
+from vwgconnect.platform.skoda.client import TechnicalClient
 
 
 async def main():

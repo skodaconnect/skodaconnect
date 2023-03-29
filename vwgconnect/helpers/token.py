@@ -6,7 +6,7 @@ Helper functions for token handling.
 
 from datetime import datetime
 import jwt
-from skodaconnect.strings.globals import SIG_VERIFY, EXPIRY
+from vwgconnect.strings.globals import SIG_VERIFY, EXPIRY
 
 
 def decode_token(token) -> dict:

@@ -5,4 +5,4 @@ For more details and documentation, visit the github page at:
     https://github.com/skodaconnect/skodaconnect
 """
 
-from skodaconnect.api.technical.client import TechnicalClient
+from vwgconnect.platform.mbb.client import MBBClient

@@ -5,4 +5,4 @@ For more details and documentation, visit the github page at:
     https://github.com/skodaconnect/skodaconnect
 """
 
-from skodaconnect.api.connect.client import ConnectClient
+from vwgconnect.platform.connect.client import ConnectClient

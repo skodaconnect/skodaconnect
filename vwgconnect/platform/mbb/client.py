@@ -8,9 +8,9 @@ Handles API calls and tokens.
 from __future__ import annotations
 from typing import Union
 from aiohttp import ClientSession
-from skodaconnect.api.connect.client import ConnectClient
-from skodaconnect.helpers.token import token_valid
-from skodaconnect.api.mbb.const import (
+from vwgconnect.platform.connect.client import ConnectClient
+from vwgconnect.helpers.token import token_valid
+from vwgconnect.platform.mbb.const import (
     SCOPES,
     XCLIENT,
     MBBOAUTH2,
@@ -43,7 +43,7 @@ from skodaconnect.api.mbb.const import (
     SETSETTINGS,
     MAXCURRENT,
 )
-from skodaconnect.strings.globals import (
+from vwgconnect.strings.globals import (
     DATA,
     TOKEN,
     GRANT_TYPE,

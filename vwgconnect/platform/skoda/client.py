@@ -7,8 +7,8 @@ Handles API calls and tokens.
 
 from __future__ import annotations
 from aiohttp import ClientSession
-from skodaconnect.api.base.client import APIClient
-from skodaconnect.strings.globals import (
+from vwgconnect.platform.base.client import APIClient
+from vwgconnect.strings.globals import (
     PARAMS,
     IDENTITIES,
     SETTINGS,
@@ -44,7 +44,7 @@ from skodaconnect.strings.globals import (
     VIN,
     TYPE,
 )
-from skodaconnect.api.technical.const import (
+from vwgconnect.platform.skoda.const import (
     APP_URI,
     CLIENT,
     GRANTS,
@@ -68,8 +68,8 @@ from skodaconnect.api.technical.const import (
     CHARGEUNLOCK,
     CHARGETARGET,
 )
-from skodaconnect.helpers.token import decode_token
-from skodaconnect.helpers.html import get_nonce, get_state
+from vwgconnect.helpers.token import decode_token
+from vwgconnect.helpers.html import get_nonce, get_state
 
 
 class TechnicalClient(APIClient):
