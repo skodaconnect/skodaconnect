@@ -7,7 +7,7 @@ Handles API calls and tokens.
 
 from __future__ import annotations
 from aiohttp import ClientSession
-
+from json import dumps as tojson
 from vwgconnect.platform.base import APIClient
 from vwgconnect.platform.connectconst import (
     APP_URI,
@@ -22,7 +22,7 @@ from vwgconnect.platform.connectconst import (
     CAR_DATA,
 )
 from vwgconnect.helper.token import decode_token
-from vwgconnect.helper.html import get_nonce, get_state
+from vwgconnect.helper.html import get_nonce, get_state, json_to_obj
 from vwgconnect.string.globals import (
     CONTENT,
     APP_JSON,
@@ -167,7 +167,8 @@ class ConnectClient(APIClient):
             if response.get(STATUS) is not HTTP_OK:
                 raise Exception(HTTP_ERRORS.get(STATUS, HTTP_ERROR))
             else:
-                return response.get(DATA)
+                # Return response data as object
+                return json_to_obj(tojson(response.get(DATA)))
         except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}
 
@@ -180,7 +181,7 @@ class ConnectClient(APIClient):
             if response.get(STATUS) is not HTTP_OK:
                 raise Exception(HTTP_ERRORS.get(STATUS, HTTP_ERROR))
             else:
-                return response.get(DATA)
+                return json_to_obj(tojson(response.get(DATA)))
         except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}
 
@@ -193,6 +194,6 @@ class ConnectClient(APIClient):
             if response.get(STATUS) is not HTTP_OK:
                 raise Exception(HTTP_ERRORS.get(STATUS, HTTP_ERROR))
             else:
-                return response.get(DATA)
+                return json_to_obj(tojson(response.get(DATA)))
         except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}

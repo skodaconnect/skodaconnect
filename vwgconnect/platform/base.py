@@ -215,7 +215,7 @@ class APIClient(ABC):
         Returns:
             dict:
                 status: HTTP status code
-                data:   HTTP data, if data exist else None
+                data:   HTTP data object, if data exist else None
                 location:   HTTP location header if exists
                 url:    HTTP URL
         """
