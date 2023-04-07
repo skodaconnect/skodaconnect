@@ -2,7 +2,7 @@
 line-length = 120
 extend-exclude = '''
 (
-   /vwgconnect/_OLD_/
+   vwgconnect/_OLD_/
    | ^/*py$
 )
 '''
