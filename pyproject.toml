@@ -6,7 +6,6 @@ extend-exclude = '''
    | ^/*py$
 )
 '''
-verbose = true
 
 [tool.ruff]
 line-length = 120
