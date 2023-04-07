@@ -6,6 +6,7 @@ Handles API calls and tokens.
 """
 
 from __future__ import annotations
+from jwt.exceptions import DecodeError
 from aiohttp import ClientSession
 
 from vwgconnect.platform.base import APIClient
@@ -120,7 +121,7 @@ class ConnectClient(APIClient):
         try:
             tokens = await self.skoda_token(code=code)
             return tokens
-        except:  # pylint: disable=broad-except, bare-except
+        except DecodeError:
             # Return empty dict if unable to parse received tokens
             return {ERROR: "No tokens"}
 
@@ -131,7 +132,7 @@ class ConnectClient(APIClient):
                 code=self.refresh_token,
                 action=REVOKE,
             )
-        except:  # pylint: disable=broad-except, bare-except
+        except DecodeError:
             return False
 
     async def refresh_tokens(self: APIClient) -> bool:  # pylint: disable=arguments-differ
@@ -152,7 +153,7 @@ class ConnectClient(APIClient):
                 self.access_token = tokens.get(ACCESS_TOKEN)
                 self.refresh_token = tokens.get(REFRESH_TOKEN)
                 return True
-        except:  # pylint: disable=bare-except
+        except DecodeError:
             return False
 
     # API endpoints

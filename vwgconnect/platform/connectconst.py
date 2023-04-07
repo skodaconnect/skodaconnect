@@ -8,10 +8,7 @@ USER_AGENT = "okhttp/4.9.3"
 APP_URI = "skodaconnect://oidc.login/"
 
 CLIENT = "7f045eee-7003-4379-9968-9355ed2adb06@apps_vw-dilab_com"
-SCOPES = (
-    "openid profile address cars email birthdate badge mbb phone "
-    + "driversLicense dealers profession vin mileage"
-)
+SCOPES = "openid profile address cars email birthdate badge mbb phone driversLicense dealers profession vin mileage"
 GRANTS = "code id_token"
 SYSTEM_ID = "CONNECT"
 

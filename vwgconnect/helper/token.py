@@ -5,7 +5,8 @@ Helper functions for token handling.
 """
 
 from datetime import datetime
-import jwt
+from jwt import decode
+from jwt.exceptions import DecodeError, ExpiredSignatureError
 from vwgconnect.string.globals import SIG_VERIFY, EXPIRY
 
 
@@ -14,14 +15,14 @@ def decode_token(token) -> dict:
     decoded = None
     # Try old pyJWT syntax first
     try:
-        decoded = jwt.decode(token, verify=False)
-    except:  # pylint: disable=bare-except
+        decoded = decode(token, verify=False)
+    except DecodeError:
         decoded = None
     # Try new pyJWT syntax if old fails
     if decoded is None:
         try:
-            decoded = jwt.decode(token, options={SIG_VERIFY: False})
-        except:  # pylint: disable=bare-except
+            decoded = decode(token, options={SIG_VERIFY: False})
+        except DecodeError:
             decoded = {}
     return decoded
 
@@ -33,13 +34,13 @@ def token_valid(token):
         exp = decode_token(token).get(EXPIRY, None)
         expires = datetime.fromtimestamp(int(exp))
 
-        # Inprobable that the token expires this very second
+        # Improbable that the token expires this very second
         if expires > now:
             return True
         else:
             return False
-    except jwt.ExpiredSignatureError:
+    except ExpiredSignatureError:
         return False
-    except:  # pylint: disable=bare-except
+    except TypeError:
         pass
     return False
