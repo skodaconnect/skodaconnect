@@ -1,4 +1,5 @@
-
+/*py
+!/setup.py
 .eggs/
 .settings/
 build/

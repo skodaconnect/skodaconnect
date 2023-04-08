@@ -106,7 +106,7 @@ class MBBClient(ConnectClient):
         """Return MBB Access Token."""
         try:
             return self._mbb_tokens.get(ACCESS_TOKEN, None)
-        except:  # pylint: disable=bare-except
+        except:  # noqa: E722
             return None
 
     @mbb_access_token.setter
@@ -126,7 +126,7 @@ class MBBClient(ConnectClient):
         """Return Refresh Token."""
         try:
             return self._mbb_tokens.get(REFRESH_TOKEN, None)
-        except:  # pylint: disable=bare-except
+        except:  # noqa: E722
             return None
 
     @mbb_refresh_token.setter
@@ -203,7 +203,7 @@ class MBBClient(ConnectClient):
                 self.mbb_access_token = tokens.get(ACCESS_TOKEN, None)
                 self.mbb_refresh_token = tokens.get(REFRESH_TOKEN, None)
                 return True
-        except:  # pylint: disable=bare-except
+        except:  # noqa: E722
             pass
         return False
 
@@ -228,7 +228,7 @@ class MBBClient(ConnectClient):
             revoke_resp = await self._request(url=revoke_url, data={TOKEN: token, TOKENHINT: typ})
             if revoke_resp.get(STATUS, 0) == HTTP_OK:
                 return True
-        except:  # pylint: disable=bare-except
+        except:  # noqa: E722
             pass
         return False
 
@@ -255,7 +255,7 @@ class MBBClient(ConnectClient):
             else:
                 # Connect id_token might have changed, fetch new MBB tokens
                 return await self.get_mbb_tokens()
-        except:  # pylint: disable=bare-except
+        except:  # noqa: E722
             return False
 
     async def auth(self: ConnectClient, email: str, password: str) -> bool:
@@ -322,9 +322,7 @@ class MBBClient(ConnectClient):
         except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}
 
-    async def status_request(
-        self: ConnectClient, vin: str, reqid: str, base: str = BASE_URL
-    ) -> dict:
+    async def status_request(self: ConnectClient, vin: str, reqid: str, base: str = BASE_URL) -> dict:
         """
         Return information about vehicle status refresh request.
         Parameters:
@@ -374,9 +372,7 @@ class MBBClient(ConnectClient):
         except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}
 
-    async def timer_request(
-        self: ConnectClient, vin: str, reqid: str, base: str = BASE_URL
-    ) -> dict:
+    async def timer_request(self: ConnectClient, vin: str, reqid: str, base: str = BASE_URL) -> dict:
         """
         Return information about dparture timer operation request.
         Parameters:
@@ -404,9 +400,7 @@ class MBBClient(ConnectClient):
         except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}
 
-    async def aircon_request(
-        self: ConnectClient, vin: str, reqid: str, base: str = BASE_URL
-    ) -> dict:
+    async def aircon_request(self: ConnectClient, vin: str, reqid: str, base: str = BASE_URL) -> dict:
         """
         Return information about climatisation operation request.
         Parameters:
@@ -434,9 +428,7 @@ class MBBClient(ConnectClient):
         except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}
 
-    async def charging_request(
-        self: ConnectClient, vin: str, reqid: str, base: str = BASE_URL
-    ) -> dict:
+    async def charging_request(self: ConnectClient, vin: str, reqid: str, base: str = BASE_URL) -> dict:
         """
         Return information about charging operation request.
         Parameters:
@@ -464,9 +456,7 @@ class MBBClient(ConnectClient):
         except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}
 
-    async def aux_heater_request(
-        self: ConnectClient, vin: str, reqid: str, base: str = BASE_URL
-    ) -> dict:
+    async def aux_heater_request(self: ConnectClient, vin: str, reqid: str, base: str = BASE_URL) -> dict:
         """
         Return information about charging operation request.
         Parameters:
@@ -493,9 +483,7 @@ class MBBClient(ConnectClient):
             payload: Json/Parameters/Data to POST
         """
         try:
-            response = await self._mbb_api_call(
-                url=url, method=HTTP_POST, headers=headers, **payload
-            )
+            response = await self._mbb_api_call(url=url, method=HTTP_POST, headers=headers, **payload)
             if response.get(STATUS, 0) is HTTP_OK:
                 return response.get(DATA, {})
             elif response.get(STATUS, 0) is HTTP_THROTTLED:
@@ -683,9 +671,7 @@ class MBBClient(ConnectClient):
         except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}
 
-    async def charge_current(
-        self: ConnectClient, vin: str, value: int, base: str = BASE_URL
-    ) -> str:
+    async def charge_current(self: ConnectClient, vin: str, value: int, base: str = BASE_URL) -> str:
         """
         Method to set charger maximum current.
         Parameters:
