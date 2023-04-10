@@ -25,6 +25,7 @@ setuptools.setup(
     packages=setuptools.find_packages(),
     provides=["skodaconnect"],
     install_requires=list(open("requirements.txt").read().strip().split("\n")),
+    tests_require=list(open("test-requirements.txt").read().strip().split("\n")),
     # use_scm_version=True,
     use_scm_version={"local_scheme": local_scheme},
     setup_requires=[
