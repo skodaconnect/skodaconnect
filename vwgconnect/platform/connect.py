@@ -21,6 +21,8 @@ from vwgconnect.platform.connectconst import (
     MBB_STATUS,
     PERSONAL_DATA,
     CAR_DATA,
+    CONNECT_URL,
+    VEHICLE_STATUS,
 )
 from vwgconnect.helper.token import decode_token
 from vwgconnect.helper.html import get_nonce, get_state
@@ -195,5 +197,23 @@ class ConnectClient(APIClient):
                 raise Exception(HTTP_ERRORS.get(STATUS, HTTP_ERROR))
             else:
                 return response.get(DATA)
+        except Exception as exc:  # pylint: disable=broad-except
+            return {ERROR: exc}
+
+    async def vehicle_status(self: APIClient, vin: str) -> dict:
+        """
+        Return vehicle status information.
+        Parameters:
+            vin: Vehicle VIN number
+        Returns:
+            dict: status data
+        """
+
+        try:
+            url_parts = [CONNECT_URL, "v2", VEHICLE_STATUS, vin]
+            req_url = "/".join(url_parts)
+            response = await self._api_call(url=req_url)
+            if response.get(STATUS, 0) is HTTP_OK:
+                return response.get(DATA, {})
         except Exception as exc:  # pylint: disable=broad-except
             return {ERROR: exc}
