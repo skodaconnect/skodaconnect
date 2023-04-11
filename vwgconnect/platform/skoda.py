@@ -59,7 +59,6 @@ from .skodaconst import (
     USERS,
     CHARGING,
     AIRCON,
-    CAR_STATUS,
     POSITION,
     START,
     STOP,
@@ -244,23 +243,6 @@ class TechnicalClient(APIClient):
         """
         try:
             url_parts = [BASE_URL, V1, POSITION, VEHICLES, vin, PARK_POS]
-            req_url = "/".join(url_parts)
-            response = await self._api_call(url=req_url)
-            if response.get(STATUS, 0) is HTTP_OK:
-                return response.get(DATA, {})
-        except Exception as exc:  # pylint: disable=broad-except
-            return {ERROR: exc}
-
-    async def status(self: APIClient, vin: str) -> dict:
-        """
-        Return vehicle status information.
-        Parameters:
-            vin: Vehicle VIN number
-        Returns:
-            dict: status data
-        """
-        try:
-            url_parts = [BASE_URL, V1, CAR_STATUS, vin]
             req_url = "/".join(url_parts)
             response = await self._api_call(url=req_url)
             if response.get(STATUS, 0) is HTTP_OK:

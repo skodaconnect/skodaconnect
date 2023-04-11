@@ -16,3 +16,6 @@ CUST_URL = "https://customer-profile.apps.emea.vwapps.io/v2/customers"
 MBB_STATUS = "mbbStatusData"
 PERSONAL_DATA = "personalData"
 CAR_DATA = "realCarData"
+
+CONNECT_URL = "https://api.connect.skoda-auto.cz/api"
+VEHICLE_STATUS = "vehicle-status"
