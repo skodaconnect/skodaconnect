@@ -1,4 +1,5 @@
-name: pre-commit
+---
+name: Run CI
 
 on:
   pull_request:
@@ -8,10 +9,46 @@ on:
     branches: [2.0-dev]
 
 jobs:
+  testing:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11"]
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Create virtualenv
+        run: |
+          python3 -m venv venv
+          source venv/bin/activate
+      - name: Install dependencies
+        run: |
+          pip install -U pip
+          pip install ruff pytest
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+          if [ -f test-requirements.txt ]; then
+            pip install -r test-requirements.txt
+          fi
+      - name: Run a quick lint for syntax errors only
+        run: |
+          ruff --format=github --select=E9,F63,F7,F82 --target-version=py37 .
+      - name: Run test suite
+        run: |
+          export PYTHONPATH=.
+          pytest -s test/*
+
   pre-commit:
+    needs: testing
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v3
       - uses: pre-commit/action@v3.0.0
-
+        with:
+          extra_args: ""
