@@ -28,7 +28,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -U pip
-          pip install ruff pytest
+          pip install ruff pytest pytest-pep8
           if [ -f requirements.txt ]; then
             pip install -r requirements.txt
           fi
