@@ -12,3 +12,9 @@ line-length = 120
 src = [ "vwgconnect" ]
 force-exclude = true
 extend-exclude = [ "vwgconnect/_OLD_/" ]
+
+[tool.pytest]
+minversion = 5.4.3
+pep8maxlinelength=250
+pep8ignore=* E731 \
+           * E402 

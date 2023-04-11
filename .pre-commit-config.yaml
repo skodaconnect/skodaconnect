@@ -14,9 +14,6 @@ repos:
     hooks:
       - id: check-executables-have-shebangs
       - id: check-json
-      - id: no-commit-to-branch
-        args:
-          - --branch=2.0-dev
   - repo: https://github.com/adrienverge/yamllint.git
     rev: v1.28.0
     hooks:
