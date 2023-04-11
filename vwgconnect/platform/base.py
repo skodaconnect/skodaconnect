@@ -13,6 +13,7 @@ from base64 import b64encode
 from urllib.parse import parse_qs, urlparse, urlencode, urljoin
 from datetime import timedelta, datetime, timezone
 from abc import ABC, abstractmethod
+from jwt.exceptions import DecodeError
 import asyncio
 from aiohttp import ClientSession, ClientTimeout
 from vwgconnect.helper.html import parse_form
@@ -129,7 +130,7 @@ class APIClient(ABC):
         try:
             token_claims = decode_token(self.access_token)
             return token_claims.get(SUBJECT, None)
-        except:  # pylint: disable=bare-except
+        except DecodeError:
             return None
 
     @property
@@ -137,7 +138,7 @@ class APIClient(ABC):
         """Return Identity Token."""
         try:
             return self._tokens.get(ID_TOKEN, None)
-        except:  # pylint: disable=bare-except
+        except TypeError:
             return None
 
     @id_token.setter
@@ -157,7 +158,7 @@ class APIClient(ABC):
         """Return Access Token."""
         try:
             return self._tokens.get(ACCESS_TOKEN, None)
-        except:  # pylint: disable=bare-except
+        except TypeError:
             return None
 
     @access_token.setter
@@ -177,7 +178,7 @@ class APIClient(ABC):
         """Return Refresh Token."""
         try:
             return self._tokens.get(REFRESH_TOKEN, None)
-        except:  # pylint: disable=bare-except
+        except TypeError:
             return None
 
     @refresh_token.setter
@@ -338,7 +339,7 @@ class APIClient(ABC):
         # POST password form data and validate respone
         try:
             pw_post = issuer + pw_action
-            if not SIGNIN_SERVICE in pw_post or not self.client_id in pw_post:
+            if SIGNIN_SERVICE not in pw_post or self.client_id not in pw_post:
                 parts = [issuer, SIGNIN_SERVICE, V1, self.client_id, pw_action]
                 pw_post = "/".join(parts)
 
@@ -400,7 +401,7 @@ class APIClient(ABC):
         except Exception as exc:  # pylint: disable=broad-except
             # When redirect_uri is reached an Exception will occur
             # since the URL will be non http:// or https://
-            if not CODE in redirect_url:
+            if CODE not in redirect_url:
                 raise Exception("No athorization code received.") from exc
         # Validate received authorization code
         try:
@@ -453,9 +454,7 @@ class APIClient(ABC):
         try:
             if SIGNIN_SERVICE in location:
                 # Follow first redirect to get HTML data
-                html_resp = await self._request(
-                    url=location, headers=self.auth_headers, redirect=False
-                )
+                html_resp = await self._request(url=location, headers=self.auth_headers, redirect=False)
                 if html_resp.get(STATUS, 0) is not HTTP_OK:
                     raise Exception("Failed fetching login form.")
                 authz_url = await self._signin(
@@ -471,7 +470,7 @@ class APIClient(ABC):
             raise Exception("Signin failed") from exc
 
         # Expect our url at this point to be towards /oidc/v1/oauth/sso...
-        if not "oauth/sso" in authz_url:
+        if "oauth/sso" not in authz_url:
             raise Exception("Unexpected redirect, authorization failed,")
 
         # We are already logged on, shorter authorization flow
@@ -543,7 +542,7 @@ class APIClient(ABC):
                 ACCESS_TOKEN: tokens.get(ACCESS_TOKEN, tokens.get(ACCESSTOKEN)),
                 REFRESH_TOKEN: tokens.get(REFRESH_TOKEN, tokens.get(REFRESHTOKEN)),
             }
-        except:  # pylint: disable=broad-except, bare-except
+        except:  # noqa: E722
             # Return false if failed
             return False
 
@@ -584,7 +583,7 @@ class APIClient(ABC):
             # Make sure that we got redirect and location for image
             if response.get(LOCATION, False):
                 return response.get(LOCATION).split("?")[0]
-        except:  # pylint: disable=bare-except
+        except:  # noqa: E722
             pass
         return None
 

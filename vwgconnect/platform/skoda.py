@@ -7,6 +7,7 @@ Handles API calls and tokens.
 
 from __future__ import annotations
 from aiohttp import ClientSession
+from jwt.exceptions import DecodeError
 from vwgconnect.platform.base import APIClient
 from vwgconnect.string.globals import (
     PARAMS,
@@ -139,7 +140,7 @@ class TechnicalClient(APIClient):
         try:
             tokens = await self.skoda_token(code=code)
             return tokens
-        except:  # pylint: disable=broad-except, bare-except
+        except DecodeError:
             # Return empty dict if unable to parse received tokens
             return {ERROR: "No tokens"}
 
@@ -150,7 +151,7 @@ class TechnicalClient(APIClient):
                 code=self.refresh_token,
                 action=REVOKE,
             )
-        except:  # pylint: disable=broad-except, bare-except
+        except DecodeError:
             return False
 
     async def refresh_tokens(self: APIClient) -> bool:  # pylint: disable=arguments-differ
@@ -171,7 +172,7 @@ class TechnicalClient(APIClient):
                 self.access_token = tokens.get(ACCESS_TOKEN)
                 self.refresh_token = tokens.get(REFRESH_TOKEN)
                 return True
-        except:  # pylint: disable=bare-except
+        except:  # noqa: E722
             return False
 
     async def request_status(  # pylint: disable=arguments-differ
@@ -497,13 +498,10 @@ class TechnicalClient(APIClient):
         """
         try:
             # Validate settings
-            if not CHARGECONFIG in data:
+            if CHARGECONFIG not in data:
                 raise Exception("Missing settings for set request")
             else:
-                if not all(
-                    setting in data[CHARGECONFIG]
-                    for setting in [CHARGEAMPERE, CHARGETARGET, CHARGEUNLOCK]
-                ):
+                if not all(setting in data[CHARGECONFIG] for setting in [CHARGEAMPERE, CHARGETARGET, CHARGEUNLOCK]):
                     raise Exception("Missing settings for set request")
             req_payload = {DATA: {**data, TYPE: UPDATE}, PARAMS: {VIN: vin}}
             return await self._set_charger(payload=req_payload)
