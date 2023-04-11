@@ -19,5 +19,3 @@ testpaths = [
   "test",
 ]
 pep8maxlinelength=250
-pep8ignore=* E731 \
-           * E402 
