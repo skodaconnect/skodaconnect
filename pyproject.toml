@@ -14,7 +14,10 @@ force-exclude = true
 extend-exclude = [ "vwgconnect/_OLD_/" ]
 
 [tool.pytest]
-minversion = 5.4.3
+minversion = "7.0"
+testpaths = [
+  "test",
+]
 pep8maxlinelength=250
 pep8ignore=* E731 \
            * E402 
