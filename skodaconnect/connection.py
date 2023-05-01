@@ -1009,10 +1009,8 @@ class Connection:
                     url=url,
                     allow_redirects=False
                 )
-                if response.headers.get('Location', False):
-                    return response.headers.get('Location').split('?')[0]
-                else:
-                    _LOGGER.debug('Could not fetch Model image URL, request returned with status code {response.status_code}')
+                response.raise_for_status()
+                return url
             except:
                 _LOGGER.debug('Could not fetch Model image URL')
         except:
