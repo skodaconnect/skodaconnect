@@ -1265,7 +1265,7 @@ def create_instruments():
             attr="charging_time_left",
             name="Charging time left",
             icon="mdi:battery-charging-100",
-            unit="h",
+            unit="min",
             device_class="duration"
         ),
         Sensor(
@@ -1313,7 +1313,7 @@ def create_instruments():
             attr="climatisation_time_left",
             name="Climatisation time left",
             icon="mdi:clock",
-            unit="h",
+            unit="min",
             device_class="duration"
         ),
         Sensor(
