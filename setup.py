@@ -1,4 +1,4 @@
-import setuptools
+from setuptools import setup, find_packages
 
 # read the contents of your README file
 from os import path
@@ -10,21 +10,27 @@ with open(path.join(this_directory, 'README.md'), encoding='utf-8') as f:
 def local_scheme(version):
     return ""
 
-setuptools.setup(
+setup(
     name='skodaconnect',
     version=lib_version,
     description='Communicate with Skoda Connect',
     author='lendy007',
     author_email='lendik@gmail.com',
-    url='https://github.com/lendy007/skodaconnect',
+    url='https://github.com/skodaconnect/skodaconnect',
     long_description=long_description,
     long_description_content_type='text/markdown',
-    packages=setuptools.find_packages(),
+    packages=find_packages(),
     provides=["skodaconnect"],
-    install_requires=list(open("requirements.txt").read().strip().split("\n")),
+    install_requires=[
+        "aiohttp",
+        "beautifulsoup4",
+        "cryptography",
+        "lxml", 
+        "pyjwt"
+    ],
     #use_scm_version=True,
     use_scm_version={"local_scheme": local_scheme},
     setup_requires=[
-        'setuptools_scm',
+        'setuptools_scm', "wheel"
     ]
 )
