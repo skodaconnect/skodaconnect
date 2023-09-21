@@ -112,3 +112,17 @@ Refrain from using methods starting with _, they are intended for internal use o
 
 ## Further help or contributions
 For questions, further help or contributions you can join the Discord server at https://discord.gg/826X9jEtCh
+
+## Building
+We are using a `pyproject.toml` style of building, with `flit`.
+To build your own version of skodaconnect, use the following steps:
+
+1. Get the current source from GitHub
+2. Make sure you have flit installed:
+```
+pip install flit
+```
+3. Build the project
+```
+flit build
+```
