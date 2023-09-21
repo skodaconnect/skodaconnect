@@ -4,7 +4,12 @@ build-backend = "flit_core.buildapi"
 
 [project]
 name = "skodaconnect"
-authors = [{name = "lendy007", email = "lendik@gmail.com"}]
+authors = [
+    {name = "lendy007", email = "lendik@gmail.com"},
+    {name = "FarFar", email = "faekie@hotmail.com"},
+    {name =  "dvx76", email = "fabrice.devaux@gmail.com"},
+    {name = "WebSpider", email = "bacardicoke@gmail.com"}
+]
 readme = "README.md"
 license = {file = "LICENSE"}
 classifiers = ["License :: OSI Approved :: Apache Software License"]
