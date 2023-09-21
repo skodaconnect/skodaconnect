@@ -1,0 +1,21 @@
+[build-system]
+requires = ["flit_core >=3.2,<4"]
+build-backend = "flit_core.buildapi"
+
+[project]
+name = "skodaconnect"
+authors = [{name = "lendy007", email = "lendik@gmail.com"}]
+readme = "README.md"
+license = {file = "LICENSE"}
+classifiers = ["License :: OSI Approved :: Apache Software License"]
+dynamic = ["version", "description"]
+dependencies = [
+  "aiohttp",
+  "beautifulsoup4",
+  "cryptography",
+  "lxml",
+  "pyjwt"
+]
+
+[project.urls]
+Home = "https://github.com/skodaconnect"
