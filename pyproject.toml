@@ -10,9 +10,14 @@ authors = [
     {name =  "dvx76", email = "fabrice.devaux@gmail.com"},
     {name = "WebSpider", email = "bacardicoke@gmail.com"}
 ]
-readme = "README.md"
+readme = {file = "README.md", content-type = "text/markdown"}
 license = {file = "LICENSE"}
-classifiers = ["License :: OSI Approved :: Apache Software License"]
+classifiers = [
+    "License :: OSI Approved :: Apache Software License",
+    "Development Status :: 4 - Beta",
+    "Operating System :: POSIX",
+    "Programming Language :: Python :: 3"
+]
 dynamic = ["version", "description"]
 dependencies = [
   "aiohttp",
@@ -24,4 +29,6 @@ dependencies = [
 requires-python = ">=3.7"
 
 [project.urls]
-Home = "https://github.com/skodaconnect"
+Homepage = "https://github.com/skodaconnect"
+Repository = "https://github.com/skodaconnect/skodaconnect.git"
+Bug Tracker = "https://github.com/skodaconnect/skodaconnect/issues"
