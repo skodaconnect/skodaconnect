@@ -48,6 +48,7 @@ Heating is what it sounds like and ventilation is used to ventilate/cool the car
 ## Thanks to
 
 - [RobinostLund](https://github.com/robinostlund/volkswagencarnet) for initial project for Volkswagen Carnet which this is based on initially
+- [lendy007](https://github.com/lendy007) for creating intial release for Skoda cars
 - [Farfar](https://github.com/Farfar) for modifications related to electric engines
 - [tanelvakker](https://github.com/tanelvakker) for modifications related to correct SPIN handling for various actions and using correct URLs also for MY2021
 - [wieshka](https://github.com/wieshka) for help with Skoda Enyaq iV development
