@@ -50,7 +50,7 @@ HEADERS_SESSION = {
     'X-Client-Id': XCLIENT_ID,
     'X-App-Version': XAPPVERSION,
     'X-App-Name': XAPPNAME,
-    'User-Agent': USER_AGENT,
+    #'User-Agent': USER_AGENT,
     'tokentype': 'IDK_TECHNICAL'
 }
 
