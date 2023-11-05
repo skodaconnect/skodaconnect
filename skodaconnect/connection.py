@@ -332,7 +332,7 @@ class Connection:
                 _LOGGER.debug(f"Trying to authorize with {tokenBody}")
             newHeader = {
                 'Content-Type': "application/json; charset=UTF-8",
-                'user-agent': "okhttp/4.9.3"
+                'User-Agent': USER_AGENT
             }
             req = await self._session.post(
                 url=tokenURL,
@@ -1983,9 +1983,8 @@ class Connection:
                     _LOGGER.debug(f'Response JSON: {error}')
                     raise SkodaException('Failed token refresh')
             else:
-                resp = await response.json()
                 _LOGGER.warning(f'Something went wrong when refreshing tokens for "{client}".')
-                _LOGGER.debug(f'Response JSON: {resp}')
+                _LOGGER.debug(f'Response: {response}')
         except Exception as error:
             _LOGGER.warning(f'Could not refresh tokens: {error}')
         return False
