@@ -332,7 +332,7 @@ class Connection:
                 _LOGGER.debug(f"Trying to authorize with {tokenBody}")
             newHeader = {
                 'Content-Type': "application/json; charset=UTF-8",
-                'user-agent': "okhttp/4.9.3"
+                'User-Agent': USER_AGENT
             }
             req = await self._session.post(
                 url=tokenURL,
