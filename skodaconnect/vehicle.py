@@ -164,9 +164,9 @@ class Vehicle:
         if not self._discovered:
             await self.discover()
         else:
-            # Rediscover if data is older than 1 hour
-            hourago = datetime.now() - timedelta(hours = 1)
-            if self._discovered < hourago:
+            # Rediscover if data is older than 1 day
+            dayago = datetime.now() - timedelta(days = 1)
+            if self._discovered < dayago:
                 await self.discover()
 
         # Fetch all data if car is not deactivated
