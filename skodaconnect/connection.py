@@ -932,7 +932,7 @@ class Connection:
             subject = self.decode_token(atoken).get('sub', None)
 
             response = await self.get(
-                f'https://customer-profile.apps.emea.vwapps.io/v2/customers/{subject}/realCarData'
+                f'https://customer-profile.vwgroup.io/v2/customers/{subject}/realCarData'
             )
             if response.get('realCars', False):
                 data = {
