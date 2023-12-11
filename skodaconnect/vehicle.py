@@ -1531,15 +1531,15 @@ class Vehicle:
         if self.attrs.get('StoredVehicleDataResponse', False):
             last_connected_utc = self.attrs.get('StoredVehicleDataResponse').get('vehicleData').get('data')[0].get('field')[0].get('tsCarSentUtc')
             if isinstance(last_connected_utc, datetime):
-                last_connected = last_connected_utc
+                last_connected = last_connected_utc.astimezone().replace(tzinfo=None)
             else:
-                last_connected = datetime.fromisoformat(last_connected_utc)
+                last_connected = datetime.strptime(last_connected_utc,'%Y-%m-%dT%H:%M:%SZ').astimezone().replace(tzinfo=None)
         elif self.attrs.get('vehicle_remote', False):
             last_connected_utc = self.attrs.get('vehicle_remote', {}).get('capturedAt', None)
             if isinstance(last_connected_utc, datetime):
-                last_connected = last_connected_utc
+                last_connected = last_connected_utc.astimezone().replace(tzinfo=None)
             elif isinstance(last_connected_utc, str):
-                last_connected = datetime.fromisoformat(last_connected_utc)
+                last_connected = datetime.strptime(last_connected_utc,'%Y-%m-%dT%H:%M:%S.%fZ').astimezone().replace(tzinfo=None).replace(microsecond=0)
             else:
                 return None
         return last_connected.isoformat()
@@ -1983,9 +1983,9 @@ class Vehicle:
         """Return timestamp of last parking time."""
         parkTime_utc = self.attrs.get('findCarResponse', {}).get('parkingTimeUTC', 'Unknown')
         if isinstance(parkTime_utc, datetime):
-            parkTime = parkTime_utc
+            parkTime = parkTime_utc.astimezone().replace(tzinfo=None)
         else:
-            parkTime = datetime.fromisoformat(parkTime_utc)
+            parkTime = datetime.strptime(parkTime_utc,'%Y-%m-%dT%H:%M:%SZ').astimezone().replace(tzinfo=None)
         return parkTime.isoformat()
 
     @property
