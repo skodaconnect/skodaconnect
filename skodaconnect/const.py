@@ -41,7 +41,7 @@ XAPPNAME = 'cz.skodaauto.connect'
 # IOS App UA
 # USER_AGENT = 'MySkoda/230629002 CFNetwork/1474 Darwin/23.0.0'
 # Android App UA
-USER_AGENT = 'OneConnect/000000148 CFNetwork/1485 Darwin/23.1.0'
+USER_AGENT = 'OneConnect/000000157 CFNetwork/1485 Darwin/23.1.0'
 APP_URI = 'skodaconnect://oidc.login/'
 
 # Used when fetching data
