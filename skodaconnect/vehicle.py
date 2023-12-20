@@ -985,10 +985,10 @@ class Vehicle:
                                     }
                                 }
                             }
-                    data.pop('temperatureConversionTableUsed', None)
+                    data['airConditioningSettings'].pop('temperatureConversionTableUsed', None)
                     data['type'] = 'Start'
                     if temp is not None:
-                        data['targetTemperatureInKelvin'] = temp + 273.15
+                        data['airConditioningSettings']['targetTemperatureInKelvin'] = temp + 273.15
                 else:
                     data = {'type': 'Stop'}
                 return await self._set_aircon(data)
