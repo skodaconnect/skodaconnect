@@ -6,6 +6,7 @@ Helper functions to parse HTML form data.
 
 from __future__ import annotations
 from base64 import b64encode
+from types import SimpleNamespace
 import re
 import json
 import hashlib
@@ -67,3 +68,8 @@ def parse_form(html: str) -> dict:
         return form_data
     except Exception as exc:
         return {"error": str(exc)}
+
+
+def json_to_obj(json_str: str) -> object:
+    """Deserialize json string to python object."""
+    return json.loads(json_str, object_hook=lambda d: SimpleNamespace(**d))

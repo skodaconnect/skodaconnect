@@ -36,7 +36,7 @@ from skodaconnect.exceptions import (
     SkodaLoginFailedException,
     SkodaInvalidRequestException,
     SkodaRequestInProgressException,
-    SkodaServiceUnavailable
+    SkodaServiceUnavailable,
 )
 
 from aiohttp import ClientSession, ClientTimeout
@@ -61,18 +61,20 @@ from .const import (
     MODELAPPID,
     MODELAPIKEY,
     MODELHOST,
-    MODELAPI
+    MODELAPI,
 )
 
-version_info >= (3, 0) or exit('Python 3 required')
+version_info >= (3, 0) or exit("Python 3 required")
 
 _LOGGER = logging.getLogger(__name__)
 
 TIMEOUT = timedelta(seconds=30)
 
+
 class Connection:
-    """ Connection to Connect services """
-  # Init connection class
+    """Connection to Connect services"""
+
+    # Init connection class
     def __init__(self, session, username, password, fulldebug=False, **optional):
         """
         Init connection to Skoda Connect services
@@ -93,32 +95,32 @@ class Connection:
         self._session_nonce = self._getNonce()
         self._session_state = self._getState()
 
-        self._session_auth_ref_url = {'default': BASE_SESSION}
-        self._session_spin_ref_url = {'default': BASE_SESSION}
+        self._session_auth_ref_url = {"default": BASE_SESSION}
+        self._session_spin_ref_url = {"default": BASE_SESSION}
         self._session_first_update = False
         self._session_auth_username = username
         self._session_auth_password = password
         self._vehicles = []
         self._session_tokens = {}
 
-        _LOGGER.info(f'Unofficial Skoda Connect library, version {lib_version}')
-        _LOGGER.debug(f'Using service {self._session_base}')
+        _LOGGER.info(f"Unofficial Skoda Connect library, version {lib_version}")
+        _LOGGER.debug(f"Using service {self._session_base}")
 
     def _clear_cookies(self):
         self._session._cookie_jar._cookies.clear()
-        self._session_cookies = ''
+        self._session_cookies = ""
 
     def _getNonce(self):
         chars = string.ascii_letters + string.digits
-        text = ''.join(secrets.choice(chars) for i in range(10))
+        text = "".join(secrets.choice(chars) for i in range(10))
         sha256 = hashlib.sha256()
         sha256.update(text.encode())
-        return (b64encode(sha256.digest()).decode('utf-8')[:-1])
+        return b64encode(sha256.digest()).decode("utf-8")[:-1]
 
     def _getState(self):
         return self._getNonce()
 
-  # API login/logout/authorization methods
+    # API login/logout/authorization methods
     async def restore_tokens(self, tokens):
         # Try to restore refresh token, if supplied
         for client in tokens:
@@ -134,25 +136,25 @@ class Connection:
                         try:
                             verified = await self.verify_token(token, client)
                             if verified:
-                                self._session_tokens[client] = {
-                                    'refresh_token': tokens[client]
-                                }
-                                _LOGGER.info(f'Restored token for client "{client}", valid until {expire}')
+                                self._session_tokens[client] = {"refresh_token": tokens[client]}
+                                _LOGGER.info(
+                                    f'Restored token for client "{client}", valid until {expire}'
+                                )
                             else:
-                                raise SkodaTokenInvalidException('Token failed verification')
-                        except (SkodaTokenInvalidException) as e:
-                            _LOGGER.info(f'Token for client {client} is invalid: {e}')
+                                raise SkodaTokenInvalidException("Token failed verification")
+                        except SkodaTokenInvalidException as e:
+                            _LOGGER.info(f"Token for client {client} is invalid: {e}")
                             self._session_tokens.pop(client, None)
                         except Exception as e:
-                            _LOGGER.debug(f'unhandled exception occured, error: {e}')
+                            _LOGGER.debug(f"unhandled exception occured, error: {e}")
                             self._session_tokens.pop(client, None)
             except Exception as e:
-                _LOGGER.debug(f'Token restore failed for {client}, error {e}')
-                _LOGGER.info('Restore token failed')
+                _LOGGER.debug(f"Token restore failed for {client}, error {e}")
+                _LOGGER.info("Restore token failed")
                 self._session_tokens = {}
                 return False
         # Verify that the "technical" refresh_token has been restored, required client for most actions
-        if self._session_tokens.get('technical', {}).get('refresh_token'):
+        if self._session_tokens.get("technical", {}).get("refresh_token"):
             return True
         else:
             return False
@@ -163,7 +165,7 @@ class Connection:
         try:
             for client in self._session_tokens:
                 # Validate the refresh token
-                token = self._session_tokens[client].get('refresh_token', None)
+                token = self._session_tokens[client].get("refresh_token", None)
                 if token is not None:
                     _LOGGER.debug(f'Validating refresh token for "{client}"')
                     if await self.validate_token(token) is not False:
@@ -174,10 +176,10 @@ class Connection:
 
     async def doLogin(self):
         """Login method, clean login"""
-        _LOGGER.info('Initiating new login')
+        _LOGGER.info("Initiating new login")
 
         if len(self._session_tokens) > 0:
-            _LOGGER.info('Revoking old tokens.')
+            _LOGGER.info("Revoking old tokens.")
             try:
                 await self.logout()
             except:
@@ -193,242 +195,287 @@ class Connection:
         self._session_state = self._getState()
 
         # Login with skoda client
-        return await self._authorize('technical')
+        return await self._authorize("technical")
 
-    async def _authorize(self, client='connect'):
-        """"Login" function. Authorize a certain client type and get tokens."""
+    async def _authorize(self, client="connect"):
+        """ "Login" function. Authorize a certain client type and get tokens."""
 
         # Login/Authorization starts here
         try:
             self._session_headers = HEADERS_SESSION.copy()
             self._session_auth_headers = HEADERS_AUTH.copy()
 
-            _LOGGER.debug(f'Starting authorization process for client {client}')
+            _LOGGER.debug(f"Starting authorization process for client {client}")
             req = await self._session.get(
-                url='https://identity.vwgroup.io/.well-known/openid-configuration'
+                url="https://identity.vwgroup.io/.well-known/openid-configuration"
             )
             if req.status != 200:
                 return False
-            response_data =  await req.json()
-            authorizationEndpoint = response_data['authorization_endpoint']
-            authissuer = response_data['issuer']
+            response_data = await req.json()
+            authorizationEndpoint = response_data["authorization_endpoint"]
+            authissuer = response_data["issuer"]
 
             # Get authorization page (login page)
             if self._session_fulldebug:
                 _LOGGER.debug(f'Get authorization page: "{authorizationEndpoint}"')
             try:
                 req = await self._session.get(
-                    url=authorizationEndpoint+\
-                        '?redirect_uri='+APP_URI+\
-                        '&nonce='+self._session_nonce+\
-                        '&state='+self._session_state+\
-                        '&response_type='+CLIENT_LIST[client].get('TOKEN_TYPES')+\
-                        '&client_id='+CLIENT_LIST[client].get('CLIENT_ID')+\
-                        '&scope='+CLIENT_LIST[client].get('SCOPE'),
+                    url=authorizationEndpoint
+                    + "?redirect_uri="
+                    + APP_URI
+                    + "&nonce="
+                    + self._session_nonce
+                    + "&state="
+                    + self._session_state
+                    + "&response_type="
+                    + CLIENT_LIST[client].get("TOKEN_TYPES")
+                    + "&client_id="
+                    + CLIENT_LIST[client].get("CLIENT_ID")
+                    + "&scope="
+                    + CLIENT_LIST[client].get("SCOPE"),
                     headers=self._session_auth_headers,
-                    allow_redirects=False
+                    allow_redirects=False,
                 )
-                if req.headers.get('Location', False):
-                    ref = req.headers.get('Location', '')
-                    if 'error' in ref:
-                        error = parse_qs(urlparse(ref).query).get('error', '')[0]
-                        if 'error_description' in ref:
-                            error = parse_qs(urlparse(ref).query).get('error_description', '')[0]
-                            _LOGGER.info(f'Unable to login, {error}')
+                if req.headers.get("Location", False):
+                    ref = req.headers.get("Location", "")
+                    if "error" in ref:
+                        error = parse_qs(urlparse(ref).query).get("error", "")[0]
+                        if "error_description" in ref:
+                            error = parse_qs(urlparse(ref).query).get("error_description", "")[0]
+                            _LOGGER.info(f"Unable to login, {error}")
                         else:
-                            _LOGGER.info(f'Unable to login.')
+                            _LOGGER.info(f"Unable to login.")
                         raise SkodaException(error)
                     else:
                         if self._session_fulldebug:
                             _LOGGER.debug(f'Got authorization endpoint: "{ref}"')
                         req = await self._session.get(
-                            url=ref,
-                            headers=self._session_auth_headers,
-                            allow_redirects=False
+                            url=ref, headers=self._session_auth_headers, allow_redirects=False
                         )
                 else:
-                    _LOGGER.warning(f'Unable to fetch authorization endpoint')
+                    _LOGGER.warning(f"Unable to fetch authorization endpoint")
                     raise SkodaException('Missing "location" header')
-            except (SkodaException):
+            except SkodaException:
                 raise
             except Exception as error:
-                _LOGGER.warning(f'Failed to get authorization endpoint. {error}')
+                _LOGGER.warning(f"Failed to get authorization endpoint. {error}")
                 raise SkodaException(error)
 
             # If we need to sign in (first token)
-            if 'signin-service' in ref:
+            if "signin-service" in ref:
                 _LOGGER.debug("User is not logged on, use signin service")
-                location = await self._signin_service(req, authissuer, authorizationEndpoint, client)
+                location = await self._signin_service(
+                    req, authissuer, authorizationEndpoint, client
+                )
             else:
                 # We are already logged on, shorter authorization flow
-                location = req.headers.get('Location', None)
+                location = req.headers.get("Location", None)
 
             # Follow all redirects until we reach the callback URL
             try:
                 maxDepth = 10
                 while not location.startswith(APP_URI):
                     if location is None:
-                        raise SkodaException('Login failed')
+                        raise SkodaException("Login failed")
                     if self._session_fulldebug:
                         _LOGGER.debug(f'Process HTTP redirect URL "{location}"')
-                    if 'error' in location:
-                        error = parse_qs(urlparse(location).query).get('error', '')[0]
-                        if error == 'login.error.throttled':
-                            timeout = parse_qs(urlparse(location).query).get('enableNextButtonAfterSeconds', '')[0]
-                            raise SkodaAccountLockedException(f'Account is locked for another {timeout} seconds')
-                        elif error == 'login.errors.password_invalid':
-                            raise SkodaAuthenticationException('Invalid password')
+                    if "error" in location:
+                        error = parse_qs(urlparse(location).query).get("error", "")[0]
+                        if error == "login.error.throttled":
+                            timeout = parse_qs(urlparse(location).query).get(
+                                "enableNextButtonAfterSeconds", ""
+                            )[0]
+                            raise SkodaAccountLockedException(
+                                f"Account is locked for another {timeout} seconds"
+                            )
+                        elif error == "login.errors.password_invalid":
+                            raise SkodaAuthenticationException("Invalid password")
                         else:
-                            _LOGGER.warning(f'Login failed: {error}')
+                            _LOGGER.warning(f"Login failed: {error}")
                         raise SkodaLoginFailedException(error)
-                    if 'terms-and-conditions' in location:
-                        raise SkodaEULAException('The terms and conditions must be accepted first at "https://www.skoda-connect.com/"')
+                    if "terms-and-conditions" in location:
+                        raise SkodaEULAException(
+                            'The terms and conditions must be accepted first at "https://www.skoda-connect.com/"'
+                        )
 
                     response = await self._session.get(
-                        url=location,
-                        headers=self._session_auth_headers,
-                        allow_redirects=False
+                        url=location, headers=self._session_auth_headers, allow_redirects=False
                     )
-                    if response.headers.get('Location', False) is False:
-                        if 'consent' in location:
+                    if response.headers.get("Location", False) is False:
+                        if "consent" in location:
                             new_form = await self._parse_form(response)
-                            _LOGGER.info(f'Consented scopes: {new_form.get("internalAndAlreadyConsentedScopes", "")}, not consented: {new_form.get("consentedScopes", "")}')
-                            raise SkodaAuthenticationException(f'Missing consent for client "{client}" scopes: {new_form.get("consentedScopes", "")}')
+                            _LOGGER.info(
+                                f'Consented scopes: {new_form.get("internalAndAlreadyConsentedScopes", "")}, not consented: {new_form.get("consentedScopes", "")}'
+                            )
+                            raise SkodaAuthenticationException(
+                                f'Missing consent for client "{client}" scopes: {new_form.get("consentedScopes", "")}'
+                            )
                         else:
-                            raise SkodaAuthenticationException(f'Unhandled error, redirect stopped at {location}')
-                    location = response.headers.get('Location', None)
+                            raise SkodaAuthenticationException(
+                                f"Unhandled error, redirect stopped at {location}"
+                            )
+                    location = response.headers.get("Location", None)
                     # Set a max limit on requests to prevent forever loop
                     maxDepth -= 1
                     if maxDepth == 0:
-                        raise SkodaException('Too many redirects')
-            except (SkodaException, SkodaEULAException, SkodaAuthenticationException, SkodaAccountLockedException, SkodaLoginFailedException):
+                        raise SkodaException("Too many redirects")
+            except (
+                SkodaException,
+                SkodaEULAException,
+                SkodaAuthenticationException,
+                SkodaAccountLockedException,
+                SkodaLoginFailedException,
+            ):
                 raise
             except Exception as e:
                 # If we get an unhandled exception it should be because we can't redirect to the APP_URI URL and thus we have our auth code
-                if 'code' in location:
+                if "code" in location:
                     if self._session_fulldebug:
-                        _LOGGER.debug('Got code: %s' % location)
+                        _LOGGER.debug("Got code: %s" % location)
                     pass
                 else:
-                    _LOGGER.debug(f'Exception occured while logging in.')
+                    _LOGGER.debug(f"Exception occured while logging in.")
                     raise SkodaLoginFailedException(e)
 
-            _LOGGER.debug('Received authorization code, exchange for tokens.')
+            _LOGGER.debug("Received authorization code, exchange for tokens.")
             # Extract code and tokens
-            jwt_auth_code = parse_qs(urlparse(location).fragment).get('code')[0]
+            jwt_auth_code = parse_qs(urlparse(location).fragment).get("code")[0]
             # Old token exchange commented below
-            #jwt_id_token = parse_qs(urlparse(location).fragment).get('id_token')[0]
-            #tokenBody = {
+            # jwt_id_token = parse_qs(urlparse(location).fragment).get('id_token')[0]
+            # tokenBody = {
             #    'auth_code': jwt_auth_code,
             #    'id_token':  jwt_id_token,
             #    'brand': BRAND
-            #}
-            #tokenURL = 'https://tokenrefreshservice.apps.emea.vwapps.io/exchangeAuthCode'
-            tokenBody = {
-                'authorizationCode': jwt_auth_code
-            }
-            tokenURL = 'https://api.connect.skoda-auto.cz/api/v1/authentication/token?systemId='+CLIENT_LIST[client].get('SYSTEM_ID')
+            # }
+            # tokenURL = 'https://tokenrefreshservice.apps.emea.vwapps.io/exchangeAuthCode'
+            tokenBody = {"authorizationCode": jwt_auth_code}
+            tokenURL = (
+                "https://api.connect.skoda-auto.cz/api/v1/authentication/token?systemId="
+                + CLIENT_LIST[client].get("SYSTEM_ID")
+            )
             if self._session_fulldebug:
                 _LOGGER.debug(f"Trying to authorize with {tokenBody}")
             newHeader = {
-                'Content-Type': "application/json; charset=UTF-8",
-                'user-agent': "okhttp/4.9.3"
+                "Content-Type": "application/json; charset=UTF-8",
+                "user-agent": "okhttp/4.9.3",
             }
             req = await self._session.post(
                 url=tokenURL,
-                #headers=self._session_auth_headers,
+                # headers=self._session_auth_headers,
                 headers=newHeader,
-                json = tokenBody,
-                allow_redirects=False
+                json=tokenBody,
+                allow_redirects=False,
             )
             _LOGGER.debug(f"Got {req}")
             if req.status != 200:
                 if req.status >= 500:
-                    raise SkodaServiceUnavailable(f'API returned HTTP status {req.status}')
-                raise SkodaException(f'Token exchange failed. Request status: {req.status}')
+                    raise SkodaServiceUnavailable(f"API returned HTTP status {req.status}")
+                raise SkodaException(f"Token exchange failed. Request status: {req.status}")
             # Save access, identity and refresh tokens according to requested client
-            _LOGGER.debug('Received token exchange response, checking for errors.')
+            _LOGGER.debug("Received token exchange response, checking for errors.")
             token_data = await req.json()
             if self._session_fulldebug:
                 _LOGGER.debug(f"Token data is: {token_data}")
             self._session_tokens[client] = {}
 
             # Assume that tokens were received OK
-            if not 'error' in token_data:
-                self._session_tokens[client]['access_token'] = token_data.get('access_token', token_data.get('accessToken', ''))
-                self._session_tokens[client]['refresh_token'] = token_data.get('refresh_token', token_data.get('refreshToken', ''))
-                self._session_tokens[client]['id_token'] = token_data.get('id_token', token_data.get('idToken', ''))
+            if not "error" in token_data:
+                self._session_tokens[client]["access_token"] = token_data.get(
+                    "access_token", token_data.get("accessToken", "")
+                )
+                self._session_tokens[client]["refresh_token"] = token_data.get(
+                    "refresh_token", token_data.get("refreshToken", "")
+                )
+                self._session_tokens[client]["id_token"] = token_data.get(
+                    "id_token", token_data.get("idToken", "")
+                )
             else:
-                error = token_data.get('error', '')
-                if 'error_description' in token_data:
-                    error_description = token_data.get('error_description', '')
-                    raise SkodaException(f'{error} - {error_description}')
+                error = token_data.get("error", "")
+                if "error_description" in token_data:
+                    error_description = token_data.get("error_description", "")
+                    raise SkodaException(f"{error} - {error_description}")
                 else:
                     raise SkodaException(error)
             if self._session_fulldebug:
                 for key in self._session_tokens.get(client, {}):
-                    _LOGGER.debug(f'Got {key} for client {CLIENT_LIST[client].get("CLIENT_ID","")}, token: "{self._session_tokens.get(client, {}).get(key, None)}"')
+                    _LOGGER.debug(
+                        f'Got {key} for client {CLIENT_LIST[client].get("CLIENT_ID","")}, token: "{self._session_tokens.get(client, {}).get(key, None)}"'
+                    )
 
             # Verify refresh token, warn if problems are found
-            verified = await self.verify_token(self._session_tokens[client].get('refresh_token', None), client)
+            verified = await self.verify_token(
+                self._session_tokens[client].get("refresh_token", None), client
+            )
             if verified is False:
-                _LOGGER.warning(f'Token for {client} is invalid!')
+                _LOGGER.warning(f"Token for {client} is invalid!")
             elif isinstance(verified, dict):
-                _LOGGER.info(f'Token for {client} verified OK.')
+                _LOGGER.info(f"Token for {client} verified OK.")
             else:
-                _LOGGER.warning(f'Token for {client} could not be verified, verification returned {verified}.')
-        except (SkodaEULAException, SkodaAccountLockedException, SkodaAuthenticationException, SkodaException, SkodaLoginFailedException) as e:
+                _LOGGER.warning(
+                    f"Token for {client} could not be verified, verification returned {verified}."
+                )
+        except (
+            SkodaEULAException,
+            SkodaAccountLockedException,
+            SkodaAuthenticationException,
+            SkodaException,
+            SkodaLoginFailedException,
+        ) as e:
             _LOGGER.error(e)
             raise
-        except (TypeError):
-            _LOGGER.warning(f'Login failed for {self._session_auth_username}. The server might be temporarily unavailable, try again later. If the problem persists, verify your account at https://www.skoda-connect.com')
+        except TypeError:
+            _LOGGER.warning(
+                f"Login failed for {self._session_auth_username}. The server might be temporarily unavailable, try again later. If the problem persists, verify your account at https://www.skoda-connect.com"
+            )
             raise
         except Exception as error:
-            _LOGGER.error(f'Login failed for {self._session_auth_username}, {error}')
+            _LOGGER.error(f"Login failed for {self._session_auth_username}, {error}")
             raise SkodaLoginFailedException(error)
         return True
 
-    async def _signin_service(self, html, authissuer, authorizationEndpoint, client='technical'):
+    async def _signin_service(self, html, authissuer, authorizationEndpoint, client="technical"):
         """Method to signin to Skoda Connect portal."""
         # Parse form data and populate with email
         try:
             user_form = await self._parse_form(html)
             # Expect first form to be HTML
-            if user_form.get('type', None) == 'html':
-                user_form['email'] = self._session_auth_username
+            if user_form.get("type", None) == "html":
+                user_form["email"] = self._session_auth_username
             else:
-                raise SkodaAuthenticationException('Expected HTML data for initial login form!')
-            if user_form.get('action', None) is not None:
-                post_url = authissuer + user_form.get('action')
-                user_form.pop('action', None)
+                raise SkodaAuthenticationException("Expected HTML data for initial login form!")
+            if user_form.get("action", None) is not None:
+                post_url = authissuer + user_form.get("action")
+                user_form.pop("action", None)
             else:
-                raise SkodaAuthenticationException('Could not find login URL!')
+                raise SkodaAuthenticationException("Could not find login URL!")
             form_data = user_form
-            form_data.pop('type', None)
+            form_data.pop("type", None)
         except Exception as e:
-            _LOGGER.error('Failed to extract user login form.')
+            _LOGGER.error("Failed to extract user login form.")
             raise
 
         # POST email
         # https://identity.vwgroup.io/signin-service/v1/{CLIENT_ID}/login/identifier
-        self._session_auth_headers['Referer'] = authorizationEndpoint
-        self._session_auth_headers['Origin'] = authissuer
+        self._session_auth_headers["Referer"] = authorizationEndpoint
+        self._session_auth_headers["Origin"] = authissuer
         _LOGGER.debug(f"Start login process for user {self._session_auth_username}")
         req = await self._session.post(
-            url = post_url,
-            headers = self._session_auth_headers,
-            data = form_data
+            url=post_url, headers=self._session_auth_headers, data=form_data
         )
         # Check valid response
         try:
             if req.status != 200:
-                raise SkodaException('Authorization request failed, service might be temporarily unavailable.')
-            if 'error' in str(req.url):
+                raise SkodaException(
+                    "Authorization request failed, service might be temporarily unavailable."
+                )
+            if "error" in str(req.url):
                 login_error = str(req.url).split("error=", 1)[1]
-                if login_error == 'validator.email.invalid':
-                    raise SkodaConfigException(f'Invalid email address provided: {self._session_auth_username}')
+                if login_error == "validator.email.invalid":
+                    raise SkodaConfigException(
+                        f"Invalid email address provided: {self._session_auth_username}"
+                    )
                 else:
-                    raise SkodaAuthenticationException(f'Login error: {login_error}')
+                    raise SkodaAuthenticationException(f"Login error: {login_error}")
         except (SkodaAuthenticationException, SkodaConfigException) as e:
             raise
         except Exception as e:
@@ -438,47 +485,51 @@ class Connection:
         # Parse response and process data before posting password
         try:
             pw_form = await self._parse_form(req)
-            if pw_form.get('type', '') == 'html':
-                _LOGGER.debug('Expected dynamic HTML form')
-                if 'register' in pw_form.get('action', ''):
-                    raise SkodaLoginFailedException('The specified email is not registered')
-            if pw_form.get('error', None) is not None:
-                raise SkodaLoginFailedException(f'Login failed with error: {pw_form.get("error", None)}')
-            if 'registerCredentialsPath' in pw_form:
-                raise SkodaAuthenticationException('Registration is not completed for this account!')
-            if not pw_form.get('hmac', False):
-                raise SkodaLoginFailedException('Failed to extract login hmac attribute')
-            if not pw_form.get('postAction', pw_form.get('action', False)):
-                raise SkodaLoginFailedException('Failed to extract login post action attribute')
-            form_data['hmac'] = pw_form.get('hmac', '')
-            form_data['password'] = self._session_auth_password
-            post_action = pw_form.get('postAction', pw_form.get('action', False))
-        except (SkodaLoginFailedException):
+            if pw_form.get("type", "") == "html":
+                _LOGGER.debug("Expected dynamic HTML form")
+                if "register" in pw_form.get("action", ""):
+                    raise SkodaLoginFailedException("The specified email is not registered")
+            if pw_form.get("error", None) is not None:
+                raise SkodaLoginFailedException(
+                    f'Login failed with error: {pw_form.get("error", None)}'
+                )
+            if "registerCredentialsPath" in pw_form:
+                raise SkodaAuthenticationException(
+                    "Registration is not completed for this account!"
+                )
+            if not pw_form.get("hmac", False):
+                raise SkodaLoginFailedException("Failed to extract login hmac attribute")
+            if not pw_form.get("postAction", pw_form.get("action", False)):
+                raise SkodaLoginFailedException("Failed to extract login post action attribute")
+            form_data["hmac"] = pw_form.get("hmac", "")
+            form_data["password"] = self._session_auth_password
+            post_action = pw_form.get("postAction", pw_form.get("action", False))
+        except SkodaLoginFailedException:
             raise
         except Exception as e:
             raise SkodaAuthenticationException(f"Login failed, error: {e}")
 
         # POST password
         # https://identity.vwgroup.io/signin-service/v1/{CLIENT_ID}/login/authenticate
-        self._session_auth_headers['Referer'] = post_url
-        self._session_auth_headers['Origin'] = authissuer
+        self._session_auth_headers["Referer"] = post_url
+        self._session_auth_headers["Origin"] = authissuer
         _LOGGER.debug(f"Finalizing login")
 
-        client_id = CLIENT_LIST[client].get('CLIENT_ID')
-        pw_post_url = authissuer+post_action
-        if not 'signin-service' in pw_post_url or not client_id in pw_post_url:
-            pw_post_url = authissuer+'/signin-service/v1/'+client_id+"/"+post_action
+        client_id = CLIENT_LIST[client].get("CLIENT_ID")
+        pw_post_url = authissuer + post_action
+        if not "signin-service" in pw_post_url or not client_id in pw_post_url:
+            pw_post_url = authissuer + "/signin-service/v1/" + client_id + "/" + post_action
 
         if self._session_fulldebug:
             _LOGGER.debug(f'Using login action url: "{pw_post_url}"')
         req = await self._session.post(
             url=pw_post_url,
             headers=self._session_auth_headers,
-            data = form_data,
-            allow_redirects=False
+            data=form_data,
+            allow_redirects=False,
         )
 
-        return req.headers.get('Location', None)
+        return req.headers.get("Location", None)
 
     async def _parse_form(self, html):
         """Method to parse HTML form and return input values and action."""
@@ -486,43 +537,45 @@ class Connection:
         try:
             form_data = dict()
             response_data = await html.text()
-            responseSoup = BeautifulSoup(response_data, 'html.parser')
+            responseSoup = BeautifulSoup(response_data, "html.parser")
             if responseSoup is None:
-                raise SkodaLoginFailedException('HTML form extraction failed, server did not return valid HTML data')
+                raise SkodaLoginFailedException(
+                    "HTML form extraction failed, server did not return valid HTML data"
+                )
 
             # There are two possibilities, either hard coded HTML form or dynamic form built by JS
-            html_form = responseSoup.find('form')
-            js_scripts = responseSoup.find_all('script', {'src': False})
+            html_form = responseSoup.find("form")
+            js_scripts = responseSoup.find_all("script", {"src": False})
 
             if html_form is not None:
                 # Our form is built by HTML, extract input fields
-                form_data['type'] = 'html'
-                _LOGGER.debug('Found HTML credentials form, extracting attributes')
-                for input in html_form.find_all('input', type='hidden'):
-
-                    if form_data.get(input['name'], False):
-                        form_data[input['name']] = form_data[input['name']]+' '+input['value']
+                form_data["type"] = "html"
+                _LOGGER.debug("Found HTML credentials form, extracting attributes")
+                for input in html_form.find_all("input", type="hidden"):
+                    if form_data.get(input["name"], False):
+                        form_data[input["name"]] = form_data[input["name"]] + " " + input["value"]
                     else:
-                        form_data[input['name']] = input['value']
-                action = responseSoup.find('form').get('action')
+                        form_data[input["name"]] = input["value"]
+                action = responseSoup.find("form").get("action")
                 if action is not None:
-                    form_data['action'] = action
+                    form_data["action"] = action
             elif js_scripts is not None:
                 # Our form is dynamically built by javascript, extract JSON data
-                form_data['type'] = 'js'
-                _LOGGER.debug('Found dynamic credentials form, extracting attributes')
+                form_data["type"] = "js"
+                _LOGGER.debug("Found dynamic credentials form, extracting attributes")
                 pattern = re.compile("templateModel: (.*?),\n")
                 for script in js_scripts:
                     # Check all inline scripts and search for interesting data
-                    if(pattern.search(script.string)):
+                    if pattern.search(script.string):
                         import json
+
                         data = pattern.search(script.string)
                         form_data = json.loads(data.groups()[0])
-                        _LOGGER.debug(f'Script JSON data: {form_data}')
+                        _LOGGER.debug(f"Script JSON data: {form_data}")
             else:
-                raise SkodaLoginFailedException('Failed to extract login form data')
+                raise SkodaLoginFailedException("Failed to extract login form data")
             if self._session_fulldebug:
-                _LOGGER.debug(f'Extracted form attributes: {form_data}')
+                _LOGGER.debug(f"Extracted form attributes: {form_data}")
             return form_data
         except Exception as e:
             raise SkodaAuthenticationException(f"Failed to extract login form data, error {e}")
@@ -531,99 +584,102 @@ class Connection:
         """Method to acquire VW-Group API tokens (Legacy API)."""
         try:
             # Check for valid 'connect' token
-            token = self._session_tokens.get('connect', {}).get('id_token', None)
+            token = self._session_tokens.get("connect", {}).get("id_token", None)
             if token is None:
                 _LOGGER.debug('Client "connect" token is missing, call to authorize the client.')
-                if await self._authorize('connect') is True:
-                    token = self._session_tokens.get('connect', {}).get('id_token', None)
+                if await self._authorize("connect") is True:
+                    token = self._session_tokens.get("connect", {}).get("id_token", None)
                 else:
                     raise SkodaAuthenticationException('Failed to authorize client "connect"')
 
             # If connect token is not valid, try to refresh it
             if not await self.validate_token(token):
                 # Try to refresh "Connect" token
-                if not await self.refresh_token('connect'):
+                if not await self.refresh_token("connect"):
                     raise SkodaTokenExpiredException('Token is invalid for client "connect"')
 
             # https://mbboauth-1d.prd.ece.vwg-connect.com/mbbcoauth/mobile/oauth2/v1/token
-            request_data =  {
-                'token': self._session_tokens['connect']['id_token'],
-                'grant_type': 'id_token',
-                'scope': 'sc2:fal'
+            request_data = {
+                "token": self._session_tokens["connect"]["id_token"],
+                "grant_type": "id_token",
+                "scope": "sc2:fal",
             }
-            _LOGGER.debug('Trying to fetch api tokens.')
+            _LOGGER.debug("Trying to fetch api tokens.")
             req = await self._session.post(
-                url='https://mbboauth-1d.prd.ece.vwg-connect.com/mbbcoauth/mobile/oauth2/v1/token',
-                headers= {
-                    'User-Agent': USER_AGENT,
+                url="https://mbboauth-1d.prd.ece.vwg-connect.com/mbbcoauth/mobile/oauth2/v1/token",
+                headers={
+                    "User-Agent": USER_AGENT,
                     #'X-App-Version': XAPPVERSION,
                     #'X-App-Name': XAPPNAME,
-                    'X-Client-Id': XCLIENT_ID,
-                    'X-Platform': 'Android'
+                    "X-Client-Id": XCLIENT_ID,
+                    "X-Platform": "Android",
                 },
-                data = request_data,
-                allow_redirects=False
+                data=request_data,
+                allow_redirects=False,
             )
             if req.status > 400:
-                _LOGGER.debug('API token request failed.')
-                raise SkodaException(f'API token request returned with status code {req.status}')
+                _LOGGER.debug("API token request failed.")
+                raise SkodaException(f"API token request returned with status code {req.status}")
             else:
                 # Save tokens as "vwg", use theese for get/posts to VW Group API
                 token_data = await req.json()
                 # Create empty key if not exist
-                if not self._session_tokens.get('vwg', False):
-                    self._session_tokens['vwg'] = {}
+                if not self._session_tokens.get("vwg", False):
+                    self._session_tokens["vwg"] = {}
                 for key in token_data:
-                    if '_token' in key:
-                        self._session_tokens['vwg'][key] = token_data[key]
-                if 'error' in self._session_tokens['vwg']:
-                    error = self._session_tokens['vwg'].get('error', '')
-                    if 'error_description' in self._session_tokens['vwg']:
-                        error_description = self._session_tokens['vwg'].get('error_description', '')
-                        raise SkodaException(f'{error} - {error_description}')
+                    if "_token" in key:
+                        self._session_tokens["vwg"][key] = token_data[key]
+                if "error" in self._session_tokens["vwg"]:
+                    error = self._session_tokens["vwg"].get("error", "")
+                    if "error_description" in self._session_tokens["vwg"]:
+                        error_description = self._session_tokens["vwg"].get("error_description", "")
+                        raise SkodaException(f"{error} - {error_description}")
                     else:
                         raise SkodaException(error)
                 # The vwg refresh token doesn't have an aud attribute, check the access token instead
-                verified = await self.verify_token(self._session_tokens['vwg'].get('refresh_token', None), 'vwg')
+                verified = await self.verify_token(
+                    self._session_tokens["vwg"].get("refresh_token", None), "vwg"
+                )
                 if verified is False:
-                    _LOGGER.warning('VW-Group API token could not be verified!')
+                    _LOGGER.warning("VW-Group API token could not be verified!")
                 elif isinstance(verified, dict):
-                    _LOGGER.debug('VW-Group API token verified OK.')
+                    _LOGGER.debug("VW-Group API token verified OK.")
                 else:
-                    _LOGGER.warning('Token verification encountered an error: {verified}')
+                    _LOGGER.warning("Token verification encountered an error: {verified}")
 
             # Update headers for requests, defaults to using VWG token
-            self._session_headers['Authorization'] = 'Bearer ' + self._session_tokens['vwg']['access_token']
+            self._session_headers["Authorization"] = (
+                "Bearer " + self._session_tokens["vwg"]["access_token"]
+            )
         except:
             raise
         return True
 
     async def terminate(self):
         """Log out from connect services"""
-        _LOGGER.info(f'Initiating logout')
+        _LOGGER.info(f"Initiating logout")
         await self.logout()
 
     async def logout(self):
         """Logout, revoke tokens."""
         for client in self._session_tokens:
             try:
-                refresh_token = self._session_tokens[client]['refresh_token']
+                refresh_token = self._session_tokens[client]["refresh_token"]
                 await self.revoke_token(refresh_token, client)
             except:
-                _LOGGER.info('Some problem occured while revoking tokens, ignoring...')
+                _LOGGER.info("Some problem occured while revoking tokens, ignoring...")
                 pass
 
     async def revoke_token(self, token, client):
         """Revoke refresh token for supplied client."""
         try:
             req_headers = TOKEN_HEADERS[client]
-            if client == 'vwg':
-                params = {
-                    'token': token,
-                    'token_type_hint': 'refresh_token'
-                }
-                revoke_url = 'https://mbboauth-1d.prd.ece.vwg-connect.com/mbbcoauth/mobile/oauth2/v1/revoke'
-                if await self._session.post(revoke_url, headers = req_headers, data = params):
+            if client == "vwg":
+                params = {"token": token, "token_type_hint": "refresh_token"}
+                revoke_url = (
+                    "https://mbboauth-1d.prd.ece.vwg-connect.com/mbbcoauth/mobile/oauth2/v1/revoke"
+                )
+                if await self._session.post(revoke_url, headers=req_headers, data=params):
                     _LOGGER.debug(f'Revocation of token for client "{client}" successful')
                     # Remove tokens from storage
                     self._session_tokens[client] = {}
@@ -631,13 +687,16 @@ class Connection:
                 else:
                     _LOGGER.warning(f'Revocation of token for client "{client}" failed')
                     return False
-            elif client in ['connect', 'dcs', 'cabs', 'technical']:
+            elif client in ["connect", "dcs", "cabs", "technical"]:
                 # "Skoda" tokens
                 params = {
-                    'refreshToken': token,
+                    "refreshToken": token,
                 }
-                revoke_url = 'https://api.connect.skoda-auto.cz/api/v1/authentication/token/revoke?systemId='+CLIENT_LIST[client].get('SYSTEM_ID')
-                if await self._session.post(revoke_url, headers = req_headers, data = params):
+                revoke_url = (
+                    "https://api.connect.skoda-auto.cz/api/v1/authentication/token/revoke?systemId="
+                    + CLIENT_LIST[client].get("SYSTEM_ID")
+                )
+                if await self._session.post(revoke_url, headers=req_headers, data=params):
                     _LOGGER.debug(f'Revocation of token for client "{client}" successful')
                     # Remove tokens from storage
                     self._session_tokens[client] = {}
@@ -646,43 +705,57 @@ class Connection:
                     _LOGGER.warning(f'Revocation of token for client "{client}" failed')
                     return False
         except Exception as e:
-            _LOGGER.info(f'Revocation of token for {client} failed with error: {e}')
+            _LOGGER.info(f"Revocation of token for {client} failed with error: {e}")
         return False
 
-  # HTTP methods to API
-    async def get(self, url, vin=''):
+    # HTTP methods to API
+    async def get(self, url, vin=""):
         """Perform a HTTP GET."""
         try:
             response = await self._request(METH_GET, url)
             return response
         except aiohttp.client_exceptions.ClientResponseError as error:
             data = {
-                'status_code': error.status,
-                'error': error.code,
-                'error_description': error.message,
-                'response_headers': error.headers,
-                'request_info': error.request_info
+                "status_code": error.status,
+                "error": error.code,
+                "error_description": error.message,
+                "response_headers": error.headers,
+                "request_info": error.request_info,
             }
             if error.status == 401:
-                _LOGGER.warning('Received "Unauthorized" while fetching data.\nThis can occur if tokens expired or refresh service is unavailable.')
+                _LOGGER.warning(
+                    'Received "Unauthorized" while fetching data.\nThis can occur if tokens expired or refresh service is unavailable.'
+                )
             elif error.status == 400:
-                _LOGGER.error('Received "Bad Request" from server.\nThe request might be malformed or not implemented correctly for this vehicle.')
+                _LOGGER.error(
+                    'Received "Bad Request" from server.\nThe request might be malformed or not implemented correctly for this vehicle.'
+                )
             elif error.status == 412:
-                _LOGGER.debug('Received "Pre-condition failed".\nService might be temporarily unavailable.')
+                _LOGGER.debug(
+                    'Received "Pre-condition failed".\nService might be temporarily unavailable.'
+                )
             elif error.status == 500:
-                _LOGGER.info('Received "Internal server error".\nThe service is temporarily unavailable.')
+                _LOGGER.info(
+                    'Received "Internal server error".\nThe service is temporarily unavailable.'
+                )
             elif error.status == 502:
-                _LOGGER.info('Received "Bad gateway".\nEither the endpoint is temporarily unavailable or not supported for this vehicle.')
+                _LOGGER.info(
+                    'Received "Bad gateway".\nEither the endpoint is temporarily unavailable or not supported for this vehicle.'
+                )
             elif 400 <= error.status <= 499:
-                _LOGGER.error('Received unhandled error indicating client-side problem.\nRestart or try again later.')
+                _LOGGER.error(
+                    "Received unhandled error indicating client-side problem.\nRestart or try again later."
+                )
             elif 500 <= error.status <= 599:
-                _LOGGER.error('Received unhandled error indicating server-side problem.\nThe service might be temporarily unavailable.')
+                _LOGGER.error(
+                    "Received unhandled error indicating server-side problem.\nThe service might be temporarily unavailable."
+                )
             else:
-                _LOGGER.error('Received unhandled error while requesting API endpoint.')
-            _LOGGER.debug(f'HTTP request information: {data}')
+                _LOGGER.error("Received unhandled error while requesting API endpoint.")
+            _LOGGER.debug(f"HTTP request information: {data}")
             return data
         except Exception as e:
-            _LOGGER.debug(f'Got non HTTP related error: {e}')
+            _LOGGER.debug(f"Got non HTTP related error: {e}")
 
     async def post(self, url, **data):
         """Perform a HTTP POST."""
@@ -702,22 +775,22 @@ class Connection:
             timeout=ClientTimeout(total=TIMEOUT.seconds),
             cookies=self._session_cookies,
             raise_for_status=False,
-            **kwargs
+            **kwargs,
         ) as response:
             response.raise_for_status()
 
             # Update cookie jar
-            if self._session_cookies != '':
+            if self._session_cookies != "":
                 self._session_cookies.update(response.cookies)
             else:
                 self._session_cookies = response.cookies
 
             try:
                 if response.status == 204:
-                    res = {'status_code': response.status}
+                    res = {"status_code": response.status}
                 elif response.status >= 200 or response.status <= 300:
                     # If this is a revoke token url, expect Content-Length 0 and return
-                    if int(response.headers.get('Content-Length', 0)) == 0 and 'revoke' in url:
+                    if int(response.headers.get("Content-Length", 0)) == 0 and "revoke" in url:
                         if response.status == 200:
                             return True
                         else:
@@ -726,16 +799,22 @@ class Connection:
                         res = await response.json(loads=json_loads)
                 else:
                     res = {}
-                    _LOGGER.debug(f'Not success status code [{response.status}] response: {response}')
-                if 'X-RateLimit-Remaining' in response.headers:
-                    res['rate_limit_remaining'] = response.headers.get('X-RateLimit-Remaining', '')
+                    _LOGGER.debug(
+                        f"Not success status code [{response.status}] response: {response}"
+                    )
+                if "X-RateLimit-Remaining" in response.headers:
+                    res["rate_limit_remaining"] = response.headers.get("X-RateLimit-Remaining", "")
             except Exception as e:
                 res = {}
-                _LOGGER.debug(f'Something went wrong [{response.status}] response: {response}, error: {e}')
+                _LOGGER.debug(
+                    f"Something went wrong [{response.status}] response: {response}, error: {e}"
+                )
                 return res
 
             if self._session_fulldebug:
-                _LOGGER.debug(f'Request for "{url}" returned with status code [{response.status}], response: {res}')
+                _LOGGER.debug(
+                    f'Request for "{url}" returned with status code [{response.status}], response: {res}'
+                )
             else:
                 _LOGGER.debug(f'Request for "{url}" returned with status code [{response.status}]')
             return res
@@ -744,51 +823,55 @@ class Connection:
         """Function for POST actions with error handling."""
         try:
             response = await self.post(query, **data)
-            _LOGGER.debug(f'Data call returned: {response}')
+            _LOGGER.debug(f"Data call returned: {response}")
             return response
         except aiohttp.client_exceptions.ClientResponseError as error:
-            _LOGGER.debug(f'Request failed. Data: {data}, HTTP request headers: {self._session_headers}')
+            _LOGGER.debug(
+                f"Request failed. Data: {data}, HTTP request headers: {self._session_headers}"
+            )
             if error.status == 401:
-                _LOGGER.error('Unauthorized')
+                _LOGGER.error("Unauthorized")
             elif error.status == 400:
-                _LOGGER.error(f'Bad request')
+                _LOGGER.error(f"Bad request")
             elif error.status == 429:
-                _LOGGER.warning('Too many requests. Further requests can only be made after the end of next trip in order to protect your vehicles battery.')
+                _LOGGER.warning(
+                    "Too many requests. Further requests can only be made after the end of next trip in order to protect your vehicles battery."
+                )
                 return 429
             elif error.status == 500:
-                _LOGGER.error('Internal server error, server might be temporarily unavailable')
+                _LOGGER.error("Internal server error, server might be temporarily unavailable")
             elif error.status == 502:
-                _LOGGER.error('Bad gateway, this function may not be implemented for this vehicle')
+                _LOGGER.error("Bad gateway, this function may not be implemented for this vehicle")
             else:
-                _LOGGER.error(f'Unhandled HTTP exception: {error}')
-            #return False
+                _LOGGER.error(f"Unhandled HTTP exception: {error}")
+            # return False
         except Exception as error:
-            _LOGGER.error(f'Failure to execute: {error}')
+            _LOGGER.error(f"Failure to execute: {error}")
         return False
 
-  # Class get data functions
+    # Class get data functions
     async def update_all(self):
         """Update status."""
         try:
-            await self.set_token('vwg')
+            await self.set_token("vwg")
             # Get all Vehicle objects and update in parallell
             update_list = []
             for vehicle in self.vehicles:
                 if vehicle.vin not in update_list:
-                    _LOGGER.debug(f'Adding {vehicle.vin} for data refresh')
+                    _LOGGER.debug(f"Adding {vehicle.vin} for data refresh")
                     update_list.append(vehicle.update())
                 else:
-                    _LOGGER.debug(f'VIN {vehicle.vin} is already queued for data refresh')
+                    _LOGGER.debug(f"VIN {vehicle.vin} is already queued for data refresh")
 
             # Wait for all data updates to complete
             if len(update_list) == 0:
-                _LOGGER.info('No vehicles in account to update')
+                _LOGGER.info("No vehicles in account to update")
             else:
-                _LOGGER.debug('Calling update function for all vehicles')
+                _LOGGER.debug("Calling update function for all vehicles")
                 await asyncio.gather(*update_list)
             return True
         except (IOError, OSError, LookupError, Exception) as error:
-            _LOGGER.warning(f'An error was encountered during interaction with the API: {error}')
+            _LOGGER.warning(f"An error was encountered during interaction with the API: {error}")
         except:
             raise
         return False
@@ -799,60 +882,72 @@ class Connection:
 
         # Check if user needs to update consent
         try:
-            await self.set_token('connect')
+            await self.set_token("connect")
         except:
             raise
         try:
             consent = await self.getConsentInfo()
             if isinstance(consent, dict):
-                _LOGGER.debug(f'Profile check returned consent data: {consent}')
-                if 'status' in consent.get('mandatoryConsentInfo', []):
-                    if consent.get('mandatoryConsentInfo', [])['status'] != 'VALID':
-                        _LOGGER.error(f'The user needs to update consent for {consent.get("mandatoryConsentInfo", [])["id"]}. If problems are encountered please visit the web portal first and accept terms and conditions.')
-                elif len(consent.get('missingMandatoryFields', [])) > 0:
-                    _LOGGER.error(f'Missing mandatory field for user: {consent.get("missingMandatoryFields", [])[0].get("name", "")}. If problems are encountered please visit the web portal first and accept terms and conditions.')
+                _LOGGER.debug(f"Profile check returned consent data: {consent}")
+                if "status" in consent.get("mandatoryConsentInfo", []):
+                    if consent.get("mandatoryConsentInfo", [])["status"] != "VALID":
+                        _LOGGER.error(
+                            f'The user needs to update consent for {consent.get("mandatoryConsentInfo", [])["id"]}. If problems are encountered please visit the web portal first and accept terms and conditions.'
+                        )
+                elif len(consent.get("missingMandatoryFields", [])) > 0:
+                    _LOGGER.error(
+                        f'Missing mandatory field for user: {consent.get("missingMandatoryFields", [])[0].get("name", "")}. If problems are encountered please visit the web portal first and accept terms and conditions.'
+                    )
                 else:
-                    _LOGGER.debug('User consent is valid, no missing information for profile')
+                    _LOGGER.debug("User consent is valid, no missing information for profile")
             else:
-                _LOGGER.debug('Could not fetch consent information. If problems are encountered please visit the web portal first and make sure that no new terms and conditions need to be accepted.')
+                _LOGGER.debug(
+                    "Could not fetch consent information. If problems are encountered please visit the web portal first and make sure that no new terms and conditions need to be accepted."
+                )
         except:
-            _LOGGER.debug('Could not fetch consent information. If problems are encountered please visit the web portal first and make sure that no new terms and conditions need to be accepted.')
+            _LOGGER.debug(
+                "Could not fetch consent information. If problems are encountered please visit the web portal first and make sure that no new terms and conditions need to be accepted."
+            )
 
         # Authorize for "skoda" client and get vehicles from garage endpoint
         try:
-            await self.set_token('technical')
+            await self.set_token("technical")
             response = await self.get(
                 #'https://api.connect.skoda-auto.cz/api/v2/garage/vehicles'
-                'https://api.connect.skoda-auto.cz/api/v3/garage'
+                "https://api.connect.skoda-auto.cz/api/v3/garage"
             )
             # Check that response is a list
-            #if isinstance(response, list):
-            if isinstance(response.get('vehicles', None), list):
-                #skoda_vehicles = response
-                skoda_vehicles = response.get('vehicles')
+            # if isinstance(response, list):
+            if isinstance(response.get("vehicles", None), list):
+                # skoda_vehicles = response
+                skoda_vehicles = response.get("vehicles")
         except:
             raise
 
         # If Skoda API return no cars, fallback to VW-Group API
         if len(skoda_vehicles) == 0:
-            _LOGGER.debug('Skoda native API returned no vehicles. Using fallback VW-Group API.')
+            _LOGGER.debug("Skoda native API returned no vehicles. Using fallback VW-Group API.")
             try:
-                await self.set_token('vwg')
-                self._session_headers.pop('Content-Type', None)
+                await self.set_token("vwg")
+                self._session_headers.pop("Content-Type", None)
                 response = await self.get(
-                    url=f'https://msg.volkswagen.de/fs-car/usermanagement/users/v1/{BRAND}/{COUNTRY}/vehicles'
+                    url=f"https://msg.volkswagen.de/fs-car/usermanagement/users/v1/{BRAND}/{COUNTRY}/vehicles"
                 )
 
-                if response.get('userVehicles', {}).get('vehicle', False):
-                    _LOGGER.debug('Found vehicle(s) associated with account.')
-                    for vehicle in response.get('userVehicles').get('vehicle'):
-                        await self.set_token('technical')
-                        vehicle_info = await self.get(url=f'https://api.connect.skoda-auto.cz/api/v2/vehicles/{vehicle}')
-                        if vehicle_info.get('vehicleSpecification', False):
-                            vehicle_info['vin'] = vehicle
+                if response.get("userVehicles", {}).get("vehicle", False):
+                    _LOGGER.debug("Found vehicle(s) associated with account.")
+                    for vehicle in response.get("userVehicles").get("vehicle"):
+                        await self.set_token("technical")
+                        vehicle_info = await self.get(
+                            url=f"https://api.connect.skoda-auto.cz/api/v2/vehicles/{vehicle}"
+                        )
+                        if vehicle_info.get("vehicleSpecification", False):
+                            vehicle_info["vin"] = vehicle
                             skoda_vehicles.append(vehicle_info)
                         else:
-                            _LOGGER.warning(f"Failed to aquire information about vehicle with VIN {vehicle}")
+                            _LOGGER.warning(
+                                f"Failed to aquire information about vehicle with VIN {vehicle}"
+                            )
             except:
                 raise
 
@@ -864,630 +959,735 @@ class Connection:
         else:
             try:
                 for vehicle in skoda_vehicles:
-                    _LOGGER.debug(f'Checking vehicle {vehicle}')
-                    vin = vehicle.get('vin', '')
-                    specs = vehicle.get('specification', vehicle.get('vehicleSpecification', ''))
+                    _LOGGER.debug(f"Checking vehicle {vehicle}")
+                    vin = vehicle.get("vin", "")
+                    specs = vehicle.get("specification", vehicle.get("vehicleSpecification", ""))
                     connectivity = []
-                    for service in vehicle.get('connectivities', []):
+                    for service in vehicle.get("connectivities", []):
                         if isinstance(service, str):
                             connectivity.append(service)
                         elif isinstance(service, dict):
-                            connectivity.append(service.get('type', ''))
+                            connectivity.append(service.get("type", ""))
 
                     capabilities = []
-                    for capability in vehicle.get('capabilities', {}).get('capabilities', []):
-                        capabilities.append(capability.get('id', ''))
+                    for capability in vehicle.get("capabilities", {}).get("capabilities", []):
+                        capabilities.append(capability.get("id", ""))
                     vehicle = {
-                        'vin': vin,
-                        'connectivities': connectivity,
-                        'capabilities': capabilities,
-                        'specification': specs,
+                        "vin": vin,
+                        "connectivities": connectivity,
+                        "capabilities": capabilities,
+                        "specification": specs,
                     }
                     # Check if object already exist
-                    _LOGGER.debug(f'Check if vehicle exists')
+                    _LOGGER.debug(f"Check if vehicle exists")
                     if self.vehicle(vin) is not None:
-                        _LOGGER.debug(f'Vehicle with VIN number {vin} already exist.')
+                        _LOGGER.debug(f"Vehicle with VIN number {vin} already exist.")
                         car = Vehicle(self, vehicle)
                         if not car == self.vehicle(vehicle):
-                            _LOGGER.debug(f'Updating {vehicle} object')
+                            _LOGGER.debug(f"Updating {vehicle} object")
                             self._vehicles.pop(vehicle)
                             self._vehicles.append(Vehicle(self, vehicle))
                     else:
-                        _LOGGER.debug(f'Adding vehicle {vin}, with connectivities: {connectivity}')
+                        _LOGGER.debug(f"Adding vehicle {vin}, with connectivities: {connectivity}")
                         self._vehicles.append(Vehicle(self, vehicle))
             except:
                 raise SkodaLoginFailedException("Unable to fetch associated vehicles for account")
         return skoda_vehicles
 
- #### API get data functions ####
-   # Profile related functions
+    #### API get data functions ####
+    # Profile related functions
     async def getConsentInfo(self):
         """Get consent information for user."""
         try:
-            await self.set_token('connect')
-            atoken = self._session_tokens['connect']['access_token']
-            subject = self.decode_token(atoken).get('sub', None)
+            await self.set_token("connect")
+            atoken = self._session_tokens["connect"]["access_token"]
+            subject = self.decode_token(atoken).get("sub", None)
 
-            data = {'scopeId': 'commonMandatoryFields'}
-            response = await self.post(f'https://profileintegrityservice.apps.emea.vwapps.io/iaa/pic/v1/users/{subject}/check-profile', json=data)
-            if response.get('mandatoryConsentInfo', False):
-                data = {
-                    'consentInfo': response
-                }
+            data = {"scopeId": "commonMandatoryFields"}
+            response = await self.post(
+                f"https://profileintegrityservice.apps.emea.vwapps.io/iaa/pic/v1/users/{subject}/check-profile",
+                json=data,
+            )
+            if response.get("mandatoryConsentInfo", False):
+                data = {"consentInfo": response}
                 return data
-            elif response.get('status_code', {}):
-                _LOGGER.warning(f'Could not fetch realCarData, HTTP status code: {response.get("status_code")}')
+            elif response.get("status_code", {}):
+                _LOGGER.warning(
+                    f'Could not fetch realCarData, HTTP status code: {response.get("status_code")}'
+                )
             else:
-                _LOGGER.info('Unhandled error while trying to fetch consent information')
+                _LOGGER.info("Unhandled error while trying to fetch consent information")
         except Exception as error:
-            _LOGGER.debug(f'Could not get consent information, error {error}')
+            _LOGGER.debug(f"Could not get consent information, error {error}")
         return False
 
     async def getRealCarData(self):
         """Get car information from customer profile, VIN, nickname, etc."""
         try:
-            await self.set_token('connect')
+            await self.set_token("connect")
             _LOGGER.debug("Attempting extraction of jwt subject from identity token.")
-            atoken = self._session_tokens['connect']['access_token']
-            subject = self.decode_token(atoken).get('sub', None)
+            atoken = self._session_tokens["connect"]["access_token"]
+            subject = self.decode_token(atoken).get("sub", None)
 
             response = await self.get(
-                f'https://customer-profile.apps.emea.vwapps.io/v2/customers/{subject}/realCarData'
+                f"https://customer-profile.apps.emea.vwapps.io/v2/customers/{subject}/realCarData"
             )
-            if response.get('realCars', False):
-                data = {
-                    'realCars': response.get('realCars', {})
-                }
+            if response.get("realCars", False):
+                data = {"realCars": response.get("realCars", {})}
                 return data
-            elif response.get('status_code', {}):
-                _LOGGER.warning(f'Could not fetch realCarData, HTTP status code: {response.get("status_code")}')
+            elif response.get("status_code", {}):
+                _LOGGER.warning(
+                    f'Could not fetch realCarData, HTTP status code: {response.get("status_code")}'
+                )
             else:
-                _LOGGER.info('Unhandled error while trying to fetch realcar data')
+                _LOGGER.info("Unhandled error while trying to fetch realcar data")
         except Exception as error:
-            _LOGGER.warning(f'Could not fetch realCarData, error: {error}')
+            _LOGGER.warning(f"Could not fetch realCarData, error: {error}")
         return False
 
-   # Vehicle related functions
+    # Vehicle related functions
     async def getHomeRegion(self, vin):
         """Get API requests base url for VIN."""
         try:
-            await self.set_token('vwg')
-            response = await self.get(f'https://mal-1a.prd.ece.vwg-connect.com/api/cs/vds/v1/vehicles/{vin}/homeRegion', vin)
-            self._session_auth_ref_url[vin] = response['homeRegion']['baseUri']['content'].split('/api')[0].replace('mal-', 'fal-') if response['homeRegion']['baseUri']['content'] != 'https://mal-1a.prd.ece.vwg-connect.com/api' else 'https://msg.volkswagen.de'
-            self._session_spin_ref_url[vin] = response['homeRegion']['baseUri']['content'].split('/api')[0]
-            return response['homeRegion']['baseUri']['content']
+            await self.set_token("vwg")
+            response = await self.get(
+                f"https://mal-1a.prd.ece.vwg-connect.com/api/cs/vds/v1/vehicles/{vin}/homeRegion",
+                vin,
+            )
+            self._session_auth_ref_url[vin] = (
+                response["homeRegion"]["baseUri"]["content"]
+                .split("/api")[0]
+                .replace("mal-", "fal-")
+                if response["homeRegion"]["baseUri"]["content"]
+                != "https://mal-1a.prd.ece.vwg-connect.com/api"
+                else "https://msg.volkswagen.de"
+            )
+            self._session_spin_ref_url[vin] = response["homeRegion"]["baseUri"]["content"].split(
+                "/api"
+            )[0]
+            return response["homeRegion"]["baseUri"]["content"]
         except Exception as error:
-            _LOGGER.debug(f'Could not get homeregion, error {error}')
-            self._session_auth_ref_url[vin] = self._session_auth_ref_url['default']
-            self._session_spin_ref_url[vin] = self._session_spin_ref_url['default']
+            _LOGGER.debug(f"Could not get homeregion, error {error}")
+            self._session_auth_ref_url[vin] = self._session_auth_ref_url["default"]
+            self._session_spin_ref_url[vin] = self._session_spin_ref_url["default"]
         return False
 
     async def getOperationList(self, vin):
         """Collect operationlist for VIN, supported/licensed functions."""
         try:
-            await self.set_token('vwg')
+            await self.set_token("vwg")
             response = await self.get(
                 urljoin(
                     self._session_spin_ref_url[vin],
-                    f'/api/rolesrights/operationlist/v3/vehicles/{vin}'
+                    f"/api/rolesrights/operationlist/v3/vehicles/{vin}",
                 )
             )
-            if response.get('operationList', False):
-                data = response.get('operationList', {})
-            elif response.get('status_code', {}):
-                _LOGGER.warning(f'Could not fetch operation list, HTTP status code: {response.get("status_code")}')
+            if response.get("operationList", False):
+                data = response.get("operationList", {})
+            elif response.get("status_code", {}):
+                _LOGGER.warning(
+                    f'Could not fetch operation list, HTTP status code: {response.get("status_code")}'
+                )
                 data = response
             else:
-                _LOGGER.info(f'Could not fetch operation list: {response}')
-                data = {'error': 'unknown'}
+                _LOGGER.info(f"Could not fetch operation list: {response}")
+                data = {"error": "unknown"}
         except Exception as error:
-            _LOGGER.warning(f'Could not fetch operation list, error: {error}')
-            data = {'error': 'unknown'}
+            _LOGGER.warning(f"Could not fetch operation list, error: {error}")
+            data = {"error": "unknown"}
         return data
 
     async def getModelImageURL(self, vin, size):
         """Construct the URL for the model image."""
         try:
             # Construct message to be encrypted
-            date = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%mZ')
-            if size in ['S', 's', 'Small', 'small']:
-                message = MODELAPPID +'\n'+ MODELAPI +'?vin='+ vin +'&view='+ MODELVIEWS +'&date='+ date
+            date = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%mZ")
+            if size in ["S", "s", "Small", "small"]:
+                message = (
+                    MODELAPPID
+                    + "\n"
+                    + MODELAPI
+                    + "?vin="
+                    + vin
+                    + "&view="
+                    + MODELVIEWS
+                    + "&date="
+                    + date
+                )
             else:
-                message = MODELAPPID +'\n'+ MODELAPI +'?vin='+ vin +'&view='+ MODELVIEWL +'&date='+ date
+                message = (
+                    MODELAPPID
+                    + "\n"
+                    + MODELAPI
+                    + "?vin="
+                    + vin
+                    + "&view="
+                    + MODELVIEWL
+                    + "&date="
+                    + date
+                )
             # Construct hmac SHA-256 key object and encode the message
             digest = hmac.new(MODELAPIKEY, msg=message.encode(), digestmod=hashlib.sha256).digest()
-            b64enc = {'sign': b64encode(digest).decode()}
+            b64enc = {"sign": b64encode(digest).decode()}
             sign = urlencode(b64enc)
             # Construct the URL
-            if size in ['S', 's', 'Small', 'small']:
-                path = MODELAPI +'?vin='+ vin +'&view='+ MODELVIEWS +'&appId='+ MODELAPPID +'&date='+ date +'&'+ sign
+            if size in ["S", "s", "Small", "small"]:
+                path = (
+                    MODELAPI
+                    + "?vin="
+                    + vin
+                    + "&view="
+                    + MODELVIEWS
+                    + "&appId="
+                    + MODELAPPID
+                    + "&date="
+                    + date
+                    + "&"
+                    + sign
+                )
             else:
-                path = MODELAPI +'?vin='+ vin +'&view='+ MODELVIEWL +'&appId='+ MODELAPPID +'&date='+ date +'&'+ sign
+                path = (
+                    MODELAPI
+                    + "?vin="
+                    + vin
+                    + "&view="
+                    + MODELVIEWL
+                    + "&appId="
+                    + MODELAPPID
+                    + "&date="
+                    + date
+                    + "&"
+                    + sign
+                )
             url = MODELHOST + path
             try:
-                response = await self._session.get(
-                    url=url,
-                    allow_redirects=False
-                )
-                if response.headers.get('Location', False):
-                    return response.headers.get('Location').split('?')[0]
+                response = await self._session.get(url=url, allow_redirects=False)
+                if response.headers.get("Location", False):
+                    return response.headers.get("Location").split("?")[0]
                 else:
-                    _LOGGER.debug('Could not fetch Model image URL, request returned with status code {response.status_code}')
+                    _LOGGER.debug(
+                        "Could not fetch Model image URL, request returned with status code {response.status_code}"
+                    )
             except:
-                _LOGGER.debug('Could not fetch Model image URL')
+                _LOGGER.debug("Could not fetch Model image URL")
         except:
-            _LOGGER.debug('Could not fetch Model image URL, message signing failed.')
+            _LOGGER.debug("Could not fetch Model image URL, message signing failed.")
         return None
 
     async def getVehicleStatusReport(self, vin):
         """Get stored vehicle status report (Connect services)."""
         try:
-            await self.set_token('vwg')
+            await self.set_token("vwg")
             response = await self.get(
                 urljoin(
                     self._session_auth_ref_url[vin],
-                    f'fs-car/bs/vsr/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/status'
+                    f"fs-car/bs/vsr/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/status",
                 )
             )
-            if response.get('StoredVehicleDataResponse', {}).get('vehicleData', {}).get('data', {})[0].get('field', {})[0] :
+            if (
+                response.get("StoredVehicleDataResponse", {})
+                .get("vehicleData", {})
+                .get("data", {})[0]
+                .get("field", {})[0]
+            ):
                 data = {
-                    'StoredVehicleDataResponse': response.get('StoredVehicleDataResponse', {}),
-                    'StoredVehicleDataResponseParsed': dict([(e['id'],e if 'value' in e else '') for f in [s['field'] for s in response['StoredVehicleDataResponse']['vehicleData']['data']] for e in f])
+                    "StoredVehicleDataResponse": response.get("StoredVehicleDataResponse", {}),
+                    "StoredVehicleDataResponseParsed": dict(
+                        [
+                            (e["id"], e if "value" in e else "")
+                            for f in [
+                                s["field"]
+                                for s in response["StoredVehicleDataResponse"]["vehicleData"][
+                                    "data"
+                                ]
+                            ]
+                            for e in f
+                        ]
+                    ),
                 }
                 return data
-            elif response.get('status_code', {}):
-                _LOGGER.warning(f'Could not fetch vehicle status report, HTTP status code: {response.get("status_code")}')
+            elif response.get("status_code", {}):
+                _LOGGER.warning(
+                    f'Could not fetch vehicle status report, HTTP status code: {response.get("status_code")}'
+                )
             else:
-                _LOGGER.info('Unhandled error while trying to fetch status data')
+                _LOGGER.info("Unhandled error while trying to fetch status data")
         except Exception as error:
-            _LOGGER.warning(f'Could not fetch StoredVehicleDataResponse, error: {error}')
+            _LOGGER.warning(f"Could not fetch StoredVehicleDataResponse, error: {error}")
         return False
 
     async def getVehicleStatus(self, vin, smartlink=False):
         """Get stored vehicle status (SmartLink and new API)."""
         try:
             if smartlink:
-                await self.set_token('dcs')
-                response = await self.get(f'https://api.connect.skoda-auto.cz/api/v1/vehicle-status/{vin}')
+                await self.set_token("dcs")
+                response = await self.get(
+                    f"https://api.connect.skoda-auto.cz/api/v1/vehicle-status/{vin}"
+                )
                 if response:
-                    data = {
-                        'vehicle_status': response
-                    }
+                    data = {"vehicle_status": response}
                     return data
-                elif response.get('status_code', {}):
-                    _LOGGER.warning(f'Could not fetch vehicle status, HTTP status code: {response.get("status_code")}')
+                elif response.get("status_code", {}):
+                    _LOGGER.warning(
+                        f'Could not fetch vehicle status, HTTP status code: {response.get("status_code")}'
+                    )
                 else:
-                    _LOGGER.info('Unhandled error while trying to fetch vehicle status via SmartLink')
+                    _LOGGER.info(
+                        "Unhandled error while trying to fetch vehicle status via SmartLink"
+                    )
             else:
-                await self.set_token('connect')
-                response = await self.get(f'https://api.connect.skoda-auto.cz/api/v2/vehicle-status/{vin}')
+                await self.set_token("connect")
+                response = await self.get(
+                    f"https://api.connect.skoda-auto.cz/api/v2/vehicle-status/{vin}"
+                )
                 if response:
-                    data = {
-                        'vehicle_remote': response.get('remote', {})
-                    }
+                    data = {"vehicle_remote": response.get("remote", {})}
                     # Check for errors
-                    if len(response.get('errors', [])) > 0:
-                        data['errors'] = response.get('errors', [])
+                    if len(response.get("errors", [])) > 0:
+                        data["errors"] = response.get("errors", [])
                     return data
-                elif response.get('status_code', {}):
-                    _LOGGER.warning(f'Could not fetch vehicle status, HTTP status code: {response.get("status_code")}')
+                elif response.get("status_code", {}):
+                    _LOGGER.warning(
+                        f'Could not fetch vehicle status, HTTP status code: {response.get("status_code")}'
+                    )
                 else:
-                    _LOGGER.info('Unhandled error while trying to fetch vehicle status via SmartLink')
+                    _LOGGER.info(
+                        "Unhandled error while trying to fetch vehicle status via SmartLink"
+                    )
         except Exception as error:
-            _LOGGER.warning(f'Could not fetch SmartLink vehicle status, error: {error}')
+            _LOGGER.warning(f"Could not fetch SmartLink vehicle status, error: {error}")
         return False
 
     async def getTripStatistics(self, vin):
         """Get short term trip statistics."""
         try:
-            await self.set_token('vwg')
+            await self.set_token("vwg")
             short = await self.get(
                 urljoin(
                     self._session_auth_ref_url[vin],
-                    f'fs-car/bs/tripstatistics/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/tripdata/shortTerm?newest'
+                    f"fs-car/bs/tripstatistics/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/tripdata/shortTerm?newest",
                 )
             )
             long = await self.get(
                 urljoin(
                     self._session_auth_ref_url[vin],
-                    f'fs-car/bs/tripstatistics/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/tripdata/longTerm?newest'
+                    f"fs-car/bs/tripstatistics/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/tripdata/longTerm?newest",
                 )
             )
             data = {}
-            if short.get('tripData', False) and long.get('tripData', False):
-                data['tripstatistics'] = short.get('tripData', {})
-                data['longtermstatistics'] = long.get('tripData', {})
+            if short.get("tripData", False) and long.get("tripData", False):
+                data["tripstatistics"] = short.get("tripData", {})
+                data["longtermstatistics"] = long.get("tripData", {})
                 return data
-            elif short.get('tripData', False):
-                data['tripstatistics'] = short.get('tripData', {})
+            elif short.get("tripData", False):
+                data["tripstatistics"] = short.get("tripData", {})
                 return data
-            elif long.get('tripData', False):
-                data['longtermstatistics'] = long.get('tripData', {})
+            elif long.get("tripData", False):
+                data["longtermstatistics"] = long.get("tripData", {})
                 return data
-            elif short.get('status_code', False):
-                _LOGGER.warning(f'Could not fetch trip statistics, HTTP status code: {short.get("status_code")}')
-            elif long.get('status_code', False):
-                _LOGGER.warning(f'Could not fetch trip statistics, HTTP status code: {long.get("status_code")}')
+            elif short.get("status_code", False):
+                _LOGGER.warning(
+                    f'Could not fetch trip statistics, HTTP status code: {short.get("status_code")}'
+                )
+            elif long.get("status_code", False):
+                _LOGGER.warning(
+                    f'Could not fetch trip statistics, HTTP status code: {long.get("status_code")}'
+                )
             else:
-                _LOGGER.info(f'Unhandled error while trying to fetch trip statistics')
+                _LOGGER.info(f"Unhandled error while trying to fetch trip statistics")
         except Exception as error:
-            _LOGGER.warning(f'Could not fetch trip statistics, error: {error}')
+            _LOGGER.warning(f"Could not fetch trip statistics, error: {error}")
         return False
 
     async def getPosition(self, vin):
         """Get position data."""
         try:
-            await self.set_token('vwg')
+            await self.set_token("vwg")
             response = await self.get(
                 urljoin(
                     self._session_auth_ref_url[vin],
-                    f'fs-car/bs/cf/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/position'
+                    f"fs-car/bs/cf/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/position",
                 )
             )
-            if response.get('findCarResponse', {}):
-                data = {
-                    'findCarResponse': response.get('findCarResponse', {}),
-                    'isMoving': False
-                }
+            if response.get("findCarResponse", {}):
+                data = {"findCarResponse": response.get("findCarResponse", {}), "isMoving": False}
                 return data
-            elif response.get('status_code', {}):
-                if response.get('status_code', 0) == 204:
-                    _LOGGER.debug(f'Seems car is moving, HTTP 204 received from position')
-                    data = {
-                        'isMoving': True,
-                        'rate_limit_remaining': 15
-                    }
+            elif response.get("status_code", {}):
+                if response.get("status_code", 0) == 204:
+                    _LOGGER.debug(f"Seems car is moving, HTTP 204 received from position")
+                    data = {"isMoving": True, "rate_limit_remaining": 15}
                     return data
                 else:
-                    _LOGGER.warning(f'Could not fetch position, HTTP status code: {response.get("status_code")}')
+                    _LOGGER.warning(
+                        f'Could not fetch position, HTTP status code: {response.get("status_code")}'
+                    )
             else:
-                _LOGGER.info('Unhandled error while trying to fetch positional data')
+                _LOGGER.info("Unhandled error while trying to fetch positional data")
         except Exception as error:
-            _LOGGER.warning(f'Could not fetch position, error: {error}')
+            _LOGGER.warning(f"Could not fetch position, error: {error}")
         return False
 
     async def getParkingPosition(self, vin):
         """Get position data (New API)."""
         try:
-            await self.set_token('technical')
-            response = await self.get(f'https://api.connect.skoda-auto.cz/api/v1/position/vehicles/{vin}/parking-position')
-            if response.get('latitude', False):
-                data = {
-                    'findCarResponse': response,
-                    'isMoving': False
-                }
+            await self.set_token("technical")
+            response = await self.get(
+                f"https://api.connect.skoda-auto.cz/api/v1/position/vehicles/{vin}/parking-position"
+            )
+            if response.get("latitude", False):
+                data = {"findCarResponse": response, "isMoving": False}
                 return data
-            elif response.get('status_code', {}):
-                if response.get('status_code', 0) == 204:
-                    _LOGGER.debug(f'Seems car is moving, HTTP 204 received from position')
-                    data = {
-                        'isMoving': True
-                    }
+            elif response.get("status_code", {}):
+                if response.get("status_code", 0) == 204:
+                    _LOGGER.debug(f"Seems car is moving, HTTP 204 received from position")
+                    data = {"isMoving": True}
                     return data
                 else:
-                    _LOGGER.warning(f'Could not fetch position, HTTP status code: {response.get("status_code")}')
+                    _LOGGER.warning(
+                        f'Could not fetch position, HTTP status code: {response.get("status_code")}'
+                    )
             else:
-                _LOGGER.info('Unhandled error while trying to fetch positional data')
+                _LOGGER.info("Unhandled error while trying to fetch positional data")
         except Exception as error:
-            _LOGGER.warning(f'Could not fetch position, error: {error}')
+            _LOGGER.warning(f"Could not fetch position, error: {error}")
         return False
 
     async def getDeparturetimer(self, vin):
         """Get departure timers."""
         try:
-            await self.set_token('vwg')
+            await self.set_token("vwg")
             response = await self.get(
                 urljoin(
                     self._session_auth_ref_url[vin],
-                    f'fs-car/bs/departuretimer/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/timer'
+                    f"fs-car/bs/departuretimer/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/timer",
                 )
             )
-            if response.get('timer', {}):
-                data = {'departuretimer': response.get('timer', {})}
+            if response.get("timer", {}):
+                data = {"departuretimer": response.get("timer", {})}
                 return data
-            elif response.get('status_code', {}):
-                _LOGGER.warning(f'Could not fetch timers, HTTP status code: {response.get("status_code")}')
+            elif response.get("status_code", {}):
+                _LOGGER.warning(
+                    f'Could not fetch timers, HTTP status code: {response.get("status_code")}'
+                )
             else:
-                _LOGGER.info('Unknown error while trying to fetch data for departure timers')
+                _LOGGER.info("Unknown error while trying to fetch data for departure timers")
         except Exception as error:
-            _LOGGER.warning(f'Could not fetch timers, error: {error}')
+            _LOGGER.warning(f"Could not fetch timers, error: {error}")
         return False
 
     async def getTimers(self, vin):
         """Get timers data (New Skoda API)."""
         try:
-            await self.set_token('connect')
-            response = await self.get(f'https://api.connect.skoda-auto.cz/api/v1/air-conditioning/{vin}/timers')
-            if response.get('timers', []):
-                data = {'timers': response.get('timers', [])}
+            await self.set_token("connect")
+            response = await self.get(
+                f"https://api.connect.skoda-auto.cz/api/v1/air-conditioning/{vin}/timers"
+            )
+            if response.get("timers", []):
+                data = {"timers": response.get("timers", [])}
                 return data
-            elif response.get('status_code', False):
-                _LOGGER.warning(f'Could not fetch timers, HTTP status code: {response.get("status_code")}')
+            elif response.get("status_code", False):
+                _LOGGER.warning(
+                    f'Could not fetch timers, HTTP status code: {response.get("status_code")}'
+                )
             else:
-                _LOGGER.info('Unhandled error while trying to fetch timers data')
+                _LOGGER.info("Unhandled error while trying to fetch timers data")
         except Exception as error:
-            _LOGGER.warning(f'Could not fetch timers, error: {error}')
+            _LOGGER.warning(f"Could not fetch timers, error: {error}")
         return False
 
     async def getClimater(self, vin):
         """Get climatisation data."""
         try:
-            await self.set_token('vwg')
+            await self.set_token("vwg")
             response = await self.get(
                 urljoin(
                     self._session_auth_ref_url[vin],
-                    f'fs-car/bs/climatisation/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/climater'
+                    f"fs-car/bs/climatisation/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/climater",
                 )
             )
-            if response.get('climater', {}):
-                data = {'climater': response.get('climater', {})}
+            if response.get("climater", {}):
+                data = {"climater": response.get("climater", {})}
                 return data
-            elif response.get('status_code', {}):
-                _LOGGER.warning(f'Could not fetch climatisation, HTTP status code: {response.get("status_code")}')
+            elif response.get("status_code", {}):
+                _LOGGER.warning(
+                    f'Could not fetch climatisation, HTTP status code: {response.get("status_code")}'
+                )
             else:
-                _LOGGER.info('Unhandled error while trying to fetch climatisation data')
+                _LOGGER.info("Unhandled error while trying to fetch climatisation data")
         except Exception as error:
-            _LOGGER.warning(f'Could not fetch climatisation, error: {error}')
+            _LOGGER.warning(f"Could not fetch climatisation, error: {error}")
         return False
 
     async def getAirConditioning(self, vin):
         """Get air-conditioning data (Skoda native API)."""
         try:
-            await self.set_token('connect')
-            airconStatus = self.get(f'https://api.connect.skoda-auto.cz/api/v1/air-conditioning/{vin}/status')
-            airconSettings = self.get(f'https://api.connect.skoda-auto.cz/api/v1/air-conditioning/{vin}/settings')
+            await self.set_token("connect")
+            airconStatus = self.get(
+                f"https://api.connect.skoda-auto.cz/api/v1/air-conditioning/{vin}/status"
+            )
+            airconSettings = self.get(
+                f"https://api.connect.skoda-auto.cz/api/v1/air-conditioning/{vin}/settings"
+            )
             airconData = await asyncio.gather(airconStatus, airconSettings)
 
-            if airconData[0].get('state', {}):
-                data = {'airConditioning': airconData[0]}
+            if airconData[0].get("state", {}):
+                data = {"airConditioning": airconData[0]}
                 if len(airconData) >= 2:
-                    data['airConditioningSettings'] = airconData[1]
+                    data["airConditioningSettings"] = airconData[1]
                 _LOGGER.info(f"Returning with data {data}")
                 return data
-            elif airconData[0].get('status_code', False):
-                _LOGGER.warning(f'Could not fetch air-conditioning data, HTTP status code: {airconData[0].get("status_code")}')
-            elif airconData[1].get('status_code', False):
-                _LOGGER.warning(f'Could not fetch air-conditioning settings, HTTP status code: {airconData[1].get("status_code")}')
+            elif airconData[0].get("status_code", False):
+                _LOGGER.warning(
+                    f'Could not fetch air-conditioning data, HTTP status code: {airconData[0].get("status_code")}'
+                )
+            elif airconData[1].get("status_code", False):
+                _LOGGER.warning(
+                    f'Could not fetch air-conditioning settings, HTTP status code: {airconData[1].get("status_code")}'
+                )
             else:
-                _LOGGER.info('Unhandled error while trying to fetch air-conditioning data')
+                _LOGGER.info("Unhandled error while trying to fetch air-conditioning data")
         except Exception as error:
-            _LOGGER.warning(f'Could not fetch air-conditioning, error: {error}')
+            _LOGGER.warning(f"Could not fetch air-conditioning, error: {error}")
         return False
 
     async def getCharger(self, vin):
         """Get charger data."""
         try:
-            await self.set_token('vwg')
+            await self.set_token("vwg")
             response = await self.get(
                 urljoin(
                     self._session_auth_ref_url[vin],
-                    f'fs-car/bs/batterycharge/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/charger'
+                    f"fs-car/bs/batterycharge/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/charger",
                 )
             )
-            if response.get('charger', {}):
-                data = {'charger': response.get('charger', {})}
+            if response.get("charger", {}):
+                data = {"charger": response.get("charger", {})}
                 return data
-            elif response.get('status_code', {}):
-                _LOGGER.warning(f'Could not fetch charger, HTTP status code: {response.get("status_code")}')
+            elif response.get("status_code", {}):
+                _LOGGER.warning(
+                    f'Could not fetch charger, HTTP status code: {response.get("status_code")}'
+                )
             else:
-                _LOGGER.info('Unhandled error while trying to fetch charger data')
+                _LOGGER.info("Unhandled error while trying to fetch charger data")
         except Exception as error:
-            _LOGGER.warning(f'Could not fetch charger, error: {error}')
+            _LOGGER.warning(f"Could not fetch charger, error: {error}")
         return False
 
     async def getCharging(self, vin):
         """Get charging data (New Skoda API)."""
         try:
-            await self.set_token('connect')
-            chargerMode = self.get(f'https://api.connect.skoda-auto.cz/api/v1/charging/{vin}/mode')
-            chargerStatus = self.get(f'https://api.connect.skoda-auto.cz/api/v1/charging/{vin}/status')
-            chargerSettings = self.get(f'https://api.connect.skoda-auto.cz/api/v1/charging/{vin}/settings')
+            await self.set_token("connect")
+            chargerMode = self.get(f"https://api.connect.skoda-auto.cz/api/v1/charging/{vin}/mode")
+            chargerStatus = self.get(
+                f"https://api.connect.skoda-auto.cz/api/v1/charging/{vin}/status"
+            )
+            chargerSettings = self.get(
+                f"https://api.connect.skoda-auto.cz/api/v1/charging/{vin}/settings"
+            )
             chargingData = await asyncio.gather(chargerStatus, chargerSettings, chargerMode)
 
-            if chargingData[0].get('battery', {}) or chargingData[1].get('maxChargeCurrentAc', {}):
+            if chargingData[0].get("battery", {}) or chargingData[1].get("maxChargeCurrentAc", {}):
                 response = chargingData[0]
-                response['chargerSettings'] = chargingData[1]
+                response["chargerSettings"] = chargingData[1]
                 return response
-            elif chargerStatus.get('status_code', {}):
-                _LOGGER.warning(f'Could not fetch charging, HTTP status code: {chargerStatus.get("status_code")}')
+            elif chargerStatus.get("status_code", {}):
+                _LOGGER.warning(
+                    f'Could not fetch charging, HTTP status code: {chargerStatus.get("status_code")}'
+                )
             else:
-                _LOGGER.info('Unhandled error while trying to fetch charging data')
+                _LOGGER.info("Unhandled error while trying to fetch charging data")
         except Exception as error:
-            _LOGGER.warning(f'Could not fetch charging, error: {error}')
+            _LOGGER.warning(f"Could not fetch charging, error: {error}")
         return False
 
     async def getPreHeater(self, vin):
         """Get parking heater data."""
         try:
-            await self.set_token('vwg')
+            await self.set_token("vwg")
             response = await self.get(
                 urljoin(
                     self._session_auth_ref_url[vin],
-                    f'fs-car/bs/rs/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/status'
+                    f"fs-car/bs/rs/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/status",
                 )
             )
-            if response.get('statusResponse', {}):
-                data = {'heating': response.get('statusResponse', {})}
+            if response.get("statusResponse", {}):
+                data = {"heating": response.get("statusResponse", {})}
                 return data
-            elif response.get('status_code', {}):
-                _LOGGER.warning(f'Could not fetch pre-heating, HTTP status code: {response.get("status_code")}')
+            elif response.get("status_code", {}):
+                _LOGGER.warning(
+                    f'Could not fetch pre-heating, HTTP status code: {response.get("status_code")}'
+                )
             else:
-                _LOGGER.info('Unhandled error while trying to fetch pre-heating data')
+                _LOGGER.info("Unhandled error while trying to fetch pre-heating data")
         except Exception as error:
-            _LOGGER.warning(f'Could not fetch pre-heating, error: {error}')
+            _LOGGER.warning(f"Could not fetch pre-heating, error: {error}")
         return False
 
- #### API data set functions ####
+    #### API data set functions ####
     async def get_request_status(self, vin, sectionId, requestId):
         """Return status of a request ID for a given section ID."""
         try:
             error_code = None
             # Requests for Skoda Native API
-            if sectionId in ['charging',  'air-conditioning']:
-                url = 'https://api.connect.skoda-auto.cz/api/v1/$sectionId/operation-requests/$requestId'
+            if sectionId in ["charging", "air-conditioning"]:
+                url = "https://api.connect.skoda-auto.cz/api/v1/$sectionId/operation-requests/$requestId"
             # Requests for VW-Group API
-            elif sectionId == 'climatisation':
+            elif sectionId == "climatisation":
                 url = urljoin(
                     self._session_auth_ref_url[vin],
-                    f'fs-car/bs/$sectionId/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/climater/actions/$requestId'
+                    f"fs-car/bs/$sectionId/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/climater/actions/$requestId",
                 )
-            elif sectionId == 'batterycharge':
+            elif sectionId == "batterycharge":
                 url = urljoin(
                     self._session_auth_ref_url[vin],
-                    f'fs-car/bs/$sectionId/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/charger/actions/$requestId'
+                    f"fs-car/bs/$sectionId/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/charger/actions/$requestId",
                 )
-            elif sectionId == 'departuretimer':
+            elif sectionId == "departuretimer":
                 url = urljoin(
                     self._session_auth_ref_url[vin],
-                    f'fs-car/bs/$sectionId/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/timer/actions/$requestId'
+                    f"fs-car/bs/$sectionId/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/timer/actions/$requestId",
                 )
-            elif sectionId == 'vsr':
+            elif sectionId == "vsr":
                 url = urljoin(
                     self._session_auth_ref_url[vin],
-                    f'fs-car/bs/$sectionId/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/requests/$requestId/jobstatus'
+                    f"fs-car/bs/$sectionId/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/requests/$requestId/jobstatus",
                 )
-            elif sectionId == 'rhf':
+            elif sectionId == "rhf":
                 url = urljoin(
                     self._session_auth_ref_url[vin],
-                    f'fs-car/bs/$sectionId/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/honkAndFlash/$requestId/status'
+                    f"fs-car/bs/$sectionId/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/honkAndFlash/$requestId/status",
                 )
             else:
                 url = urljoin(
                     self._session_auth_ref_url[vin],
-                    f'fs-car/bs/$sectionId/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/requests/$requestId/status'
+                    f"fs-car/bs/$sectionId/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/requests/$requestId/status",
                 )
-            url = re.sub('\$sectionId', sectionId, url)
-            url = re.sub('\$requestId', requestId, url)
+            url = re.sub("\$sectionId", sectionId, url)
+            url = re.sub("\$requestId", requestId, url)
 
             # Set token according to API origin
-            if sectionId in ['charging', 'air-conditioning']:
-                await self.set_token('connect')
+            if sectionId in ["charging", "air-conditioning"]:
+                await self.set_token("connect")
             else:
-                await self.set_token('vwg')
+                await self.set_token("vwg")
 
             response = await self.get(url)
 
             # Pre-heater on older cars
-            if response.get('requestStatusResponse', {}).get('status', False):
-                result = response.get('requestStatusResponse', {}).get('status', False)
+            if response.get("requestStatusResponse", {}).get("status", False):
+                result = response.get("requestStatusResponse", {}).get("status", False)
             # Electric charging, climatisation and departure timers
-            elif response.get('action', {}).get('actionState', False):
-                result = response.get('action', {}).get('actionState', False)
-                error_code = response.get('action', {}).get('errorCode', None)
+            elif response.get("action", {}).get("actionState", False):
+                result = response.get("action", {}).get("actionState", False)
+                error_code = response.get("action", {}).get("errorCode", None)
             # Skoda native API requests
-            elif response.get('status', False):
-                result = response.get('status', False)
+            elif response.get("status", False):
+                result = response.get("status", False)
             else:
-                result = 'Unknown'
+                result = "Unknown"
             # Translate status messages to meaningful info
-            if result in ['request_in_progress', 'queued', 'fetched', 'InProgress', 'Waiting']:
-                status = 'In progress'
-            elif result in ['request_fail', 'failed']:
-                status = 'Failed'
+            if result in ["request_in_progress", "queued", "fetched", "InProgress", "Waiting"]:
+                status = "In progress"
+            elif result in ["request_fail", "failed"]:
+                status = "Failed"
                 if error_code is not None:
                     # Identified error code for charging, 11 = not connected
-                    if sectionId == 'charging' and error_code == 11:
-                        _LOGGER.info(f'Request failed, charger is not connected')
+                    if sectionId == "charging" and error_code == 11:
+                        _LOGGER.info(f"Request failed, charger is not connected")
                     else:
-                        _LOGGER.info(f'Request failed with error code: {error_code}')
-            elif result in ['unfetched', 'delayed', 'PollingTimeout']:
-                status = 'No response'
-            elif result in [ "FailPlugDisconnected", "FailTimerChargingActive" ]:
+                        _LOGGER.info(f"Request failed with error code: {error_code}")
+            elif result in ["unfetched", "delayed", "PollingTimeout"]:
+                status = "No response"
+            elif result in ["FailPlugDisconnected", "FailTimerChargingActive"]:
                 status = "Unavailable"
-            elif result in ['request_successful', 'succeeded', "Successful"]:
-                status = 'Success'
+            elif result in ["request_successful", "succeeded", "Successful"]:
+                status = "Success"
             else:
                 status = result
             return status
         except Exception as error:
-            _LOGGER.warning(f'Failure during get request status: {error}')
-            raise SkodaException(f'Failure during get request status: {error}')
+            _LOGGER.warning(f"Failure during get request status: {error}")
+            raise SkodaException(f"Failure during get request status: {error}")
 
     async def get_sec_token(self, vin, spin, action):
         """Get a security token, required for certain set functions."""
         urls = {
-            'lock':    f'/api/rolesrights/authorization/v2/vehicles/{vin}/services/rlu_v1/operations/LOCK/security-pin-auth-requested',
-            'unlock':  f'/api/rolesrights/authorization/v2/vehicles/{vin}/services/rlu_v1/operations/UNLOCK/security-pin-auth-requested',
-            'heating': f'/api/rolesrights/authorization/v2/vehicles/{vin}/services/rheating_v1/operations/P_QSACT/security-pin-auth-requested',
-            'timer':   f'/api/rolesrights/authorization/v2/vehicles/{vin}/services/timerprogramming_v1/operations/P_SETTINGS_AU/security-pin-auth-requested',
-            'rclima':  f'/api/rolesrights/authorization/v2/vehicles/{vin}/services/rclima_v1/operations/P_START_CLIMA_AU/security-pin-auth-requested'
+            "lock": f"/api/rolesrights/authorization/v2/vehicles/{vin}/services/rlu_v1/operations/LOCK/security-pin-auth-requested",
+            "unlock": f"/api/rolesrights/authorization/v2/vehicles/{vin}/services/rlu_v1/operations/UNLOCK/security-pin-auth-requested",
+            "heating": f"/api/rolesrights/authorization/v2/vehicles/{vin}/services/rheating_v1/operations/P_QSACT/security-pin-auth-requested",
+            "timer": f"/api/rolesrights/authorization/v2/vehicles/{vin}/services/timerprogramming_v1/operations/P_SETTINGS_AU/security-pin-auth-requested",
+            "rclima": f"/api/rolesrights/authorization/v2/vehicles/{vin}/services/rclima_v1/operations/P_START_CLIMA_AU/security-pin-auth-requested",
         }
         if not spin:
-            raise SkodaConfigException('SPIN is required')
+            raise SkodaConfigException("SPIN is required")
         try:
-            await self.set_token('vwg')
+            await self.set_token("vwg")
             if not urls.get(action, False):
                 raise SkodaException(f'Security token for "{action}" is not implemented')
-            response = await self.get(
-                urljoin(
-                    self._session_spin_ref_url[vin],
-                    urls.get(action)
-                )
-            )
-            secToken = response['securityPinAuthInfo']['securityToken']
-            challenge = response['securityPinAuthInfo']['securityPinTransmission']['challenge']
+            response = await self.get(urljoin(self._session_spin_ref_url[vin], urls.get(action)))
+            secToken = response["securityPinAuthInfo"]["securityToken"]
+            challenge = response["securityPinAuthInfo"]["securityPinTransmission"]["challenge"]
             spinHash = self.hash_spin(challenge, str(spin))
             body = {
-                'securityPinAuthentication': {
-                    'securityPin': {
-                        'challenge': challenge,
-                        'securityPinHash': spinHash
-                    },
-                    'securityToken': secToken
+                "securityPinAuthentication": {
+                    "securityPin": {"challenge": challenge, "securityPinHash": spinHash},
+                    "securityToken": secToken,
                 }
             }
-            self._session_headers['Content-Type'] = 'application/json'
+            self._session_headers["Content-Type"] = "application/json"
             response = await self.post(
                 urljoin(
                     self._session_spin_ref_url[vin],
-                    '/api/rolesrights/authorization/v2/security-pin-auth-completed'
+                    "/api/rolesrights/authorization/v2/security-pin-auth-completed",
                 ),
-                json = body
+                json=body,
             )
-            self._session_headers.pop('Content-Type', None)
-            if response.get('securityToken', False):
-                return response['securityToken']
+            self._session_headers.pop("Content-Type", None)
+            if response.get("securityToken", False):
+                return response["securityToken"]
             else:
-                raise SkodaException('Did not receive a valid security token')
+                raise SkodaException("Did not receive a valid security token")
         except Exception as error:
-            _LOGGER.error(f'Could not generate security token (maybe wrong SPIN?), error: {error}')
+            _LOGGER.error(f"Could not generate security token (maybe wrong SPIN?), error: {error}")
             raise
 
-   # VW-Group API methods
-    async def _setVWAPI(self, url, **data): #endpoint, **data):
+    # VW-Group API methods
+    async def _setVWAPI(self, url, **data):  # endpoint, **data):
         """Data call through VW-Group API."""
         try:
-            await self.set_token('vwg')
+            await self.set_token("vwg")
             # Combine homeregion with endpoint URL
-            #url = urljoin(self._session_auth_ref_url, endpoint)
+            # url = urljoin(self._session_auth_ref_url, endpoint)
             response = await self._data_call(url, **data)
-            self._session_headers.pop('X-mbbSecToken', None)
-            self._session_headers.pop('X-securityToken', None)
+            self._session_headers.pop("X-mbbSecToken", None)
+            self._session_headers.pop("X-securityToken", None)
             if not response:
-                #raise SkodaException(f'Invalid or no response for endpoint {endpoint}')
-                raise SkodaException(f'Invalid or no response for endpoint {url}')
+                # raise SkodaException(f'Invalid or no response for endpoint {endpoint}')
+                raise SkodaException(f"Invalid or no response for endpoint {url}")
             elif response == 429:
-                raise SkodaThrottledException('Action rate limit reached. Start the car to reset the action limit')
+                raise SkodaThrottledException(
+                    "Action rate limit reached. Start the car to reset the action limit"
+                )
             else:
-                data = {'id': '', 'state': ''}
+                data = {"id": "", "state": ""}
                 for key in response:
                     if isinstance(response.get(key), dict):
                         for k in response.get(key):
-                            if 'id' in k.lower():
-                                data['id'] = str(response.get(key).get(k))
-                            if 'state' in k.lower():
-                                data['state'] = response.get(key).get(k)
+                            if "id" in k.lower():
+                                data["id"] = str(response.get(key).get(k))
+                            if "state" in k.lower():
+                                data["state"] = response.get(key).get(k)
                     else:
-                        if 'Id' in key:
-                            data['id'] = str(response.get(key))
-                        if 'State' in key:
-                            data['state'] = response.get(key)
-                if response.get('rate_limit_remaining', False):
-                    data['rate_limit_remaining'] = response.get('rate_limit_remaining', None)
+                        if "Id" in key:
+                            data["id"] = str(response.get(key))
+                        if "State" in key:
+                            data["state"] = response.get(key)
+                if response.get("rate_limit_remaining", False):
+                    data["rate_limit_remaining"] = response.get("rate_limit_remaining", None)
                 return data
         except:
-            self._session_headers.pop('X-mbbSecToken', None)
-            self._session_headers.pop('X-securityToken', None)
+            self._session_headers.pop("X-mbbSecToken", None)
+            self._session_headers.pop("X-securityToken", None)
             raise
         return False
 
@@ -1496,24 +1696,26 @@ class Connection:
         return await self._setVWAPI(
             urljoin(
                 self._session_auth_ref_url[vin],
-                f'fs-car/bs/batterycharge/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/charger/actions'
+                f"fs-car/bs/batterycharge/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/charger/actions",
             ),
-            json = data
+            json=data,
         )
 
     async def setClimater(self, vin, data, spin):
         """Execute climatisation actions."""
         try:
             # Only get security token if auxiliary heater is to be started
-            if data.get('action', {}).get('settings', {}).get('heaterSource', None) == 'auxiliary':
-                self._session_headers['X-securityToken'] = await self.get_sec_token(vin = vin, spin = spin, action = 'rclima')
+            if data.get("action", {}).get("settings", {}).get("heaterSource", None) == "auxiliary":
+                self._session_headers["X-securityToken"] = await self.get_sec_token(
+                    vin=vin, spin=spin, action="rclima"
+                )
             return await self._setVWAPI(
                 urljoin(
-                self._session_auth_ref_url[vin],
-                f'fs-car/bs/climatisation/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/climater/actions'
-            ),
-            json = data
-        )
+                    self._session_auth_ref_url[vin],
+                    f"fs-car/bs/climatisation/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/climater/actions",
+                ),
+                json=data,
+            )
         except:
             raise
         return False
@@ -1523,133 +1725,169 @@ class Connection:
         try:
             # First get most recent departuretimer settings from server
             departuretimers = await self.getDeparturetimer(vin)
-            timer = departuretimers.get('departuretimer', {}).get('timersAndProfiles', {}).get('timerList', {}).get('timer', [])
-            profile = departuretimers.get('departuretimer', {}).get('timersAndProfiles', {}).get('timerProfileList', {}).get('timerProfile', [])
-            setting = departuretimers.get('departuretimer', {}).get('timersAndProfiles', {}).get('timerBasicSetting', [])
+            timer = (
+                departuretimers.get("departuretimer", {})
+                .get("timersAndProfiles", {})
+                .get("timerList", {})
+                .get("timer", [])
+            )
+            profile = (
+                departuretimers.get("departuretimer", {})
+                .get("timersAndProfiles", {})
+                .get("timerProfileList", {})
+                .get("timerProfile", [])
+            )
+            setting = (
+                departuretimers.get("departuretimer", {})
+                .get("timersAndProfiles", {})
+                .get("timerBasicSetting", [])
+            )
             # Set heater source default to electric
-            source = 'electric'
+            source = "electric"
 
             # Construct Timer data
-            timers = [{},{},{}]
+            timers = [{}, {}, {}]
             for i in range(0, 3):
-                timers[i]['currentCalendarProvider'] = {}
+                timers[i]["currentCalendarProvider"] = {}
                 for key in timer[i]:
                     # Ignore the timestamp key
-                    if key not in ['timestamp']:
+                    if key not in ["timestamp"]:
                         timers[i][key] = timer[i][key]
-                if timers[i].get('timerFrequency', '') == 'single':
-                    timers[i]['departureTimeOfDay'] = '00:00'
+                if timers[i].get("timerFrequency", "") == "single":
+                    timers[i]["departureTimeOfDay"] = "00:00"
 
             # Set charger minimum limit if action is chargelimit
-            if data.get('action', None) == 'chargelimit' :
-                actiontype = 'setChargeMinLimit'
-                setting['chargeMinLimit'] = int(data.get('limit', 50))
+            if data.get("action", None) == "chargelimit":
+                actiontype = "setChargeMinLimit"
+                setting["chargeMinLimit"] = int(data.get("limit", 50))
             # Modify timers if action is on, off or schedule
-            elif data.get('action', None) in ['on', 'off', 'schedule']:
-                actiontype = 'setTimersAndProfiles'
-                if 'id' in data:
-                    timerid = int(data.get('id', 1)) -1
+            elif data.get("action", None) in ["on", "off", "schedule"]:
+                actiontype = "setTimersAndProfiles"
+                if "id" in data:
+                    timerid = int(data.get("id", 1)) - 1
                 else:
-                    timerid = int(data.get('schedule', {}).get('id', 1))-1
+                    timerid = int(data.get("schedule", {}).get("id", 1)) - 1
 
                 # Set timer programmed status if data contains action = on or off
-                if data.get('action', None) in ['on', 'off']:
-                    action = 'programmed' if data.get('action', False) == 'on' else 'notProgrammed'
+                if data.get("action", None) in ["on", "off"]:
+                    action = "programmed" if data.get("action", False) == "on" else "notProgrammed"
                 # Set departure schedule
-                elif data.get('action', None) == 'schedule':
-                    action = 'programmed' if data.get('schedule', {}).get('enabled', False) else 'notProgrammed'
-                    if data.get('schedule', {}).get('recurring', False):
-                        timers[timerid]['timerFrequency'] = 'cyclic'
-                        timers[timerid]['departureWeekdayMask'] = data.get('schedule', {}).get('days', 'nnnnnnn')
-                        timers[timerid]['departureTimeOfDay'] = data.get('schedule', {}).get('time', '08:00')
-                        timers[timerid].pop('departureDateTime', None)
+                elif data.get("action", None) == "schedule":
+                    action = (
+                        "programmed"
+                        if data.get("schedule", {}).get("enabled", False)
+                        else "notProgrammed"
+                    )
+                    if data.get("schedule", {}).get("recurring", False):
+                        timers[timerid]["timerFrequency"] = "cyclic"
+                        timers[timerid]["departureWeekdayMask"] = data.get("schedule", {}).get(
+                            "days", "nnnnnnn"
+                        )
+                        timers[timerid]["departureTimeOfDay"] = data.get("schedule", {}).get(
+                            "time", "08:00"
+                        )
+                        timers[timerid].pop("departureDateTime", None)
                     else:
-                        timers[timerid]['timerFrequency'] = 'single'
-                        timers[timerid]['departureWeekdayMask'] = 'nnnnnnn'
-                        timers[timerid]['departureTimeOfDay'] = '00:00'
-                        timers[timerid]['departureDateTime'] = \
-                            data.get('schedule', {}).get('date', '2020-01-01') + 'T' +\
-                            data.get('schedule', {}).get('time', '08:00')
+                        timers[timerid]["timerFrequency"] = "single"
+                        timers[timerid]["departureWeekdayMask"] = "nnnnnnn"
+                        timers[timerid]["departureTimeOfDay"] = "00:00"
+                        timers[timerid]["departureDateTime"] = (
+                            data.get("schedule", {}).get("date", "2020-01-01")
+                            + "T"
+                            + data.get("schedule", {}).get("time", "08:00")
+                        )
                 # Catch uncatched scenario
                 else:
-                    action = 'notProgrammed'
-                timers[timerid]['timerProgrammedStatus'] = action
+                    action = "notProgrammed"
+                timers[timerid]["timerProgrammedStatus"] = action
 
             # If heatersource is to be set
-            elif data.get('action', None) == 'heaterSource':
-                actiontype = 'setTimersAndProfiles'
+            elif data.get("action", None) == "heaterSource":
+                actiontype = "setTimersAndProfiles"
 
             else:
-                raise SkodaException('Unknown action for departure timer')
+                raise SkodaException("Unknown action for departure timer")
 
             # Set heatersource, if specified
-            source = data.get('heaterSource', data.get('schedule', {}).get('heaterSource', 'electric'))
+            source = data.get(
+                "heaterSource", data.get("schedule", {}).get("heaterSource", "electric")
+            )
 
             # Construct Profiles data
             enabled = None
-            profiles = [{},{},{}]
+            profiles = [{}, {}, {}]
             for i in range(0, 3):
                 for key in profile[i]:
                     # Ignore the timestamp key
-                    if key not in ['timestamp']:
+                    if key not in ["timestamp"]:
                         profiles[i][key] = profile[i][key]
                 # Set heater source
-                profiles[i]['heaterSource'] = source
-                if timers[i].get('timerProgrammedStatus', None) == "programmed":
+                profiles[i]["heaterSource"] = source
+                if timers[i].get("timerProgrammedStatus", None) == "programmed":
                     enabled = True
 
-            if enabled == None and source == 'automatic':
-                raise SkodaInvalidRequestException('At least one departure must be scheduled for heater to be enabled')
+            if enabled == None and source == "automatic":
+                raise SkodaInvalidRequestException(
+                    "At least one departure must be scheduled for heater to be enabled"
+                )
 
             # Set optional settings
-            if data.get('schedule', {}).get('chargeMaxCurrent', None) is not None:
-                profiles[timerid]['chargeMaxCurrent']=data.get('schedule', {}).get('chargeMaxCurrent',False)
+            if data.get("schedule", {}).get("chargeMaxCurrent", None) is not None:
+                profiles[timerid]["chargeMaxCurrent"] = data.get("schedule", {}).get(
+                    "chargeMaxCurrent", False
+                )
 
-            if data.get('schedule', {}).get('targetChargeLevel', None) is not None:
-                profiles[timerid]['targetChargeLevel']=data.get('schedule', {}).get('targetChargeLevel',False)
+            if data.get("schedule", {}).get("targetChargeLevel", None) is not None:
+                profiles[timerid]["targetChargeLevel"] = data.get("schedule", {}).get(
+                    "targetChargeLevel", False
+                )
 
-            if data.get('schedule', {}).get('profileName', None) is not None:
-                profiles[timerid]['profileName']=data.get('schedule', {}).get('profileName',False)
+            if data.get("schedule", {}).get("profileName", None) is not None:
+                profiles[timerid]["profileName"] = data.get("schedule", {}).get(
+                    "profileName", False
+                )
 
-            if data.get('schedule', {}).get('operationClimatisation', None) is not None:
-                profiles[timerid]['operationClimatisation']=data.get('schedule', {}).get('operationClimatisation',False)
+            if data.get("schedule", {}).get("operationClimatisation", None) is not None:
+                profiles[timerid]["operationClimatisation"] = data.get("schedule", {}).get(
+                    "operationClimatisation", False
+                )
 
-            if data.get('schedule', {}).get('operationCharging', None) is not None:
-                profiles[timerid]['operationCharging']=data.get('schedule', {}).get('operationCharging',False)
+            if data.get("schedule", {}).get("operationCharging", None) is not None:
+                profiles[timerid]["operationCharging"] = data.get("schedule", {}).get(
+                    "operationCharging", False
+                )
 
             # Construct basic settings
             settings = {
-                'chargeMinLimit': int(setting['chargeMinLimit']),
-                'heaterSource': 'electric',
-                'targetTemperature': int(data['temp'])
+                "chargeMinLimit": int(setting["chargeMinLimit"]),
+                "heaterSource": "electric",
+                "targetTemperature": int(data["temp"]),
             }
             body = {
-                'action': {
-                    'timersAndProfiles': {
-                        'timerBasicSetting': settings,
-                        'timerList': {
-                            'timer': timers
-                        },
-                        'timerProfileList': {
-                            'timerProfile': profiles
-                        }
+                "action": {
+                    "timersAndProfiles": {
+                        "timerBasicSetting": settings,
+                        "timerList": {"timer": timers},
+                        "timerProfileList": {"timerProfile": profiles},
                     },
-                    'type': actiontype
+                    "type": actiontype,
                 }
             }
 
-            await self.set_token('vwg')
+            await self.set_token("vwg")
             # Only get security token if auxiliary heater is to be enabled
-            if source == 'automatic':
-               self._session_headers['X-securityToken'] = await self.get_sec_token(vin = vin, spin = spin, action = 'timer')
+            if source == "automatic":
+                self._session_headers["X-securityToken"] = await self.get_sec_token(
+                    vin=vin, spin=spin, action="timer"
+                )
 
-            #return await self._setVWAPI(
+            # return await self._setVWAPI(
             return await self._setVWAPI(
                 urljoin(
                     self._session_auth_ref_url[vin],
-                    f'fs-car/bs/departuretimer/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/timer/actions'
+                    f"fs-car/bs/departuretimer/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/timer/actions",
                 ),
-                json = body
+                json=body,
             )
         except:
             raise
@@ -1657,152 +1895,170 @@ class Connection:
 
     async def setHonkAndFlash(self, vin, data):
         """Execute honk and flash actions."""
-        #return await self._setVWAPI(
+        # return await self._setVWAPI(
         return await self._setVWAPI(
             urljoin(
                 self._session_auth_ref_url[vin],
-                f'fs-car/bs/rhf/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/honkAndFlash'
+                f"fs-car/bs/rhf/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/honkAndFlash",
             ),
-            json = data
+            json=data,
         )
 
     async def setLock(self, vin, data, spin):
         """Remote lock and unlock actions."""
         try:
             # Save Content-Type header to be restored later
-            if 'Content-Type' in self._session_headers:
-                contType = self._session_headers['Content-Type']
+            if "Content-Type" in self._session_headers:
+                contType = self._session_headers["Content-Type"]
             else:
                 contType = False
             # Fetch security token for lock/unlock
-            if 'unlock' in data:
-                self._session_headers['X-mbbSecToken'] = await self.get_sec_token(vin = vin, spin = spin, action = 'unlock')
+            if "unlock" in data:
+                self._session_headers["X-mbbSecToken"] = await self.get_sec_token(
+                    vin=vin, spin=spin, action="unlock"
+                )
             else:
-                self._session_headers['X-mbbSecToken'] = await self.get_sec_token(vin = vin, spin = spin, action = 'lock')
+                self._session_headers["X-mbbSecToken"] = await self.get_sec_token(
+                    vin=vin, spin=spin, action="lock"
+                )
             # Set temporary Content-Type
-            self._session_headers['Content-Type'] = 'application/vnd.vwg.mbb.RemoteLockUnlock_v1_0_0+xml'
+            self._session_headers[
+                "Content-Type"
+            ] = "application/vnd.vwg.mbb.RemoteLockUnlock_v1_0_0+xml"
 
             response = await self._setVWAPI(
                 urljoin(
                     self._session_auth_ref_url[vin],
-                    f'fs-car/bs/rlu/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/actions'
+                    f"fs-car/bs/rlu/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/actions",
                 ),
-                data = data
+                data=data,
             )
 
             # Clean up content-type
-            self._session_headers.pop('Content-Type', None)
-            if contType: self._session_headers['Content-Type'] = contType
+            self._session_headers.pop("Content-Type", None)
+            if contType:
+                self._session_headers["Content-Type"] = contType
 
             return response
 
         except:
-            self._session_headers.pop('Content-Type', None)
-            if contType: self._session_headers['Content-Type'] = contType
+            self._session_headers.pop("Content-Type", None)
+            if contType:
+                self._session_headers["Content-Type"] = contType
             raise
         return False
 
     async def setPreHeater(self, vin, data, spin):
         """Petrol/diesel parking heater actions."""
         try:
-            if 'Content-Type' in self._session_headers:
-                contType = self._session_headers['Content-Type']
+            if "Content-Type" in self._session_headers:
+                contType = self._session_headers["Content-Type"]
             else:
-                contType = ''
-            self._session_headers['Content-Type'] = 'application/vnd.vwg.mbb.RemoteStandheizung_v2_0_2+json'
+                contType = ""
+            self._session_headers[
+                "Content-Type"
+            ] = "application/vnd.vwg.mbb.RemoteStandheizung_v2_0_2+json"
             if isinstance(data, dict):
-                if not 'quickstop' in data.get('performAction'):
-                    self._session_headers['x-mbbSecToken'] = await self.get_sec_token(vin = vin, spin = spin, action = 'heating')
+                if not "quickstop" in data.get("performAction"):
+                    self._session_headers["x-mbbSecToken"] = await self.get_sec_token(
+                        vin=vin, spin=spin, action="heating"
+                    )
             else:
                 raise SkodaConfigException("Invalid data for preheater")
             response = await self._setVWAPI(
                 urljoin(
                     self._session_auth_ref_url[vin],
-                    f'fs-car/bs/rs/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/action'
+                    f"fs-car/bs/rs/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/action",
                 ),
-                json = data
+                json=data,
             )
 
             # Clean up headers
-            self._session_headers.pop('x-mbbSecToken', None)
-            self._session_headers.pop('Content-Type', None)
-            if contType: self._session_headers['Content-Type'] = contType
+            self._session_headers.pop("x-mbbSecToken", None)
+            self._session_headers.pop("Content-Type", None)
+            if contType:
+                self._session_headers["Content-Type"] = contType
 
             return response
 
         except Exception as error:
-            self._session_headers.pop('x-mbbSecToken', None)
-            self._session_headers.pop('Content-Type', None)
-            if contType: self._session_headers['Content-Type'] = contType
+            self._session_headers.pop("x-mbbSecToken", None)
+            self._session_headers.pop("Content-Type", None)
+            if contType:
+                self._session_headers["Content-Type"] = contType
             raise
         return False
 
     async def setRefresh(self, vin):
-        """"Force vehicle data update."""
+        """ "Force vehicle data update."""
         return await self._setVWAPI(
             urljoin(
                 self._session_auth_ref_url[vin],
-                f'fs-car/bs/vsr/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/requests'
+                f"fs-car/bs/vsr/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/requests",
             ),
-            data=None
+            data=None,
         )
 
     async def setWindowHeater(self, vin, action):
         """Special handling of window heater for native API."""
         try:
-            await self.set_token('connect')
-            if action in ['start', 'stop']:
+            await self.set_token("connect")
+            if action in ["start", "stop"]:
                 url = f"https://api.connect.skoda-auto.cz/api/v1/air-conditioning/operation-requests/{action}-window-heating"
-                body = {
-                    'vin': vin
-                }
+                body = {"vin": vin}
             else:
                 raise SkodaInvalidRequestException("Invalid action for window heating.")
             response = await self._data_call(url, json=body)
             if not response:
-                _LOGGER.debug(f'API call failed, data: {body}')
-                raise SkodaException('Invalid or no response')
+                _LOGGER.debug(f"API call failed, data: {body}")
+                raise SkodaException("Invalid or no response")
             else:
-                request_id = response.get('id', 0)
-                request_state = response.get('status', 'unknown')
-                _LOGGER.debug(f'Request returned with state "{request_state}", request id: {request_id}')
-                return dict({'id': str(request_id), 'state': request_state})
+                request_id = response.get("id", 0)
+                request_state = response.get("status", "unknown")
+                _LOGGER.debug(
+                    f'Request returned with state "{request_state}", request id: {request_id}'
+                )
+                return dict({"id": str(request_id), "state": request_state})
         except:
             raise
         return False
 
-   # Skoda native API request methods
+    # Skoda native API request methods
     async def _setSkodaAPI(self, endpoint, vin, **data):
         """Data call through Skoda API."""
         try:
-            await self.set_token('connect')
-            url = f"https://api.connect.skoda-auto.cz/api/v1/{endpoint}/operation-requests?vin={vin}"
+            await self.set_token("connect")
+            url = (
+                f"https://api.connect.skoda-auto.cz/api/v1/{endpoint}/operation-requests?vin={vin}"
+            )
             response = await self._data_call(url, **data)
             if not response:
-                _LOGGER.debug(f'API call failed, data: {data}')
-                raise SkodaException('Invalid or no response')
+                _LOGGER.debug(f"API call failed, data: {data}")
+                raise SkodaException("Invalid or no response")
             else:
-                request_id = response.get('id', 0)
-                request_state = response.get('status', 'unknown')
-                _LOGGER.debug(f'Request returned with state "{request_state}", request id: {request_id}')
-                return dict({'id': str(request_id), 'state': request_state})
+                request_id = response.get("id", 0)
+                request_state = response.get("status", "unknown")
+                _LOGGER.debug(
+                    f'Request returned with state "{request_state}", request id: {request_id}'
+                )
+                return dict({"id": str(request_id), "state": request_state})
         except:
             raise
         return False
 
     async def setAirConditioning(self, vin, data):
         """Execute air conditioning actions."""
-        return await self._setSkodaAPI('air-conditioning', vin, json = data)
+        return await self._setSkodaAPI("air-conditioning", vin, json=data)
 
     async def setTimers(self, vin, data):
         """Execute timer actions."""
-        return await self._setSkodaAPI('air-conditioning', vin, json = data)
+        return await self._setSkodaAPI("air-conditioning", vin, json=data)
 
     async def setCharging(self, vin, data):
         """Execute charging actions."""
-        return await self._setSkodaAPI('charging', vin, json = data)
+        return await self._setSkodaAPI("charging", vin, json=data)
 
- #### Token handling ####
+    #### Token handling ####
     def decode_token(self, token):
         """Helper method to deocde jwt token, different syntax in different versions."""
         # Try old pyJWT syntax first
@@ -1813,11 +2069,11 @@ class Connection:
         # Try new pyJWT syntax if old fails
         if decoded is None:
             try:
-                decoded = jwt.decode(token, options={'verify_signature': False})
+                decoded = jwt.decode(token, options={"verify_signature": False})
             except:
                 decoded = None
         if decoded is None:
-            raise SkodaTokenInvalidException('Failed to decode token')
+            raise SkodaTokenInvalidException("Failed to decode token")
         else:
             return decoded
 
@@ -1825,7 +2081,7 @@ class Connection:
         """Function to validate a single token."""
         try:
             now = datetime.now()
-            exp = self.decode_token(token).get('exp', None)
+            exp = self.decode_token(token).get("exp", None)
             expires = datetime.fromtimestamp(int(exp))
 
             # Lazy check but it's very inprobable that the token expires the very second we want to use it
@@ -1835,7 +2091,7 @@ class Connection:
                 _LOGGER.debug(f'Token expired at {expires.strftime("%Y-%m-%d %H:%M:%S")})')
                 return False
         except Exception as e:
-            _LOGGER.info(f'Token validation failed, {e}')
+            _LOGGER.info(f"Token validation failed, {e}")
         return False
 
     async def verify_token(self, token, client):
@@ -1847,69 +2103,73 @@ class Connection:
             decoded = self.decode_token(token)
 
             # Verify that token type is either refresh_token for 'Skoda' or RT for VW-Group
-            if decoded.get('typ', decoded.get('jtt', None)) not in ['RT', 'refresh_token']:
-                raise SkodaTokenInvalidException('Invalid refresh token')
+            if decoded.get("typ", decoded.get("jtt", None)) not in ["RT", "refresh_token"]:
+                raise SkodaTokenInvalidException("Invalid refresh token")
 
-            aud = decoded.get('aud', None)
+            aud = decoded.get("aud", None)
             if aud is None:
-                if client == 'vwg':
+                if client == "vwg":
                     # Special handling for VW Group API refresh token
                     aud = "mal.prd.ece.vwg-connect.com"
                 else:
-                    raise SkodaTokenInvalidException(f'Missing audience attribute for client "{client}" token')
+                    raise SkodaTokenInvalidException(
+                        f'Missing audience attribute for client "{client}" token'
+                    )
             if not isinstance(aud, str):
                 aud = next(iter(aud))
 
             _LOGGER.debug(f'Matching token audience {aud} to client ID for "{client}"')
             try:
-                if aud == CLIENT_LIST.get(client, {}).get('CLIENT_ID', ''):
+                if aud == CLIENT_LIST.get(client, {}).get("CLIENT_ID", ""):
                     if self._session_fulldebug:
-                        _LOGGER.debug('Audience and client ID matches, fetching JWKs')
-                    req = await self._session.get(url = 'https://identity.vwgroup.io/oidc/v1/keys')
-                elif aud == 'mal.prd.ece.vwg-connect.com' and client == 'vwg':
+                        _LOGGER.debug("Audience and client ID matches, fetching JWKs")
+                    req = await self._session.get(url="https://identity.vwgroup.io/oidc/v1/keys")
+                elif aud == "mal.prd.ece.vwg-connect.com" and client == "vwg":
                     if self._session_fulldebug:
-                        _LOGGER.debug('Audience matches that of client ID, fetch MBB01 JWKs')
-                    req = await self._session.get(url = 'https://mbboauth-1d.prd.ece.vwg-connect.com/mbbcoauth/public/jwk/v1')
+                        _LOGGER.debug("Audience matches that of client ID, fetch MBB01 JWKs")
+                    req = await self._session.get(
+                        url="https://mbboauth-1d.prd.ece.vwg-connect.com/mbbcoauth/public/jwk/v1"
+                    )
                 else:
-                    raise SkodaTokenInvalidException('Token audience does not match the client ID')
+                    raise SkodaTokenInvalidException("Token audience does not match the client ID")
             except Exception as e:
-                _LOGGER.debug(f'Received error {e} while trying to match')
+                _LOGGER.debug(f"Received error {e} while trying to match")
                 raise
 
             # Fetch key list
             keys = await req.json()
             pubkeys = {}
             # Convert all RSA keys and store in list
-            for jwk in keys['keys']:
-                kid = jwk['kid']
-                if jwk['kty'] == 'RSA':
+            for jwk in keys["keys"]:
+                kid = jwk["kid"]
+                if jwk["kty"] == "RSA":
                     pubkeys[kid] = jwt.algorithms.RSAAlgorithm.from_jwk(to_json(jwk))
             # Get key ID from token and get match from key list
-            token_kid = jwt.get_unverified_header(token)['kid']
+            token_kid = jwt.get_unverified_header(token)["kid"]
             if self._session_fulldebug:
                 try:
-                    _LOGGER.debug(f'Token Key ID is {token_kid}, match from public keys: {pubkeys}')
+                    _LOGGER.debug(f"Token Key ID is {token_kid}, match from public keys: {pubkeys}")
                 except:
                     pass
             pubkey = pubkeys[token_kid]
 
             # Verify token with public key
             verified = False
-            if client == 'vwg':
+            if client == "vwg":
                 # We can't verify audience for vwg token, it's missing in RT
-                verified = jwt.decode(token, key=pubkey, algorithms=['RS256'])
+                verified = jwt.decode(token, key=pubkey, algorithms=["RS256"])
             else:
-                verified = jwt.decode(token, key=pubkey, algorithms=['RS256'], audience=aud)
+                verified = jwt.decode(token, key=pubkey, algorithms=["RS256"], audience=aud)
             if verified:
                 if self._session_fulldebug:
-                    _LOGGER.debug('Successfully verified refresh token audience and signature')
+                    _LOGGER.debug("Successfully verified refresh token audience and signature")
             return verified
-        except (SkodaTokenInvalidException) as error:
+        except SkodaTokenInvalidException as error:
             return error
         except ExpiredSignatureError:
             return False
         except Exception as error:
-            _LOGGER.debug(f'Failed to verify {aud} token, error: {error}')
+            _LOGGER.debug(f"Failed to verify {aud} token, error: {error}")
             return error
 
     async def refresh_token(self, client):
@@ -1917,24 +2177,19 @@ class Connection:
         try:
             # Refresh API tokens
             _LOGGER.debug(f'Refreshing tokens for client "{client}"')
-            old_token = self._session_tokens[client]['refresh_token']
-            if client == 'vwg':
+            old_token = self._session_tokens[client]["refresh_token"]
+            if client == "vwg":
                 # Special handling for VW-Group API token, "MBB"
                 payload = {
-                    'data': {
-                        'grant_type': 'refresh_token',
-                        'scope': 'sc2:fal',
-                        'token': old_token
-                    }
+                    "data": {"grant_type": "refresh_token", "scope": "sc2:fal", "token": old_token}
                 }
-                url = 'https://mbboauth-1d.prd.ece.vwg-connect.com/mbbcoauth/mobile/oauth2/v1/token'
+                url = "https://mbboauth-1d.prd.ece.vwg-connect.com/mbbcoauth/mobile/oauth2/v1/token"
             else:
-                payload = {
-                    'json': {
-                        'refreshToken': old_token
-                    }
-                }
-                url = 'https://api.connect.skoda-auto.cz/api/v1/authentication/token/refresh?systemId='+CLIENT_LIST[client]['SYSTEM_ID']
+                payload = {"json": {"refreshToken": old_token}}
+                url = (
+                    "https://api.connect.skoda-auto.cz/api/v1/authentication/token/refresh?systemId="
+                    + CLIENT_LIST[client]["SYSTEM_ID"]
+                )
             try:
                 response = await self._session.post(
                     url=url,
@@ -1942,45 +2197,51 @@ class Connection:
                     **payload,
                 )
             except Exception as e:
-                _LOGGER.debug(f'Token refresh failed: {e}')
+                _LOGGER.debug(f"Token refresh failed: {e}")
                 raise
 
             if response.status == 200:
                 tokens = await response.json()
-                if not 'error' in tokens:
-                    _LOGGER.debug('Refresh tokens succeeded, revoking old refresh tokens')
+                if not "error" in tokens:
+                    _LOGGER.debug("Refresh tokens succeeded, revoking old refresh tokens")
                     try:
                         await self.revoke_token(old_token, client)
                     except:
-                        _LOGGER.warning(f'Token revocation failed for client {client}!')
+                        _LOGGER.warning(f"Token revocation failed for client {client}!")
                     # Get and store tokens in common naming format
-                    self._session_tokens[client]['access_token'] = tokens.get('access_token', tokens.get('accessToken', None))
-                    self._session_tokens[client]['refresh_token'] = tokens.get('refresh_token', tokens.get('refreshToken', None))
-                    self._session_tokens[client]['id_token'] = tokens.get('id_token', tokens.get('idToken', None))
+                    self._session_tokens[client]["access_token"] = tokens.get(
+                        "access_token", tokens.get("accessToken", None)
+                    )
+                    self._session_tokens[client]["refresh_token"] = tokens.get(
+                        "refresh_token", tokens.get("refreshToken", None)
+                    )
+                    self._session_tokens[client]["id_token"] = tokens.get(
+                        "id_token", tokens.get("idToken", None)
+                    )
                 else:
-                    error = tokens.get('error', '')
-                    if 'error_description' in tokens:
-                        error_description = tokens.get('error_description', '')
-                        raise SkodaException(f'{error} - {error_description}')
+                    error = tokens.get("error", "")
+                    if "error_description" in tokens:
+                        error_description = tokens.get("error_description", "")
+                        raise SkodaException(f"{error} - {error_description}")
                     else:
                         raise SkodaException(error)
                 return True
             elif response.status == 400:
                 error = await response.json()
                 _LOGGER.debug(error)
-                if error.get('error', {}) in ['invalid_grant', 'unsupported_grant_type']:
+                if error.get("error", {}) in ["invalid_grant", "unsupported_grant_type"]:
                     _LOGGER.debug(f'API token refresh failed: {error.get("error_description", {})}')
-                    if client == 'vwg':
+                    if client == "vwg":
                         return await self._getAPITokens()
                 else:
-                    _LOGGER.debug(f'Response JSON: {error}')
-                    raise SkodaException('Failed token refresh')
+                    _LOGGER.debug(f"Response JSON: {error}")
+                    raise SkodaException("Failed token refresh")
             else:
                 resp = await response.json()
                 _LOGGER.warning(f'Something went wrong when refreshing tokens for "{client}".')
-                _LOGGER.debug(f'Response JSON: {resp}')
+                _LOGGER.debug(f"Response JSON: {resp}")
         except Exception as error:
-            _LOGGER.warning(f'Could not refresh tokens: {error}')
+            _LOGGER.warning(f"Could not refresh tokens: {error}")
         return False
 
     async def set_token(self, client):
@@ -1993,20 +2254,20 @@ class Connection:
                 _LOGGER.debug(f'Client "{client}" token is missing, call to authorize the client.')
                 try:
                     # Try to authorize client and get tokens
-                    if client != 'vwg':
+                    if client != "vwg":
                         result = await self._authorize(client)
                     else:
                         result = await self._getAPITokens()
 
                     # If authorization wasn't successful
                     if result is not True:
-                        raise SkodaAuthenticationException(f'Failed to authorize client {client}')
+                        raise SkodaAuthenticationException(f"Failed to authorize client {client}")
                 except:
                     raise
             try:
                 # Validate access token for client, refresh if validation fails
                 valid = False
-                token = self._session_tokens.get(client, {}).get('access_token', False)
+                token = self._session_tokens.get(client, {}).get("access_token", False)
                 if token is not False:
                     valid = await self.validate_token(token)
                 if not valid:
@@ -2020,24 +2281,28 @@ class Connection:
                 else:
                     try:
                         dt = datetime.fromtimestamp(valid)
-                        _LOGGER.debug(f'Access token for "{client}" is valid until {dt.strftime("%Y-%m-%d %H:%M:%S")}')
+                        _LOGGER.debug(
+                            f'Access token for "{client}" is valid until {dt.strftime("%Y-%m-%d %H:%M:%S")}'
+                        )
                     except:
                         pass
                 # Assign token to authorization header
-                self._session_headers['Authorization'] = 'Bearer ' + self._session_tokens[client]['access_token']
-                if client == 'technical':
-                    self._session_headers['tokentype'] = 'IDK_TECHNICAL'
-                elif client == 'connect':
-                    self._session_headers['tokentype'] = 'IDK_CONNECT'
-                elif client == 'dcs':
-                    self._session_headers['tokentype'] = 'IDK_SMARTLINK'
+                self._session_headers["Authorization"] = (
+                    "Bearer " + self._session_tokens[client]["access_token"]
+                )
+                if client == "technical":
+                    self._session_headers["tokentype"] = "IDK_TECHNICAL"
+                elif client == "connect":
+                    self._session_headers["tokentype"] = "IDK_CONNECT"
+                elif client == "dcs":
+                    self._session_headers["tokentype"] = "IDK_SMARTLINK"
                 else:
-                    self._session_headers['tokentype'] = 'MBB'
+                    self._session_headers["tokentype"] = "MBB"
             except Exception as e:
                 raise SkodaException(f'Failed to set token for "{client}": {e}')
             return True
 
- #### Class helpers ####
+    #### Class helpers ####
     @property
     def vehicles(self):
         """Return list of Vehicle objects."""
@@ -2046,40 +2311,39 @@ class Connection:
     def vehicle(self, vin):
         """Return vehicle object for given vin."""
         return next(
-            (
-                vehicle
-                for vehicle in self.vehicles
-                if vehicle.unique_id.lower() == vin.lower()
-            ), None
+            (vehicle for vehicle in self.vehicles if vehicle.unique_id.lower() == vin.lower()), None
         )
 
     def hash_spin(self, challenge, spin):
         """Convert SPIN and challenge to hash."""
-        spinArray = bytearray.fromhex(spin);
-        byteChallenge = bytearray.fromhex(challenge);
+        spinArray = bytearray.fromhex(spin)
+        byteChallenge = bytearray.fromhex(challenge)
         spinArray.extend(byteChallenge)
         return hashlib.sha512(spinArray).hexdigest()
 
+
 async def main():
     """Main method."""
-    if '-v' in argv:
+    if "-v" in argv:
         logging.basicConfig(level=logging.INFO)
-    elif '-vv' in argv:
+    elif "-vv" in argv:
         logging.basicConfig(level=logging.DEBUG)
     else:
         logging.basicConfig(level=logging.ERROR)
 
-    async with ClientSession(headers={'Connection': 'keep-alive'}) as session:
+    async with ClientSession(headers={"Connection": "keep-alive"}) as session:
         connection = Connection(session, **read_config())
         if await connection.doLogin():
             if await connection.get_vehicles():
                 for vehicle in connection.vehicles:
-                    print(f'Vehicle id: {vehicle}')
-                    print('Supported sensors:')
+                    print(f"Vehicle id: {vehicle}")
+                    print("Supported sensors:")
                     for instrument in vehicle.dashboard().instruments:
-                        print(f' - {instrument.name} (domain:{instrument.component}) - {instrument.str_state}')
+                        print(
+                            f" - {instrument.name} (domain:{instrument.component}) - {instrument.str_state}"
+                        )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     loop = asyncio.get_event_loop()
     loop.run_until_complete(main())
