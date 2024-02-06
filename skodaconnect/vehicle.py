@@ -2203,7 +2203,11 @@ class Vehicle:
     @property
     def outside_temperature(self):
         """Return outside temperature."""
-        response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301020001'].get('value', 0))
+        try:
+            response = int(self.attrs.get('StoredVehicleDataResponseParsed')['0x0301020001'].get('value', 0))
+        except (KeyError, ValueError) as err:
+            _LOGGER.debug(f'Failed to get outside temperature: {str(err)}.')
+            return False
         if response:
             return round(float((response / 10) - 273.15), 1)
         else:
