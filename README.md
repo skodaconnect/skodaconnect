@@ -1,4 +1,4 @@
-![Version](https://img.shields.io/github/v/release/lendy007/skodaconnect?include_prereleases)
+![Version](https://img.shields.io/github/v/release/skodaconnect/skodaconnect?include_prereleases)
 ![PyPi](https://img.shields.io/pypi/v/skodaconnect?label=latest%20pypi)
 ![Downloads PyPi](https://img.shields.io/pypi/dm/skodaconnect)
 
