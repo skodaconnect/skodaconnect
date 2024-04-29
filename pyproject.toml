@@ -5,28 +5,21 @@ build-backend = "flit_core.buildapi"
 [project]
 name = "skodaconnect"
 authors = [
-    {name = "lendy007", email = "lendik@gmail.com"},
-    {name = "FarFar", email = "faekie@hotmail.com"},
-    {name =  "dvx76", email = "fabrice.devaux@gmail.com"},
-    {name = "WebSpider", email = "bacardicoke@gmail.com"}
+  { name = "FarFar", email = "faekie@hotmail.com" },
+  { name = "dvx76", email = "fabrice.devaux@gmail.com" },
+  { name = "WebSpider", email = "bacardicoke@gmail.com" },
 ]
-readme = {file = "README.md", content-type = "text/markdown"}
-license = {file = "LICENSE"}
+readme = { file = "README.md", content-type = "text/markdown" }
+license = { file = "LICENSE" }
 classifiers = [
-    "License :: OSI Approved :: Apache Software License",
-    "Development Status :: 4 - Beta",
-    "Operating System :: POSIX",
-    "Programming Language :: Python :: 3"
+  "License :: OSI Approved :: Apache Software License",
+  "Development Status :: 4 - Beta",
+  "Operating System :: POSIX",
+  "Programming Language :: Python :: 3",
 ]
 dynamic = ["version", "description"]
-dependencies = [
-  "aiohttp",
-  "beautifulsoup4",
-  "cryptography",
-  "lxml",
-  "pyjwt"
-]
-requires-python = ">=3.7"
+dependencies = ["aiohttp", "beautifulsoup4", "cryptography", "lxml", "pyjwt"]
+requires-python = ">=3.11"
 
 [project.urls]
 Homepage = "https://github.com/skodaconnect"
