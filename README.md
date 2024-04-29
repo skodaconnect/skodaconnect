@@ -2,25 +2,26 @@
 ![PyPi](https://img.shields.io/pypi/v/skodaconnect?label=latest%20pypi)
 ![Downloads PyPi](https://img.shields.io/pypi/dm/skodaconnect)
 
-# **Contributors needed**
-Keeping up with changes made from VAG group to the API requires coders familiar with the code and structure for reverse engineering the changes into this code. Contributions in the form of raised issues and pull requests are much needed in order to maintain the functionality for all different models of Skoda cars.
-Up until now I have maintained this code after lendy007 and I have had my own interest in it since I've been using it for controlling my own Skoda. My Skoda Connect subscription is now expired and I won't be renewing it because I'm switching from my current Skoda to another car in the near future. This means that this project needs you, someone familiar with Python and an interest in keeping this code alive, in order to not stop working after the next VAG update.
-Please contact me on the Discord or through email if this person is you.
+# **Maintainers and contributors needed**
 
-/TheFarfar (Farfar)
+Keeping up with changes made by Skoda/VAG to the API requires coders with access to various cars and the ability to reverse engineer changes and new features into this project. Contributions in the form of raised issues and pull requests are much needed in order to maintain the functionality for all different models of Skoda cars.
+
+Contributors and maintainers will naturally drift away from the project once they either no longer own a Skoda or move away from Home Assistant. As a results, there aren't really any long-term maintainers or contributors still active. But we do what we can to keep the project alive and up to date.
+
+For questions, further help or contributions you can join the Discord server at https://discord.gg/826X9jEtCh.
 
 # Skoda Connect
+
 **UNOFFICIAL** library for communicating with Skoda Connect.
-Fork of https://github.com/robinostlund/volkswagencarnet,
-modified to support Skoda Connect.
-Changes has been made to mimic the MySkoda mobile app.
+
+This project is a fork of https://github.com/robinostlund/volkswagencarnet, modified to support Skoda Connect, mimicking the MySkoda mobile app.
 
 This is an API library for Skoda connected cars.
 The library is reverse engineered by intercepting HTTP requests from
 MySkoda app, there is no official API. Use at your own risk.
 If the Skoda API changes, this library may stop working without warning.
-Version 1.x is in maintenance only.
-All feature requests and major changes will be for version 2.0 (under development)
+
+While it might work for other use-cases, the primary purpose for this library is to be consumed by the https://github.com/skodaconnect/homeassistant-skodaconnect project.
 
 ## Information
 
@@ -29,8 +30,6 @@ Retrieve statistics about your Skoda from the Skoda Connect online service.
 * Support for SmartLink
 * All (native) Skoda cars supported though newer cars (Skoda Enyaq iV) use newer API that's under development
 * If your Skoda car don't work with the MySkoda app it won't work with this integration
-
-Please contribute improvements/bugfixes etc.
 
 ## Breaking changes
 
@@ -45,19 +44,6 @@ Heating is what it sounds like and ventilation is used to ventilate/cool the car
 
 - **Auxiliary Heater** is the auxiliary/parking heater for **PHEV** vehicles. This uses the climater API function, same as electric climatisation.
 
-## Thanks to
-
-- [RobinostLund](https://github.com/robinostlund/volkswagencarnet) for initial project for Volkswagen Carnet which this is based on initially
-- [lendy007](https://github.com/lendy007) for creating intial release for Skoda cars
-- [Farfar](https://github.com/Farfar) for modifications related to electric engines
-- [tanelvakker](https://github.com/tanelvakker) for modifications related to correct SPIN handling for various actions and using correct URLs also for MY2021
-- [wieshka](https://github.com/wieshka) for help with Skoda Enyaq iV development
-- WebSpider and GAEvakYD from Discord for their help with fixing login form handling
-
-## Other related repositories
-
-- [HomeAssistant Component](https://github.com/lendy007/homeassistant-skodaconnect) a custom component for Home Assistant
-
 ## Installation
 
 ```sh
@@ -67,17 +53,19 @@ $ pip install skodaconnect
 
 ### Example
 
-For an extensive example, please use the code found in example/example.py.
+For an extensive example, please use the code found in [example/example.py](example/example.py).
 When logged in the library will automatically create a vehicle object for every car registered to the account. Initially no data is fetched at all. Use the doLogin method and it will signin with the credentials used for the class constructor.
 Method get_vehicles will fetch vehicle basic information and create Vehicle class objects for all associated vehicles in account.
 To update all available data use the update_all method of the Connect class. This will call the update function for all registered vehicles, which in turn will fetch data from all available API endpoints.
 
 #### Attributes
+
 The Vehicle class contains all of the attributes with values fetched from the API.
-To access a single attribute, please see and use the example/example.py.
+To access a single attribute, please see and use the [example/example.py](example/example.py).
 This will print all available methods, variables and properties as well as a list of supported attributes for discovered car.
 
 #### Methods
+
 Vehicle, in the following example the car object is an object of Vehicle class:
 ```
 car.set_charger(action = "start")                          # action = "start" or "stop"
@@ -111,9 +99,6 @@ conn.set<method>                                                        # The se
 ```
 Refrain from using methods starting with _, they are intended for internal use only.
 
-## Further help or contributions
-For questions, further help or contributions you can join the Discord server at https://discord.gg/826X9jEtCh
-
 ## Building
 We are using a `pyproject.toml` style of building, with `flit`.
 To build your own version of skodaconnect, use the following steps:
@@ -127,3 +112,12 @@ pip install flit
 ```
 flit build
 ```
+
+## Thanks to
+
+- [RobinostLund](https://github.com/robinostlund/volkswagencarnet) for initial project for Volkswagen Carnet which this is based on initially
+- [lendy007](https://github.com/lendy007) for the initial release for Skoda cars
+- [Farfar](https://github.com/Farfar) for modifications related to electric cars
+- [tanelvakker](https://github.com/tanelvakker) for modifications related to correct SPIN handling for various actions and using correct URLs also for MY2021
+- [wieshka](https://github.com/wieshka) for help with Skoda Enyaq iV development
+- WebSpider and GAEvakYD from Discord for their help with fixing login form handling
