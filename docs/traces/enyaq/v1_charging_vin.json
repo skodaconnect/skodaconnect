@@ -1,0 +1,32 @@
+// https://mysmob.api.connect.skoda-auto.cz/api/v1/charging/VIN
+{
+    "isVehicleInSavedLocation": false,
+    "status": {
+        "chargingRateInKilometersPerHour": 0.0,
+        "chargePowerInKw": 0.0,
+        "remainingTimeToFullyChargedInMinutes": 0,
+        "state": "CONNECT_CABLE",
+        "battery": {
+            "remainingCruisingRangeInMeters": 281000,
+            "stateOfChargeInPercent": 78
+        }
+    },
+    "settings": {
+        "targetStateOfChargeInPercent": 80,
+        "preferredChargeMode": "MANUAL",
+        "availableChargeModes": [
+            "MANUAL"
+        ],
+        "chargingCareMode": "ACTIVATED",
+        "autoUnlockPlugWhenCharged": "OFF",
+        "maxChargeCurrentAc": "MAXIMUM",
+        "batterySupport": "DISABLED"
+    },
+    "carCapturedTimestamp": "2024-06-04T01:22:12Z",
+    "errors": [
+        {
+            "type": "CHARGE_TYPE_NOT_AVAILABLE",
+            "description": "Charge type is not available."
+        }
+    ]
+}

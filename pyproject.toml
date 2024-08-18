@@ -3,9 +3,8 @@ requires = ["flit_core >=3.2,<4"]
 build-backend = "flit_core.buildapi"
 
 [project]
-name = "skodaconnect"
+name = "myskoda"
 authors = [
-  { name = "FarFar", email = "faekie@hotmail.com" },
   { name = "dvx76", email = "fabrice.devaux@gmail.com" },
   { name = "WebSpider", email = "bacardicoke@gmail.com" },
 ]
@@ -23,5 +22,12 @@ requires-python = ">=3.11"
 
 [project.urls]
 Homepage = "https://github.com/skodaconnect"
-Repository = "https://github.com/skodaconnect/skodaconnect.git"
-"Bug Tracker" = "https://github.com/skodaconnect/skodaconnect/issues"
+Repository = "https://github.com/skodaconnect/myskoda.git"
+"Bug Tracker" = "https://github.com/skodaconnect/myskoda/issues"
+
+[tool.pylint.'MESSAGES CONTROL']
+max-line-length = 100
+disable = "logging-fstring-interpolation"
+
+[tool.black]
+line-length = 100

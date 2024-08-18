@@ -1,6 +1,12 @@
 ![Version](https://img.shields.io/github/v/release/skodaconnect/skodaconnect?include_prereleases)
-![PyPi](https://img.shields.io/pypi/v/skodaconnect?label=latest%20pypi)
-![Downloads PyPi](https://img.shields.io/pypi/dm/skodaconnect)
+![PyPi](https://img.shields.io/pypi/v/myskoda?label=latest%20pypi)
+![Downloads PyPi](https://img.shields.io/pypi/dm/myskoda)
+
+# DO NOT USE
+
+This fork of https://github.com/skodaconnect/skodaconnect is used to switch to the new MySkoda API and is not ready for use.
+
+Use https://github.com/skodaconnect/skodaconnect
 
 # **Maintainers and contributors needed**
 
@@ -21,7 +27,7 @@ The library is reverse engineered by intercepting HTTP requests from
 MySkoda app, there is no official API. Use at your own risk.
 If the Skoda API changes, this library may stop working without warning.
 
-While it might work for other use-cases, the primary purpose for this library is to be consumed by the https://github.com/skodaconnect/homeassistant-skodaconnect project.
+While it might work for other use-cases, the primary purpose for this library is to be consumed by the https://github.com/skodaconnect/homeassistant-myskoda project.
 
 ## Information
 
@@ -48,7 +54,7 @@ Heating is what it sounds like and ventilation is used to ventilate/cool the car
 
 ```sh
 [venv-python3] user@localhost:~
-$ pip install skodaconnect
+$ pip install myskoda
 ```
 
 ### Example
@@ -101,7 +107,7 @@ Refrain from using methods starting with _, they are intended for internal use o
 
 ## Building
 We are using a `pyproject.toml` style of building, with `flit`.
-To build your own version of skodaconnect, use the following steps:
+To build your own version of myskoda, use the following steps:
 
 1. Get the current source from GitHub
 2. Make sure you have flit installed:
@@ -115,9 +121,4 @@ flit build
 
 ## Thanks to
 
-- [RobinostLund](https://github.com/robinostlund/volkswagencarnet) for initial project for Volkswagen Carnet which this is based on initially
-- [lendy007](https://github.com/lendy007) for the initial release for Skoda cars
-- [Farfar](https://github.com/Farfar) for modifications related to electric cars
-- [tanelvakker](https://github.com/tanelvakker) for modifications related to correct SPIN handling for various actions and using correct URLs also for MY2021
-- [wieshka](https://github.com/wieshka) for help with Skoda Enyaq iV development
-- WebSpider and GAEvakYD from Discord for their help with fixing login form handling
+- [Farfar](https://github.com/Farfar) For all his work on https://github.com/skodaconnect/skodaconnect from which this is forked.

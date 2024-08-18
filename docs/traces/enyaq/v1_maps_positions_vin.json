@@ -1,0 +1,21 @@
+// https://mysmob.api.connect.skoda-auto.cz/api/v1/maps/positions?vin=VIN
+{
+    "positions": [
+        {
+            "type": "VEHICLE",
+            "gpsCoordinates": {
+                "latitude": 123.999847,
+                "longitude": 456.038604
+            },
+            "address": {
+                "city": "CITY",
+                "country": "Germany",
+                "countryCode": "DE",
+                "street": "STREET",
+                "houseNumber": "13",
+                "zipCode": "ZIP"
+            }
+        }
+    ],
+    "errors": []
+}

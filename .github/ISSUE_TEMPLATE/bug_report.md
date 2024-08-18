@@ -7,7 +7,7 @@ assignees: ''
 
 ---
 
-**Please search issues in https://github.com/skodaconnect/skodaconnect and https://github.com/skodaconnect/homeassistant-skodaconnect for duplicates or fixes before reporting a new issue.**
+**Please search issues in https://github.com/skodaconnect/myskoda and https://github.com/skodaconnect/homeassistant-myskoda for duplicates or fixes before reporting a new issue.**
 
 **Describe the bug**
 A clear and concise description of what the bug is.
@@ -20,7 +20,7 @@ Make sure that you have the latest app updates, sometimes there's new consent ne
 If the problem started after updating to a new release, please state latest working release.
 
 **Debug logs**
-If applicable, add debug logs. See [README](https://github.com/skodaconnect/homeassistant-skodaconnect#enable-debug-logging) on how to enable debug logs with response debugging.
+If applicable, add debug logs. See [README](https://github.com/skodaconnect/homeassistant-myskoda#enable-debug-logging) on how to enable debug logs with response debugging.
 
 **Installation:**
  - Home Assistant variant: [e.g. Hass OS, Docker, Core, Supervised]

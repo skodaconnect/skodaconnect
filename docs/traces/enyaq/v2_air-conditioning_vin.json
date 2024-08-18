@@ -1,0 +1,45 @@
+// https://mysmob.api.connect.skoda-auto.cz/api/v2/air-conditioning/VIN
+{
+    "estimatedDateTimeToReachTargetTemperature": "2024-06-04T13:48:33.888812925Z",
+    "state": "OFF",
+    "targetTemperature": {
+        "temperatureValue": 21.0,
+        "unitInCar": "CELSIUS"
+    },
+    "airConditioningAtUnlock": false,
+    "windowHeatingEnabled": false,
+    "steeringWheelPosition": "LEFT",
+    "seatHeatingActivated": {
+        "frontLeft": false,
+        "frontRight": false
+    },
+    "chargerConnectionState": "DISCONNECTED",
+    "chargerLockState": "UNLOCKED",
+    "windowHeatingState": {
+        "front": "OFF",
+        "rear": "OFF",
+        "unspecified": "INVALID"
+    },
+    "timers": [
+        {
+            "id": 1,
+            "enabled": false,
+            "time": "00:00",
+            "type": "ONE_OFF",
+            "selectedDays": [
+                "SATURDAY"
+            ]
+        },
+        {
+            "id": 2,
+            "enabled": false,
+            "time": "00:00",
+            "type": "ONE_OFF",
+            "selectedDays": [
+                "SATURDAY"
+            ]
+        }
+    ],
+    "carCapturedTimestamp": "2024-06-04T01:22:12Z",
+    "errors": []
+}
