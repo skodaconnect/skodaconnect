@@ -166,7 +166,7 @@ async def main():
                     login_success = True
             if not login_success:
                 print("Attempting to login to the Skoda Connect service")
-                login_success = await connection.doLogin()
+                login_success = await connection.do_login()
         except Exception as e:
             print(f"Login failed: {e}")
             exit()
@@ -308,11 +308,6 @@ async def main():
             # print("#       Update timer programming       #")
             # print(txt.center(40, "#"))
             # await vehicle.get_timerprogramming()
-            print("")
-            print("########################################")
-            print("#        Update trip statistics        #")
-            print(txt.center(40, "#"))
-            await vehicle.get_trip_statistic()
             print("")
             print("Updates complete")
 

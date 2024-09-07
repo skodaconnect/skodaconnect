@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Communicate with MySkoda API.
+
 Fork of https://github.com/skodaconnect/skodaconnect
 """
 import asyncio
@@ -42,7 +43,14 @@ from myskoda.utilities import json_loads
 from myskoda.vehicle import Vehicle
 
 from .const import (
-    API_BASE,
+    API_V1_CHARGING,
+    API_V1_TOKEN_EXCHANGE,
+    API_V1_TOKEN_REVOKE,
+    API_V1_VEHICLE_STATUS,
+    API_V1_VEHICLE_WARNING_LIGHTS,
+    API_V2_AIRCO,
+    API_V2_GARAGE,
+    API_V2_VEHICLE,
     APP_URI,
     BASE_SESSION,
     BRAND,
@@ -56,8 +64,8 @@ from .const import (
     MODELHOST,
     MODELVIEWL,
     MODELVIEWS,
+    OPENID_CONFIG,
     SCOPE,
-    SYSTEM_ID,
     TIMEOUT_30S,
     TOKEN_HEADERS,
     TOKEN_TYPES,
@@ -76,7 +84,6 @@ class Connection:
         self._session = session
         self._session_fulldebug = fulldebug
         self._session_headers = HEADERS_SESSION.copy()
-        self._session_base = BASE_SESSION
         self._session_auth_headers = HEADERS_AUTH.copy()
         self._session_cookies = ""
         self._session_nonce = self._get_nonce()
@@ -91,7 +98,6 @@ class Connection:
         self._session_tokens = {}
 
         _LOGGER.info(f"Unofficial MySkoda library, version {lib_version}")
-        _LOGGER.debug(f"Using session {self._session_base}")
 
     def _clear_cookies(self) -> None:
         """Clear session cookies."""
@@ -125,7 +131,7 @@ class Connection:
                     raise SkodaTokenInvalidException("Token failed verification")
             except SkodaTokenInvalidException as err:
                 _LOGGER.info(f"Token is invalid: {err}")
-            except Exception as e:
+            except Exception as err:
                 _LOGGER.debug(f"unhandled exception occured, error: {err}")
         except Exception as err:
             _LOGGER.debug(f"Token restore failed, error {err}")
@@ -134,7 +140,7 @@ class Connection:
             return False
         return True
 
-    async def doLogin(self):
+    async def do_login(self):
         """Login method, clean login"""
         _LOGGER.info("Initiating new login")
 
@@ -142,8 +148,8 @@ class Connection:
             _LOGGER.info("Revoking old tokens.")
             try:
                 await self.logout()
-            except:
-                pass
+            except Exception as err:
+                _LOGGER.debug(f"Logout failed with {err}, continue...")
 
         # Remove cookies and re-init session
         self._clear_cookies()
@@ -167,9 +173,7 @@ class Connection:
             self._session_auth_headers = HEADERS_AUTH.copy()
 
             _LOGGER.debug("Starting authorization process")
-            req = await self._session.get(
-                url="https://identity.vwgroup.io/.well-known/openid-configuration"
-            )
+            req = await self._session.get(url=OPENID_CONFIG)
             if req.status != 200:
                 return False
             response_data = await req.json()
@@ -234,9 +238,9 @@ class Connection:
                     raise SkodaException('Missing "location" header')
             except SkodaException:
                 raise
-            except Exception as error:
-                _LOGGER.warning(f"Failed to get authorization endpoint. {error}")
-                raise SkodaException(error)
+            except Exception as err:
+                _LOGGER.warning(f"Failed to get authorization endpoint. {err}")
+                raise SkodaException(err) from err
 
             # If we need to sign in (first token)
             if "signin-service" in ref:
@@ -326,9 +330,6 @@ class Connection:
                 "redirectUri": "myskoda://redirect/login/",
                 "verifier": verifier,
             }
-            token_url = (
-                f"{API_BASE}/api/v1/authentication/exchange-authorization-code?tokenType=CONNECT"
-            )
             if self._session_fulldebug:
                 _LOGGER.debug(f"Trying to authorize with {token_body}")
             new_header = {
@@ -336,7 +337,7 @@ class Connection:
                 "User-Agent": USER_AGENT,
             }
             req = await self._session.post(
-                url=token_url,
+                url=API_V1_TOKEN_EXCHANGE,
                 headers=new_header,
                 json=token_body,
                 allow_redirects=False,
@@ -571,11 +572,7 @@ class Connection:
             params = {
                 "refreshToken": token,
             }
-            revoke_url = (
-                "https://mysmob.api.connect.skoda-auto.cz/api/v1/authentication/token/revoke?systemId="
-                + SYSTEM_ID
-            )
-            if await self._session.post(revoke_url, headers=req_headers, data=params):
+            if await self._session.post(API_V1_TOKEN_REVOKE, headers=req_headers, data=params):
                 _LOGGER.debug("Revocation of token successful")
                 # Remove tokens from storage
                 self._session_tokens = {}
@@ -760,11 +757,9 @@ class Connection:
         skoda_vehicles = []
 
         # Authorize for "skoda" client and get vehicles from garage endpoint
-        response = await self.get("https://mysmob.api.connect.skoda-auto.cz/api/v2/garage")
+        response = await self.get(API_V2_GARAGE)
         # Check that response is a list
-        # if isinstance(response, list):
         if isinstance(response.get("vehicles", None), list):
-            # skoda_vehicles = response
             skoda_vehicles = response.get("vehicles")
 
         # If neither API returns any vehicles, raise an error
@@ -772,105 +767,36 @@ class Connection:
             raise SkodaConfigException("No vehicles were found for given account!")
 
         # Get vehicle connectivity information
-        else:
-            try:
-                for vehicle in skoda_vehicles:
-                    _LOGGER.debug(f"Checking vehicle {vehicle}")
-                    vin = vehicle.get("vin", "")
-                    # response = await self.get(
-                    #     f"https://mysmob.api.connect.skoda-auto.cz/api/v1/vehicle-information/{vin}"
-                    # )
-                    response = await self.get(
-                        f"https://mysmob.api.connect.skoda-auto.cz/api/v2/garage/vehicles/{vin}"
-                    )
-                    specification = response["specification"]
-                    capabilities = response["capabilities"]["capabilities"]
+        try:
+            for vehicle in skoda_vehicles:
+                _LOGGER.debug(f"Checking vehicle {vehicle}")
+                vin = vehicle["vin"]
+                response = await self.get(urljoin(API_V2_VEHICLE, vin))
+                specification = response["specification"]
+                capabilities = [c["id"] for c in response["capabilities"]["capabilities"]]
 
-                    # TODO: Remove? Looks like connecities is no longer a thing with the new API
-                    # connectivity = []
-                    # for service in vehicle.get("connectivities", []):
-                    #     if isinstance(service, str):
-                    #         connectivity.append(service)
-                    #     elif isinstance(service, dict):
-                    #         connectivity.append(service.get("type", ""))
-
-                    # capabilities = []
-                    # for capability in vehicle.get("capabilities", {}).get(
-                    #     "capabilities", []
-                    # ):
-                    #     capabilities.append(capability.get("id", ""))
-
-                    vehicle = {
-                        "vin": vin,
-                        # "connectivities": connectivity,
-                        "capabilities": capabilities,
-                        "specification": specification,
-                    }
-
-                    # Check if object already exist
-                    _LOGGER.debug("Check if vehicle exists")
-                    if self.vehicle(vin) is not None:
-                        _LOGGER.debug(f"Vehicle with VIN number {vin} already exist.")
-                        car = Vehicle(self, vehicle)
-                        if not car == self.vehicle(vehicle):
-                            _LOGGER.debug(f"Updating {vehicle} object")
-                            self._vehicles.pop(vehicle)
-                            self._vehicles.append(Vehicle(self, vehicle))
-                    else:
-                        _LOGGER.debug(f"Adding vehicle {vin}, with capabilities: {capabilities}")
-                        self._vehicles.append(Vehicle(self, vehicle))
-            except:
-                raise SkodaLoginFailedException("Unable to fetch associated vehicles for account")
+                # Check if object already exist
+                _LOGGER.debug("Check if vehicle exists")
+                new_vehicle = Vehicle(
+                    connection=self,
+                    vin=vin,
+                    capabilities=capabilities,
+                    specification=specification,
+                )
+                if self.vehicle(vin) is not None:
+                    _LOGGER.debug(f"Vehicle with VIN number {vin} already exist.")
+                    if not new_vehicle == self.vehicle(vehicle):
+                        _LOGGER.debug(f"Updating {vehicle} object")
+                        self._vehicles.pop(vehicle)
+                        self._vehicles.append(new_vehicle)
+                else:
+                    _LOGGER.debug(f"Adding vehicle {vin}, with capabilities: {capabilities}")
+                    self._vehicles.append(new_vehicle)
+        except Exception as err:
+            raise SkodaLoginFailedException(
+                "Unable to fetch associated vehicles for account"
+            ) from err
         return skoda_vehicles
-
-    # Vehicle related functions
-    async def getHomeRegion(self, vin: str):
-        """Get API requests base url for VIN."""
-        try:
-            response = await self.get(
-                f"https://mal-1a.prd.ece.vwg-connect.com/api/cs/vds/v1/vehicles/{vin}/homeRegion"
-            )
-            self._session_auth_ref_url[vin] = (
-                response["homeRegion"]["baseUri"]["content"]
-                .split("/api")[0]
-                .replace("mal-", "fal-")
-                if response["homeRegion"]["baseUri"]["content"]
-                != "https://mal-1a.prd.ece.vwg-connect.com/api"
-                else "https://msg.volkswagen.de"
-            )
-            self._session_spin_ref_url[vin] = response["homeRegion"]["baseUri"]["content"].split(
-                "/api"
-            )[0]
-            return response["homeRegion"]["baseUri"]["content"]
-        except Exception as err:
-            _LOGGER.debug(f"Could not get homeregion, error {err}")
-            self._session_auth_ref_url[vin] = self._session_auth_ref_url["default"]
-            self._session_spin_ref_url[vin] = self._session_spin_ref_url["default"]
-        return False
-
-    async def getOperationList(self, vin: str):
-        """Collect operationlist for VIN, supported/licensed functions."""
-        try:
-            response = await self.get(
-                urljoin(
-                    self._session_spin_ref_url[vin],
-                    f"/api/rolesrights/operationlist/v3/vehicles/{vin}",
-                )
-            )
-            if response.get("operationList", False):
-                data = response.get("operationList", {})
-            elif response.get("status_code", {}):
-                _LOGGER.warning(
-                    f'Could not fetch operation list, HTTP status code: {response.get("status_code")}'
-                )
-                data = response
-            else:
-                _LOGGER.info(f"Could not fetch operation list: {response}")
-                data = {"error": "unknown"}
-        except Exception as err:
-            _LOGGER.warning(f"Could not fetch operation list, error: {err}")
-            data = {"error": "unknown"}
-        return data
 
     async def get_model_image_url(self, vin: str, size: str):
         """Construct the URL for the model image."""
@@ -949,47 +875,6 @@ class Connection:
             _LOGGER.debug("Could not fetch Model image URL, message signing failed.")
         return None
 
-    async def get_vehicle_status_report(self, vin: str):
-        """Get stored vehicle status report (Connect services)."""
-        try:
-            response = await self.get(
-                urljoin(
-                    self._session_auth_ref_url[vin],
-                    f"fs-car/bs/vsr/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/status",
-                )
-            )
-            if (
-                response.get("StoredVehicleDataResponse", {})
-                .get("vehicleData", {})
-                .get("data", {})[0]
-                .get("field", {})[0]
-            ):
-                data = {
-                    "StoredVehicleDataResponse": response.get("StoredVehicleDataResponse", {}),
-                    "StoredVehicleDataResponseParsed": dict(
-                        [
-                            (e["id"], e if "value" in e else "")
-                            for f in [
-                                s["field"]
-                                for s in response["StoredVehicleDataResponse"]["vehicleData"][
-                                    "data"
-                                ]
-                            ]
-                            for e in f
-                        ]
-                    ),
-                }
-                return data
-            elif response.get("status_code", {}):
-                _LOGGER.warning(
-                    f'Could not fetch vehicle status report, HTTP status code: {response.get("status_code")}'
-                )
-            else:
-                _LOGGER.info("Unhandled error while trying to fetch status data")
-        except Exception as err:
-            _LOGGER.warning(f"Could not fetch StoredVehicleDataResponse, error: {err}")
-        return False
-
     async def get_vehicle_status(self, vin: str, smartlink=False):
         """Get stored vehicle status (SmartLink and new API).
 
@@ -997,9 +882,7 @@ class Connection:
         """
         try:
             if smartlink:
-                response = await self.get(
-                    f"https://mysmob.api.connect.skoda-auto.cz/api/v1/vehicle-status/{vin}"
-                )
+                response = await self.get(urljoin(API_V1_VEHICLE_STATUS, vin))
                 if response:
                     data = {"vehicle_status": response}
                     return data
@@ -1012,9 +895,7 @@ class Connection:
                         "Unhandled error while trying to fetch vehicle status via SmartLink"
                     )
             else:
-                response = await self.get(
-                    f"https://mysmob.api.connect.skoda-auto.cz/api/v1/vehicle-health-report/warning-lights/{vin}"
-                )
+                response = await self.get(urljoin(API_V1_VEHICLE_WARNING_LIGHTS, vin))
                 if response:
                     data = {"vehicle_remote": response.get("remote", {})}
                     # Check for errors
@@ -1033,96 +914,10 @@ class Connection:
             _LOGGER.warning(f"Could not fetch SmartLink vehicle status, error: {err}")
         return False
 
-    async def get_trip_statistics(self, vin: str):
-        """Get short term trip statistics."""
-        try:
-            short = await self.get(
-                urljoin(
-                    self._session_auth_ref_url[vin],
-                    f"fs-car/bs/tripstatistics/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/tripdata/shortTerm?newest",
-                )
-            )
-            long = await self.get(
-                urljoin(
-                    self._session_auth_ref_url[vin],
-                    f"fs-car/bs/tripstatistics/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/tripdata/longTerm?newest",
-                )
-            )
-            cyclic = await self.get(
-                urljoin(
-                    self._session_auth_ref_url[vin],
-                    f"fs-car/bs/tripstatistics/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/tripdata/cyclic?newest",
-                )
-            )
-            data = {}
-            if short.get("tripData", False):
-                data["tripstatistics"] = short.get("tripData", {})
-            else:
-                _LOGGER.warning(
-                    f"Could not fetch shortterm trip statistics, HTTP status code: "
-                    f'{short.get("status_code", "none")}'
-                )
-            if long.get("tripData", False):
-                data["longtermstatistics"] = long.get("tripData", {})
-            else:
-                _LOGGER.warning(
-                    f"Could not fetch longterm trip statistics, HTTP status code: "
-                    f'{long.get("status_code", "none")}'
-                )
-            if cyclic.get("tripData", False):
-                data["cyclicstatistics"] = cyclic.get("tripData", {})
-            else:
-                _LOGGER.warning(
-                    f"Could not fetch cyclic trip statistics, HTTP status code: "
-                    f'{cyclic.get("status_code", "none")}'
-                )
-            return data
-        except Exception as err:
-            _LOGGER.warning(f"Could not fetch trip statistics, error: {err}")
-        return False
-
-    async def get_position(self, vin):
-        """Get position data.
-
-        TODO:  old, no longer used?
-        """
-        try:
-            response = await self.get(
-                urljoin(
-                    self._session_auth_ref_url[vin],
-                    f"fs-car/bs/cf/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/position",
-                )
-            )
-            if response.get("findCarResponse", {}):
-                data = {
-                    "findCarResponse": response.get("findCarResponse", {}),
-                    "isMoving": False,
-                }
-                return data
-            elif response.get("status_code", {}):
-                if response.get("status_code", 0) == 204:
-                    _LOGGER.debug("Seems car is moving, HTTP 204 received from position")
-                    data = {"isMoving": True, "rate_limit_remaining": 15}
-                    return data
-                else:
-                    _LOGGER.warning(
-                        f'Could not fetch position, HTTP status code: {response.get("status_code")}'
-                    )
-            else:
-                _LOGGER.info("Unhandled error while trying to fetch positional data")
-        except Exception as err:
-            _LOGGER.warning(f"Could not fetch position, error: {err}")
-        return False
-
     async def get_parking_position(self, vin):
         """Get position data."""
         try:
-            # response = await self.get(
-            #     f"https://mysmob.api.connect.skoda-auto.cz/api/v1/position/vehicles/{vin}/parking-position"
-            # )
-            response = await self.get(
-                f"https://mysmob.api.connect.skoda-auto.cz/api/v1/maps/positions?vin={vin}"
-            )
+            response = await self.get(API_V1_POSITIONS + vin)
             # TODO: just keeping same response dict with 'findCarResponse' for now, but no reason
             # it has to be like this ....
             if gps_coord := response.get("positions")[0].get("gpsCoordinates"):
@@ -1142,48 +937,6 @@ class Connection:
         except Exception as error:
             _LOGGER.warning(f"Could not fetch position, error: {error}")
         return False
-
-    async def get_departure_timer(self, vin: str):
-        """Get departure timers."""
-        try:
-            response = await self.get(
-                urljoin(
-                    self._session_auth_ref_url[vin],
-                    f"fs-car/bs/departuretimer/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/timer",
-                )
-            )
-            if response.get("timer", {}):
-                data = {"departuretimer": response.get("timer", {})}
-                return data
-            elif response.get("status_code", {}):
-                _LOGGER.warning(
-                    f'Could not fetch timers, HTTP status code: {response.get("status_code")}'
-                )
-            else:
-                _LOGGER.info("Unknown error while trying to fetch data for departure timers")
-        except Exception as err:
-            _LOGGER.warning(f"Could not fetch timers, error: {err}")
-        return False
-
-    # AC timers are now included in the single api/v2/air-conditioning/VIN calls
-    # async def get_timers(self, vin: str):
-    #     """Get timers data."""
-    #     try:
-    #         response = await self.get(
-    #             f"https://mysmob.api.connect.skoda-auto.cz/api/v1/air-conditioning/{vin}/timers"
-    #         )
-    #         if response.get("timers", []):
-    #             data = {"timers": response.get("timers", [])}
-    #             return data
-    #         elif response.get("status_code", False):
-    #             _LOGGER.warning(
-    #                 f'Could not fetch timers, HTTP status code: {response.get("status_code")}'
-    #             )
-    #         else:
-    #             _LOGGER.info("Unhandled error while trying to fetch timers data")
-    #     except Exception as err:
-    #         _LOGGER.warning(f"Could not fetch timers, error: {err}")
-    #     return False
 
     async def get_climater(self, vin):
         """Get climatisation data."""
@@ -1210,38 +963,13 @@ class Connection:
     async def get_air_conditioning(self, vin):
         """Get air-conditioning data."""
         try:
-            response = await self.get(
-                f"https://mysmob.api.connect.skoda-auto.cz/api/v2/air-conditioning/{vin}"
-            )
-            # aircon_status = self.get(
-            #     f"https://mysmob.api.connect.skoda-auto.cz/api/v1/air-conditioning/{vin}/status"
-            # )
-            # aircon_settings = self.get(
-            #     f"https://mysmob.api.connect.skoda-auto.cz/api/v1/air-conditioning/{vin}/settings"
-            # )
-            # aircon_data = await asyncio.gather(aircon_status, aircon_settings)
+            response = await self.get(API_V2_AIRCO + vin)
 
             if response.get("state"):
                 return response
             _LOGGER.warning(
                 f'Could not fetch air-conditioning data, HTTP status code: {response.get("status_code")}'
             )
-            # if aircon_data[0].get("state", {}):
-            #     data = {"airConditioning": aircon_data[0]}
-            #     if len(aircon_data) >= 2:
-            #         data["airConditioningSettings"] = aircon_data[1]
-            #     _LOGGER.info(f"Returning with data {data}")
-            #     return data
-            # elif aircon_data[0].get("status_code", False):
-            #     _LOGGER.warning(
-            #         f'Could not fetch air-conditioning data, HTTP status code: {aircon_data[0].get("status_code")}'
-            #     )
-            # elif aircon_data[1].get("status_code", False):
-            #     _LOGGER.warning(
-            #         f'Could not fetch air-conditioning settings, HTTP status code: {aircon_data[1].get("status_code")}'
-            #     )
-            # else:
-            #     _LOGGER.info("Unhandled error while trying to fetch air-conditioning data")
         except Exception as err:
             _LOGGER.warning(f"Could not fetch air-conditioning, error: {err}")
         return False
@@ -1271,9 +999,7 @@ class Connection:
     async def get_charging(self, vin):
         """Get charging data."""
         try:
-            response = await self.get(
-                f"https://mysmob.api.connect.skoda-auto.cz/api/v1/charging/{vin}"
-            )
+            response = await self.get(API_V1_CHARGING + vin)
             charging_status = response["status"]
             charging_settings = response["settings"]
 
@@ -1516,185 +1242,6 @@ class Connection:
                     f"fs-car/bs/climatisation/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/climater/actions",
                 ),
                 json=data,
-            )
-        except:
-            raise
-        return False
-
-    async def setDeparturetimer(self, vin, data, spin):
-        """Set departure timers.
-
-        TODO: old VW API, no longer used?
-        """
-        try:
-            # First get most recent departuretimer settings from server
-            departuretimers = await self.get_departure_timer(vin)
-            timer = (
-                departuretimers.get("departuretimer", {})
-                .get("timersAndProfiles", {})
-                .get("timerList", {})
-                .get("timer", [])
-            )
-            profile = (
-                departuretimers.get("departuretimer", {})
-                .get("timersAndProfiles", {})
-                .get("timerProfileList", {})
-                .get("timerProfile", [])
-            )
-            setting = (
-                departuretimers.get("departuretimer", {})
-                .get("timersAndProfiles", {})
-                .get("timerBasicSetting", {})
-            )
-            # Set heater source according to settings
-            source = (
-                departuretimers.get("departuretimer", {})
-                .get("timersAndProfiles", {})
-                .get("timerBasicSetting", {})
-                .get("heaterSource", "electric")
-            )
-
-            # Construct Timer data
-            timers = [{}, {}, {}]
-            for i in range(0, 3):
-                timers[i]["currentCalendarProvider"] = {}
-                for key in timer[i]:
-                    # Ignore the timestamp key
-                    if key not in ["timestamp"]:
-                        timers[i][key] = timer[i][key]
-                if timers[i].get("timerFrequency", "") == "single":
-                    timers[i]["departureTimeOfDay"] = "00:00"
-
-            # Set charger minimum limit if action is chargelimit
-            if data.get("action", None) == "chargelimit":
-                actiontype = "setChargeMinLimit"
-                setting["chargeMinLimit"] = int(data.get("limit", 50))
-            # Modify timers if action is on, off or schedule
-            elif data.get("action", None) in ["on", "off", "schedule"]:
-                actiontype = "setTimersAndProfiles"
-                if "id" in data:
-                    timerid = int(data.get("id", 1)) - 1
-                else:
-                    timerid = int(data.get("schedule", {}).get("id", 1)) - 1
-
-                # Set timer programmed status if data contains action = on or off
-                if data.get("action", None) in ["on", "off"]:
-                    action = "programmed" if data.get("action", False) == "on" else "notProgrammed"
-                # Set departure schedule
-                elif data.get("action", None) == "schedule":
-                    action = (
-                        "programmed"
-                        if data.get("schedule", {}).get("enabled", False)
-                        else "notProgrammed"
-                    )
-                    if data.get("schedule", {}).get("recurring", False):
-                        timers[timerid]["timerFrequency"] = "cyclic"
-                        timers[timerid]["departureWeekdayMask"] = data.get("schedule", {}).get(
-                            "days", "nnnnnnn"
-                        )
-                        timers[timerid]["departureTimeOfDay"] = data.get("schedule", {}).get(
-                            "time", "08:00"
-                        )
-                        timers[timerid].pop("departureDateTime", None)
-                    else:
-                        timers[timerid]["timerFrequency"] = "single"
-                        timers[timerid]["departureWeekdayMask"] = "nnnnnnn"
-                        timers[timerid]["departureTimeOfDay"] = "00:00"
-                        timers[timerid]["departureDateTime"] = (
-                            data.get("schedule", {}).get("date", "2020-01-01")
-                            + "T"
-                            + data.get("schedule", {}).get("time", "08:00")
-                        )
-                # Catch uncatched scenario
-                else:
-                    action = "notProgrammed"
-                timers[timerid]["timerProgrammedStatus"] = action
-
-            # If heatersource is to be set
-            elif data.get("action", None) == "heaterSource":
-                actiontype = "setTimersAndProfiles"
-
-            else:
-                raise SkodaException("Unknown action for departure timer")
-
-            # Set heatersource from data, if specified
-            if data.get("heaterSource", "") in ["automatic", "electric"]:
-                source = data.get("heaterSource")
-
-            # Construct Profiles data
-            enabled = None
-            profiles = [{}, {}, {}]
-            for i in range(0, 3):
-                for key in profile[i]:
-                    # Ignore the timestamp key
-                    if key not in ["timestamp"]:
-                        profiles[i][key] = profile[i][key]
-                # Set heater source
-                profiles[i]["heaterSource"] = source
-                if timers[i].get("timerProgrammedStatus", None) == "programmed":
-                    enabled = True
-
-            if enabled == None and source == "automatic":
-                raise SkodaInvalidRequestException(
-                    "At least one departure must be scheduled for heater to be enabled"
-                )
-
-            # Set optional settings
-            if data.get("schedule", {}).get("chargeMaxCurrent", None) is not None:
-                profiles[timerid]["chargeMaxCurrent"] = data.get("schedule", {}).get(
-                    "chargeMaxCurrent", False
-                )
-
-            if data.get("schedule", {}).get("targetChargeLevel", None) is not None:
-                profiles[timerid]["targetChargeLevel"] = data.get("schedule", {}).get(
-                    "targetChargeLevel", False
-                )
-
-            if data.get("schedule", {}).get("profileName", None) is not None:
-                profiles[timerid]["profileName"] = data.get("schedule", {}).get(
-                    "profileName", False
-                )
-
-            if data.get("schedule", {}).get("operationClimatisation", None) is not None:
-                profiles[timerid]["operationClimatisation"] = data.get("schedule", {}).get(
-                    "operationClimatisation", False
-                )
-
-            if data.get("schedule", {}).get("operationCharging", None) is not None:
-                profiles[timerid]["operationCharging"] = data.get("schedule", {}).get(
-                    "operationCharging", False
-                )
-
-            # Construct basic settings
-            settings = {
-                "chargeMinLimit": int(setting["chargeMinLimit"]),
-                "heaterSource": source,
-                "targetTemperature": int(data["temp"]),
-            }
-            body = {
-                "action": {
-                    "timersAndProfiles": {
-                        "timerBasicSetting": settings,
-                        "timerList": {"timer": timers},
-                        "timerProfileList": {"timerProfile": profiles},
-                    },
-                    "type": actiontype,
-                }
-            }
-
-            # Only get security token if auxiliary heater is to be enabled
-            if source == "automatic":
-                self._session_headers["X-securityToken"] = await self.get_sec_token(
-                    vin=vin, spin=spin, action="timer"
-                )
-
-            # return await self._setVWAPI(
-            return await self._setVWAPI(
-                urljoin(
-                    self._session_auth_ref_url[vin],
-                    f"fs-car/bs/departuretimer/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/timer/actions",
-                ),
-                json=body,
             )
         except:
             raise

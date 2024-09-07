@@ -60,7 +60,7 @@ $ pip install myskoda
 ### Example
 
 For an extensive example, please use the code found in [example/example.py](example/example.py).
-When logged in the library will automatically create a vehicle object for every car registered to the account. Initially no data is fetched at all. Use the doLogin method and it will signin with the credentials used for the class constructor.
+When logged in the library will automatically create a vehicle object for every car registered to the account. Initially no data is fetched at all. Use the do_login method and it will signin with the credentials used for the class constructor.
 Method get_vehicles will fetch vehicle basic information and create Vehicle class objects for all associated vehicles in account.
 To update all available data use the update_all method of the Connect class. This will call the update function for all registered vehicles, which in turn will fetch data from all available API endpoints.
 
@@ -95,7 +95,7 @@ Connection:
 ```
 session = aiohttp.ClientSession(headers={'Connection': 'keep-alive'})   # Create a aiohttp session object
 conn = Connection(session, username, password, fulldebug)               #
-conn.doLogin()                                                         # Attempt a login, returns true/false, variable conn.
+conn.do_login()                                                         # Attempt a login, returns true/false, variable conn.
 conn.get_vehicles()                                                     # Attempts to fetch all vehicles associated to account.
 conn.update_all()                                                       # Calls update for all vehicle objects.
 conn.logout()                                                           # Logout from API, call for revoke of tokens.

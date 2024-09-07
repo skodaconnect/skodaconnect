@@ -5,3 +5,5 @@ For more details and documentation, visit the github page at https://github.com/
 """
 
 from myskoda.connection import Connection
+
+__all__ = ["Connection"]

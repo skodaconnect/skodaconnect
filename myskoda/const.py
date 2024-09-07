@@ -1,6 +1,7 @@
-"""Constants."""
+"""MySkoda Constants."""
 
 from datetime import timedelta
+from urllib.parse import urljoin
 
 BASE_SESSION = "https://msg.volkswagen.de"
 BRAND = "skoda"
@@ -63,6 +64,20 @@ MODELAPI = "ms/GetMODCWPImage"  # API base path
 MODELHOST = "https://iaservices.skoda-auto.com/"  # API host
 
 # API endpoints
-API_BASE = "https://mysmob.api.connect.skoda-auto.cz"
+OPENID_CONFIG = "https://identity.vwgroup.io/.well-known/openid-configuration"
+API_BASE = "https://mysmob.api.connect.skoda-auto.cz/api/"
+API_V1_TOKEN_EXCHANGE = urljoin(
+    API_BASE, "v1/authentication/exchange-authorization-code?tokenType=CONNECT"
+)
+API_V1_TOKEN_REVOKE = urljoin(API_BASE, f"v1/authentication/token/revoke?systemId={CLIENT_ID}")
+API_V1_VEHICLE_STATUS = urljoin(API_BASE, "v1/vehicle-status/")  # + VIN
+API_V1_CHARGING = urljoin(API_BASE, "v1/charging/")  # + VIN
+API_V1_VEHICLE_WARNING_LIGHTS = urljoin(
+    API_BASE, "v1/vehicle-health-report/warning-lights/"  # + VIN
+)
+API_V1_POSITIONS = urljoin(API_BASE, "v1/maps/positions?vin=")  # + VIN
+API_V2_GARAGE = urljoin(API_BASE, "v2/garage")
+API_V2_VEHICLE = urljoin(API_BASE, "v2/garage/vehicles/")  # + VIN
+API_V2_AIRCO = urljoin(API_BASE, "v2/air-conditioning/")  # + VIN
 
 TIMEOUT_30S = timedelta(seconds=30)

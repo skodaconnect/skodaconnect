@@ -1,48 +1,42 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Vehicle class for Skoda Connect."""
+"""Vehicle class for MySkoda."""
 import re
-import time
 import logging
 import asyncio
-import hashlib
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from json import dumps as to_json
 from collections import OrderedDict
-from xmlrpc.client import boolean
 
-# from myskoda.connection import Connection # Circular import
+# from myskoda.connection import Connection # TODO: Circular import
 from myskoda.utilities import find_path, is_valid_path
 from myskoda.exceptions import (
     SkodaConfigException,
     SkodaException,
-    SkodaEULAException,
-    SkodaServiceUnavailable,
-    SkodaThrottledException,
     SkodaInvalidRequestException,
     SkodaRequestInProgressException,
 )
+from myskoda.models import Capability
 
 _LOGGER = logging.getLogger(__name__)
 
 DATEZERO = datetime(1970, 1, 1)
 
 
-# Connectivities is no more
-# Capabilities to get pulled from api/v2/garage/vehicles/VIN
-
-
 class Vehicle:
     """Vehicle class."""
 
-    def __init__(self, conn, data: dict) -> None:
-        _LOGGER.debug(f"Creating Vehicle class object with data {data}")
-        self._connection = conn
-        self.vin = data["vin"]
-        # self._connectivities = data.get("connectivities", "")
-        self._capabilities = [c["id"] for c in data["capabilities"]]
-        self._specification = data["specification"]
+    def __init__(
+        self, connection, vin: str, capabilities: list[Capability], specification: dict
+    ) -> None:
+        _LOGGER.debug(
+            f"Creating Vehicle class object with VIN: {vin}, "
+            f"capabilities: {capabilities}, specification: {specification}"
+        )
+        self._connection = connection
+        self.vin = vin
+        self._capabilities = capabilities
+        self._specification = specification
         self._modelimagel = None
         self._modelimages = None
         self._discovered = False
@@ -140,7 +134,6 @@ class Vehicle:
                 await asyncio.gather(
                     # self.get_preheater(),
                     # self.get_climater(),
-                    # self.get_trip_statistic(),
                     self.get_position(),
                     # self.get_statusreport(),
                     self.get_charger(),
@@ -185,7 +178,7 @@ class Vehicle:
         #         else:
         #             _LOGGER.debug("Could not fetch climater data")
         #     self._requests.pop("air-conditioning", None)
-        if "AIR_CONDITIONING" in self._capabilities:
+        if Capability.AIR_CONDITIONING in self._capabilities:
             data = await self._connection.get_air_conditioning(self.vin)
             if data:
                 self._states.update(data)
@@ -197,36 +190,9 @@ class Vehicle:
             self._requests.pop("air-conditioning", None)
             self._requests.pop("climatisation", None)
 
-    async def get_trip_statistic(self):
-        """Fetch trip data if function is enabled."""
-        raise NotImplementedError()
-        # if "trip_statistic_v1" in self._capabilities:
-        #     if not await self.expired("trip_statistic_v1"):
-        #         data = await self._connection.get_trip_statistics(self.vin)
-        #         if data:
-        #             self._states.update(data)
-        #         else:
-        #             _LOGGER.debug("Could not fetch trip statistics")
-
     async def get_position(self):
         """Fetch position data if function is enabled."""
-        # if self._services.get("carfinder_v1", {}).get("active", False):
-        #     if not await self.expired("carfinder_v1"):
-        #         data = await self._connection.get_position(self.vin)
-        #         if data:
-        #             # Reset requests remaining to 15 if parking time has been updated
-        #             if data.get("findCarResponse", {}).get("parkingTimeUTC", False):
-        #                 try:
-        #                     newTime = data.get("findCarResponse").get("parkingTimeUTC")
-        #                     oldTime = self.attrs.get("findCarResponse").get("parkingTimeUTC")
-        #                     if newTime > oldTime:
-        #                         self.requests_remaining = 15
-        #                 except:
-        #                     pass
-        #             self._states.update(data)
-        #         else:
-        #             _LOGGER.debug("Could not fetch any positional data")
-        if "PARKING_POSITION" in self._capabilities:
+        if Capability.PARKING_POSITION in self._capabilities:
             data = await self._connection.get_parking_position(self.vin)
             if data:
                 self._states.update(data)
@@ -238,14 +204,7 @@ class Vehicle:
 
     async def get_statusreport(self):
         """Fetch status data if function is enabled."""
-        # if self._services.get("statusreport_v1", {}).get("active", False):
-        #     if not await self.expired("statusreport_v1"):
-        #         data = await self._connection.get_vehicle_status_report(self.vin)
-        #         if data:
-        #             self._states.update(data)
-        #         else:
-        #             _LOGGER.debug("Could not fetch status report")
-        if "STATE" in self._capabilities:
+        if Capability.STATE in self._capabilities:
             data = await self._connection.get_vehicle_status(self.vin)
             if data:
                 # Check if errors were encountered
@@ -286,14 +245,7 @@ class Vehicle:
 
     async def get_charger(self):
         """Fetch charger data if function is enabled."""
-        # if self._services.get("rbatterycharge_v1", {}).get("active", False):
-        #     if not await self.expired("rbatterycharge_v1"):
-        #         data = await self._connection.get_charger(self.vin)
-        #         if data:
-        #             self._states.update(data)
-        #         else:
-        #             _LOGGER.debug("Could not fetch charger data")
-        if "CHARGING" in self._capabilities:
+        if Capability.CHARGING in self._capabilities:
             data = await self._connection.get_charging(self.vin)
             if data:
                 self._states.update(data)
@@ -301,25 +253,6 @@ class Vehicle:
                 _LOGGER.debug("Could not fetch charger data")
         else:
             self._requests.pop("charger", None)
-
-    # AC timers are now included in the single api/v2/air-conditioning/VIN calls
-    # async def get_timerprogramming(self):
-    #     """Fetch timer data if function is enabled."""
-    #     # if self._services.get("timerprogramming_v1", {}).get("active", False):
-    #     #     if not await self.expired("timerprogramming_v1"):
-    #     #         data = await self._connection.get_departure_timer(self.vin)
-    #     #         if data:
-    #     #             self._states.update(data)
-    #     #         else:
-    #     #             _LOGGER.debug("Could not fetch timers")
-    #     if "AIR_CONDITIONING" in self._capabilities:
-    #         data = await self._connection.get_timers(self.vin)
-    #         if data:
-    #             self._states.update(data)
-    #         else:
-    #             _LOGGER.debug("Could not fetch timers")
-    #     else:
-    #         self._requests.pop("departuretimer", None)
 
     async def wait_for_request(self, section, request, retryCount=36):
         """Update status of outstanding requests."""
@@ -358,7 +291,7 @@ class Vehicle:
                     #         }
                     #     }
                     # # Skoda Native API charger current request, does this work?
-                    if "CHARGING" in self._capabilities:
+                    if Capability.CHARGING in self._capabilities:
                         data = {
                             "chargingSettings": {
                                 "autoUnlockPlugWhenCharged": self.attrs.get(
@@ -400,7 +333,7 @@ class Vehicle:
                     #         }
                     #     }
                     # # Skoda Native API charger current request
-                    if "CHARGING" in self._capabilities:
+                    if Capability.CHARGING in self._capabilities:
                         value = (
                             "Maximum"
                             if value in ["Maximum", "maximum", "Max", "max"]
@@ -449,7 +382,7 @@ class Vehicle:
 
     async def set_charger(self, action):
         """Charging actions."""
-        if "CHARGING" not in self._capabilities:
+        if Capability.CHARGING not in self._capabilities:
             _LOGGER.info("Remote start/stop of charger is not supported.")
             raise SkodaInvalidRequestException("Remote start/stop of charger is not supported.")
         if self._requests["batterycharge"].get("id", False):
@@ -475,7 +408,7 @@ class Vehicle:
         #             f"Invalid charger action: {action}. Must be either start, stop or setSettings"
         #         )
         # Skoda Native API requests
-        if "CHARGING" in self._capabilities:
+        if Capability.CHARGING in self._capabilities:
             if action in ["start", "stop"]:
                 data = {"type": action.capitalize()}
             elif action.get("action", {}) == "chargelimit":
@@ -536,25 +469,11 @@ class Vehicle:
     # API endpoint departuretimer
     async def set_charge_limit(self, limit=50):
         """Set charging limit."""
-        if "CHARGING" not in self._capabilities:
+        if Capability.CHARGING not in self._capabilities:
             _LOGGER.info("Set charging limit is not supported.")
             raise SkodaInvalidRequestException("Set charging limit is not supported.")
         data = {}
-        # VW-Group API charging
-        # if self._services.get("timerprogramming_v1", False) is not False:
-        #     if isinstance(limit, int):
-        #         if limit in [0, 10, 20, 30, 40, 50]:
-        #             data["limit"] = limit
-        #             data["action"] = "chargelimit"
-        #         else:
-        #             raise SkodaInvalidRequestException(
-        #                 f"Charge limit must be one of 0, 10, 20, 30, 40 or 50."
-        #             )
-        #     else:
-        #         raise SkodaInvalidRequestException(f'Charge limit "{limit}" is not supported.')
-        #     return await self._set_timers(data)
-        # Skoda Native API charging
-        if "CHARGING" in self._capabilities:
+        if Capability.CHARGING in self._capabilities:
             if isinstance(limit, int):
                 if limit in [50, 60, 70, 80, 90, 100]:
                     data["limit"] = limit
@@ -573,16 +492,7 @@ class Vehicle:
         supported = "is_departure" + str(id) + "_supported"
         if getattr(self, supported) is not True:
             raise SkodaConfigException(f'This vehicle does not support timer id "{id}".')
-        # VW-Group API
-        # if self._services.get("timerprogramming_v1", False):
-        #     data["id"] = id
-        #     if action in ["on", "off"]:
-        #         data["action"] = action
-        #     else:
-        #         raise SkodaInvalidRequestException(f'Timer action "{action}" is not supported.')
-        #     return await self._set_timers(data)
-        # Skoda native API
-        elif "AIR_CONDITIONING" in self._capabilities:
+        elif Capability.AIR_CONDITIONING in self._capabilities:
             if action in ["on", "off"]:
                 try:
                     # First get most recent departuretimer settings from server
@@ -614,27 +524,6 @@ class Vehicle:
         """Activate/deactivate use of aux heater for departure timers."""
         """ VW-Group API only for PHEV vehicles """
         raise NotImplementedError()
-        # data = {}
-        # if not self.is_auxiliary_climatisation_supported:
-        #     raise SkodaInvalidRequestException("Auxiliary heater is not supprted on this vehicle.")
-        # if spin is None:
-        #     raise SkodaInvalidRequestException("SPIN is required to set heater source.")
-
-        # # VW-Group API
-        # if self._services.get("timerprogramming_v1", False):
-        #     if source.lower() in ["electric", "automatic"]:
-        #         data = {
-        #             "heaterSource": source.lower(),
-        #             "action": "heaterSource",
-        #             "spin": spin,
-        #         }
-        #     else:
-        #         raise SkodaInvalidRequestException(
-        #             f'Source {data.get("action", "")} is not supported as heater source.'
-        #         )
-        #     return await self._set_timers(data)
-        # else:
-        #     raise SkodaInvalidRequestException("Departure timers are not supported.")
 
     async def set_timer_schedule(self, id, schedule={}, spin=False):
         """Set departure schedules."""
@@ -681,94 +570,8 @@ class Vehicle:
                     'SPIN must be supplied when using auxiliary heater".'
                 )
 
-        # VW-Group API
-        # if self._services.get("timerprogramming_v1", False):
-        #     # Validate options only available for VW-Group API
-        #     # Sanity check for off-peak hours
-        #     if not isinstance(schedule.get("nightRateActive", False), bool):
-        #         raise SkodaInvalidRequestException(
-        #             "The off-peak active variable must be set to True or False"
-        #         )
-        #     if schedule.get("nightRateStart", None) is not None:
-        #         if not re.match("^[0-9]{2}:[0-9]{2}$", schedule.get("nightRateStart", "")):
-        #             raise SkodaInvalidRequestException(
-        #                 "The start time for off-peak hours must be set in 24h format HH:MM."
-        #             )
-        #     if schedule.get("nightRateEnd", None) is not None:
-        #         if not re.match("^[0-9]{2}:[0-9]{2}$", schedule.get("nightRateEnd", "")):
-        #             raise SkodaInvalidRequestException(
-        #                 "The start time for off-peak hours must be set in 24h format HH:MM."
-        #             )
-
-        #     # Check if charging/climatisation is set and correct
-        #     if not isinstance(schedule.get("operationClimatisation", False), bool):
-        #         raise SkodaInvalidRequestException(
-        #             "The climatisation enable variable must be set to True or False"
-        #         )
-        #     if not isinstance(schedule.get("operationCharging", False), bool):
-        #         raise SkodaInvalidRequestException(
-        #             "The charging variable must be set to True or False"
-        #         )
-
-        #     # Validate temp setting, if set
-        #     if schedule.get("targetTemp", None) is not None:
-        #         if not 16 <= float(schedule.get("targetTemp", None)) <= 30:
-        #             raise SkodaInvalidRequestException(
-        #                 "Target temp must be integer value from 16 to 30"
-        #             )
-        #         else:
-        #             data["temp"] = schedule.get("targetTemp")
-
-        #     # Validate charge target and current
-        #     if schedule.get("targetChargeLevel", None) is not None:
-        #         if not 0 <= int(schedule.get("targetChargeLevel", None)) <= 100:
-        #             raise SkodaInvalidRequestException("Target charge level must be 0 to 100")
-        #     if schedule.get("chargeMaxCurrent", None) is not None:
-        #         if isinstance(schedule.get("chargeMaxCurrent", None), str):
-        #             if not schedule.get("chargeMaxCurrent", None) in [
-        #                 "Maximum",
-        #                 "maximum",
-        #                 "Max",
-        #                 "max",
-        #                 "Minimum",
-        #                 "minimum",
-        #                 "Min",
-        #                 "min",
-        #                 "Reduced",
-        #                 "reduced",
-        #             ]:
-        #                 raise SkodaInvalidRequestException(
-        #                     "Charge current must be one of Maximum/Minimum/Reduced"
-        #                 )
-        #             # elif "ONLINE" in self._connectivities:
-        #             else:
-        #                 # Set string to numeric value for VW-Group API
-        #                 schedule["chargeMaxCurrent"] = 252
-        #                 if schedule.get("chargeMaxCurrent", None) in [
-        #                     "Maximum",
-        #                     "maximum",
-        #                     "Max",
-        #                     "max",
-        #                 ]:
-        #                     schedule["chargeMaxCurrent"] = 254
-        #         elif isinstance(schedule.get("chargeMaxCurrent", None), int):
-        #             if not 1 <= int(schedule.get("chargeMaxCurrent", 254)) < 255:
-        #                 raise SkodaInvalidRequestException(
-        #                     "Charge current must be set from 1 to 254"
-        #                 )
-        #         else:
-        #             raise SkodaInvalidRequestException(
-        #                 "Invalid type for charge max current variable"
-        #             )
-        #     # Prepare data and execute
-        #     data["id"] = id
-        #     data["action"] = "schedule"
-        #     data["schedule"] = schedule
-        #     data["spin"] = spin
-        #     return await self._set_timers(data)
-
         # Skoda native API
-        elif "AIR_CONDITIONING" in self._capabilities:
+        elif Capability.AIR_CONDITIONING in self._capabilities:
             try:
                 # First get most recent departuretimer settings from server
                 timers = await self._connection.get_climater(self.vin)
@@ -812,97 +615,6 @@ class Vehicle:
         else:
             _LOGGER.info("Departure timers are not supported.")
             raise SkodaInvalidRequestException("Departure timers are not supported.")
-
-    async def _set_timers(self, data=None):
-        """Set departure timers."""
-        raise NotImplementedError()
-        # if not self._services.get("timerprogramming_v1", False):
-        #     raise SkodaInvalidRequestException("Departure timers are not supported.")
-        # if self._requests["departuretimer"].get("id", False):
-        #     timestamp = self._requests.get("departuretimer", {}).get("timestamp", datetime.now())
-        #     expired = datetime.now() - timedelta(minutes=3)
-        #     if expired > timestamp:
-        #         self._requests.get("departuretimer", {}).pop("id")
-        #     else:
-        #         raise SkodaRequestInProgressException(
-        #             "Scheduling of departure timer is already in progress"
-        #         )
-        # # Verify temperature setting
-        # if data.get("temp", False):
-        #     if data["temp"] in {
-        #         16,
-        #         16.5,
-        #         17,
-        #         17.5,
-        #         18,
-        #         18.5,
-        #         19,
-        #         19.5,
-        #         20,
-        #         20.5,
-        #         21,
-        #         21.5,
-        #         22,
-        #         22.5,
-        #         23,
-        #         23.5,
-        #         24,
-        #         24.5,
-        #         25,
-        #         25.5,
-        #         26,
-        #         26.5,
-        #         27,
-        #         27.5,
-        #         28,
-        #         28.5,
-        #         29,
-        #         29.5,
-        #         30,
-        #     }:
-        #         data["temp"] = int((data["temp"] + 273) * 10)
-        #     else:
-        #         data["temp"] = int((int(data["temp"]) + 273) * 10)
-        # else:
-        #     try:
-        #         data["temp"] = int((self.climatisation_target_temperature + 273) * 10)
-        #     except:
-        #         data["temp"] = 2930
-        #         pass
-        # if 2890 <= data["temp"] <= 3030:
-        #     pass
-        # else:
-        #     data["temp"] = 2930
-
-        # try:
-        #     self._requests["latest"] = "Departuretimer"
-        #     response = await self._connection.setDeparturetimer(
-        #         self.vin, data, spin=data.get("spin", False)
-        #     )
-        #     if not response:
-        #         self._requests["departuretimer"]["status"] = "Failed"
-        #         _LOGGER.error("Failed to execute departure timer request")
-        #         raise SkodaException("Failed to execute departure timer request")
-        #     else:
-        #         self._requests["remaining"] = response.get("rate_limit_remaining", -1)
-        #         self._requests["departuretimer"] = {
-        #             "timestamp": datetime.now().replace(microsecond=0),
-        #             "status": response.get("state", "Unknown"),
-        #             "id": response.get("id", 0),
-        #         }
-        #         if response.get("state", None) == "Throttled":
-        #             status = "Throttled"
-        #         else:
-        #             status = await self.wait_for_request("departuretimer", response.get("id", 0))
-        #         self._requests["departuretimer"]["status"] = status
-        #         self._requests["departuretimer"].pop("id", None)
-        #         return status
-        # except (SkodaInvalidRequestException, SkodaException):
-        #     raise
-        # except Exception as error:
-        #     _LOGGER.warning(f"Failed to execute departure timer request - {error}")
-        #     self._requests["departuretimer"]["status"] = "Exception"
-        # raise SkodaException("Failed to set departure timer schedule")
 
     # Climatisation electric/auxiliary/windows (CLIMATISATION)
     async def set_climatisation_temp(self, temperature=20):
@@ -1006,7 +718,7 @@ class Vehicle:
         if self.is_window_heater_supported or self.is_window_heater_new_supported:
             if action in ["start", "stop", "enabled", "disabled"]:
                 # Check if this is a Skoda native API vehicle
-                if "AIR_CONDITIONING" in self._capabilities:
+                if Capability.AIR_CONDITIONING in self._capabilities:
                     if action in ["start", "stop"]:
                         data = {"type": action, "section": "WindowHeating"}
                         return await self._set_aircon(data)
@@ -1113,7 +825,7 @@ class Vehicle:
             #     else:
             #         data = {"action": {"type": "stopClimatisation"}}
             #     return await self._set_climater(data, spin)
-            if "AIR_CONDITIONING" in self._capabilities:
+            if Capability.AIR_CONDITIONING in self._capabilities:
                 if mode == "auxiliary":
                     raise SkodaInvalidRequestException("No auxiliary climatisation support.")
                 if mode in ["Start", "start", "On", "on", "electric"]:
@@ -1204,7 +916,7 @@ class Vehicle:
 
     async def _set_aircon(self, data, spin=False):
         """Air conditioning actions."""
-        if "AIR_CONDITIONING" not in self._capabilities:
+        if Capability.AIR_CONDITIONING not in self._capabilities:
             _LOGGER.info("Remote control of air conditioning functions is not supported.")
             raise SkodaInvalidRequestException(
                 "Remote control of air conditioning functions is not supported."
@@ -2333,7 +2045,7 @@ class Vehicle:
         """Return true if carfinder_v1 service is active."""
         # if self._services.get("carfinder_v1", {}).get("active", False):
         #     return True
-        if "PARKING_POSITION" in self._capabilities:
+        if Capability.PARKING_POSITION in self._capabilities:
             return True
         elif self.attrs.get("isMoving", False):
             return True
